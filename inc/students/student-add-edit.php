@@ -14,6 +14,23 @@ function educore_student_add_edit_view() {
 
     // Handle Form Submission
     if ( isset( $_POST['educore_save_student'] ) && wp_verify_nonce( $_POST['educore_student_nonce'], 'save_student_action' ) ) {
+        
+        // বিদ্যমান ছবির ইউআরএল ডিফল্ট রাখা হলো
+        $photo_url = $student ? $student->photo_url : '';
+
+        // ছবি আপলোড প্রসেসিং
+        if ( ! empty( $_FILES['student_photo']['name'] ) ) {
+            require_once ABSPATH . 'wp-admin/includes/file.php';
+            
+            $uploaded_file = wp_handle_upload( $_FILES['student_photo'], array( 'test_form' => false ) );
+            
+            if ( isset( $uploaded_file['error'] ) ) {
+                echo '<div class="alert alert-danger">Photo Upload Error: ' . esc_html( $uploaded_file['error'] ) . '</div>';
+            } else {
+                $photo_url = $uploaded_file['url'];
+            }
+        }
+
         $data = array(
             'student_id'     => sanitize_text_field( $_POST['student_id'] ),
             'full_name'      => sanitize_text_field( $_POST['full_name'] ),
@@ -26,17 +43,19 @@ function educore_student_add_edit_view() {
             'guardian_phone' => sanitize_text_field( $_POST['guardian_phone'] ),
             'address'        => sanitize_textarea_field( $_POST['address'] ),
             'admission_date' => sanitize_text_field( $_POST['admission_date'] ),
+            'photo_url'      => $photo_url,
             'status'         => sanitize_text_field( $_POST['status'] )
         );
 
         if ( $is_edit ) {
             $wpdb->update( $table_name, $data, array( 'id' => $student_id ) );
             echo '<div class="alert alert-success">Student updated successfully.</div>';
-            $student = (object) array_merge( (array) $student, $data ); // Update local object
+            $student = (object) array_merge( (array) $student, $data ); // Local অবজেক্ট আপডেট
         } else {
             $wpdb->insert( $table_name, $data );
             echo '<div class="alert alert-success">New student added successfully.</div>';
-            $_POST = array(); // Clear form
+            $_POST = array(); // ফর্ম ক্লিয়ার
+            $photo_url = '';
         }
         educore_log_activity("Saved student record: " . $data['full_name']);
     }
@@ -51,9 +70,18 @@ function educore_student_add_edit_view() {
     <div class="bg-white p-4 rounded shadow-sm border">
         <h3 class="mb-4"><?php echo $is_edit ? 'Edit Student Details' : 'Admit New Student'; ?></h3>
         
-        <form method="POST" action="">
+        <!-- ফাইল আপলোডের জন্য enctype যুক্ত করা হলো -->
+        <form method="POST" action="" enctype="multipart/form-data">
             <?php wp_nonce_field( 'save_student_action', 'educore_student_nonce' ); ?>
             
+            <!-- ছবি এডিট করার সময় বর্তমান ছবিটির প্রিভিউ দেখানোর জন্য -->
+            <?php if ( $is_edit && ! empty( $student->photo_url ) ) : ?>
+                <div class="mb-4">
+                    <label class="form-label d-block fw-bold">Current Photo</label>
+                    <img src="<?php echo esc_url( $student->photo_url ); ?>" alt="Student Photo" class="rounded border" style="width: 100px; height: 100px; object-fit: cover;">
+                </div>
+            <?php endif; ?>
+
             <div class="row">
                 <div class="col-md-4 mb-3">
                     <label class="form-label fw-bold">Student ID (Unique)</label>
@@ -95,6 +123,15 @@ function educore_student_add_edit_view() {
                 <div class="col-md-4 mb-3">
                     <label class="form-label fw-bold">Admission Date</label>
                     <input type="date" name="admission_date" class="form-control" value="<?php echo $student ? esc_attr( $student->admission_date ) : date('Y-m-d'); ?>">
+                </div>
+            </div>
+
+            <!-- প্রোফাইল পিকচার আপলোড ইনপুট ফিল্ড -->
+            <div class="row">
+                <div class="col-md-12 mb-3">
+                    <label class="form-label fw-bold">Student Profile Photo</label>
+                    <input type="file" name="student_photo" class="form-control" accept="image/*">
+                    <div class="form-text text-muted">Accepted formats: JPG, JPEG, PNG.</div>
                 </div>
             </div>
 
