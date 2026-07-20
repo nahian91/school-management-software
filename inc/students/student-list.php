@@ -1,294 +1,379 @@
 <?php
-if ( ! defined( 'ABSPATH' ) ) exit;
+if ( ! defined( 'ABSPATH' ) ) {
+    exit; // Direct access safety buffer
+}
 
+/**
+ * Render the Core Students Datatable powered by DataTables.js Engine
+ * Database Scope: sms_students
+ */
 function educore_students_list_view() {
     global $wpdb;
-    $table_name = $wpdb->prefix . 'sms_students';
+    $table_students = $wpdb->prefix . 'sms_students';
 
-    // Handle Enrolment Form Submission inside the Tab
-    $success_msg = '';
-    $error_msg   = '';
-    $active_tab  = 'all-students'; // Default fallback anchor matrix
+    // ১. ডাটাবেজ থেকে সরাসরি সমস্ত অ্যাক্টিভ স্টুডেন্টদের ডাটা লোড
+    $students_records = $wpdb->get_results( 
+        "SELECT * FROM $table_students WHERE status = 'Active' ORDER BY class_name ASC, roll_no ASC" 
+    );
 
-    if ( isset( $_POST['educore_save_student'] ) && wp_verify_nonce( $_POST['educore_student_nonce'], 'save_student_action' ) ) {
-        $student_uid = sanitize_text_field( $_POST['student_id'] );
-        $active_tab  = 'add-student'; // Route focus to form view upon submission thread
-        
-        // Duplication Check Matrix
-        $check_duplicate = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM $table_name WHERE student_id = %s", $student_uid ) );
+    // ২. ওয়ার্ডপ্রেস অ্যাকশন হুক ব্যবহার করে রানটাইমে ডাটাটেবিল অ্যাসেটস ইনজেক্ট করা
+    wp_enqueue_style( 'datatables-cdn', 'https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css', array(), '1.13.6' );
+    wp_enqueue_script( 'datatables-cdn-js', 'https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js', array( 'jquery' ), '1.13.6', true );
 
-        if ( $check_duplicate ) {
-            $error_msg = 'The Student ID "' . esc_html($student_uid) . '" is already assigned to another record.';
-        } else {
-            $photo_url = '';
-            // Photo Upload Process System Engine
-            if ( ! empty( $_FILES['student_photo']['name'] ) ) {
-                require_once ABSPATH . 'wp-admin/includes/file.php';
-                $uploaded_file = wp_handle_upload( $_FILES['student_photo'], array( 'test_form' => false ) );
-                if ( ! isset( $uploaded_file['error'] ) ) {
-                    $photo_url = $uploaded_file['url'];
-                } else {
-                    $error_msg = 'Photo Upload Error: ' . esc_html( $uploaded_file['error'] );
-                }
-            }
-
-            if ( empty( $error_msg ) ) {
-                $data = array(
-                    'student_id'     => $student_uid,
-                    'full_name'      => sanitize_text_field( $_POST['full_name'] ),
-                    'class_name'     => sanitize_text_field( $_POST['class_name'] ),
-                    'section_name'   => sanitize_text_field( $_POST['section_name'] ),
-                    'roll_no'        => intval( $_POST['roll_no'] ),
-                    'dob'            => sanitize_text_field( $_POST['dob'] ),
-                    'gender'         => sanitize_text_field( $_POST['gender'] ),
-                    'guardian_name'  => sanitize_text_field( $_POST['guardian_name'] ),
-                    'guardian_phone' => sanitize_text_field( $_POST['guardian_phone'] ),
-                    'address'        => sanitize_textarea_field( $_POST['address'] ),
-                    'admission_date' => sanitize_text_field( $_POST['admission_date'] ),
-                    'photo_url'      => $photo_url,
-                    'status'         => sanitize_text_field( $_POST['status'] )
-                );
-
-                $inserted = $wpdb->insert( $table_name, $data );
-                if ( $inserted ) {
-                    $success_msg = 'New student enrolled and added successfully.';
-                    $_POST = array(); // Wipe transactional state
-                    $active_tab = 'all-students'; // On success, pivot back to directory list layout
-                } else {
-                    $error_msg = 'Database insertion failed. Please check system schemas.';
-                }
-            }
-        }
-
-        if ( class_exists( 'IFSEdu_School_Management_System' ) && isset( $data['full_name'] ) ) {
-            IFSEdu_School_Management_System::log_activity("Saved student record via Directory Tab: " . $data['full_name']);
-        }
-    }
-
-    // Fetch refreshed list core query
-    $students = $wpdb->get_results( "SELECT * FROM $table_name ORDER BY id DESC" );
+    // ৩. এক্সট্রাক্ট ক্লাস ফর ড্রপডাউন এক্সটার্নাল ফিল্টারিং
+    $available_classes = $wpdb->get_col( "SELECT DISTINCT class_name FROM $table_students WHERE status = 'Active' ORDER BY class_name ASC" );
     ?>
 
     <style>
-        .dnt-directory-tabs .nav-link { color: #64748b; font-weight: 600; border: none; border-bottom: 2px solid transparent; padding: 10px 20px; background: transparent; }
-        .dnt-directory-tabs .nav-link.active { color: #006a4e !important; background: transparent !important; border-color: #006a4e !important; }
-        .educore-datatable thead th { background-color: #f8fafc; color: #334155; font-weight: 600; border-bottom: 2px solid #e2e8f0; }
-        .action-btn-matrix { width: 32px; height: 32px; padding: 0; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+        /* Modern Bento & Glassmorphism Framework for DataTables */
+        .educore-dt-container {
+            background: #ffffff;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            border: 1px solid #e2e8f0;
+            margin-top: 20px;
+        }
+        .educore-dt-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+        .educore-dt-filter-box {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .educore-filter-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .educore-select-element {
+            padding: 8px 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font-size: 14px;
+            color: #334155;
+            min-width: 180px;
+            background-color: #fff;
+            height: 38px;
+        }
+        .educore-select-element:disabled {
+            background-color: #f1f5f9;
+            color: #94a3b8;
+            cursor: not-allowed;
+        }
+        
+        /* DataTables Core Overrides to Match Elite UI Theme */
+        table.dataTable {
+            border-collapse: collapse !important;
+            margin-top: 15px !important;
+            margin-bottom: 15px !important;
+            border: 1px solid #e2e8f0 !important;
+        }
+        table.dataTable thead th {
+            background: #f8fafc !important;
+            color: #475569 !important;
+            font-weight: 600 !important;
+            padding: 14px 16px !important;
+            border-bottom: 2px solid #e2e8f0 !important;
+            font-size: 12px !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.5px !important;
+        }
+        table.dataTable tbody td {
+            padding: 14px 16px !important;
+            border-bottom: 1px solid #f1f5f9 !important;
+            color: #334155 !important;
+            font-size: 14px !important;
+            vertical-align: middle !important;
+        }
+        table.dataTable tbody tr:hover td {
+            background-color: #f8fafc !important;
+        }
+        
+        /* Custom UI Badges & Action Typography */
+        .educore-badge-gender {
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            display: inline-block;
+        }
+        .gender-male { background: #e0f2fe; color: #0369a1; }
+        .gender-female { background: #fce7f3; color: #be185d; }
+        
+        .educore-row-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+        .educore-link-action {
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 13px;
+            display: inline-flex;
+            align-items: center;
+            transition: color 0.15s ease;
+        }
+        .action-view { color: #3b82f6; }
+        .action-view:hover { color: #2563eb; }
+        .action-edit { color: #10b981; }
+        .action-edit:hover { color: #059669; }
+        .action-delete { color: #ef4444; }
+        .action-delete:hover { color: #dc2626; }
+
+        /* DataTables Control Elements Styling */
+        .dataTables_wrapper .dataTables_filter input {
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 6px !important;
+            padding: 6px 12px !important;
+            background-color: #fff !important;
+            margin-left: 8px !important;
+            width: 260px !important;
+            height: 38px !important;
+        }
+        .dataTables_wrapper .dataTables_length select {
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 6px !important;
+            padding: 4px 8px !important;
+            height: 38px !important;
+            background-color: #fff !important;
+        }
+
+        /* Fixed Footer Layout for Pagination & Info Controls */
+        .educore-dt-footer-layout {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 1px solid #e2e8f0;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+        .dataTables_wrapper .dataTables_info {
+            padding-top: 0 !important;
+            color: #475569 !important;
+            font-weight: 500;
+            font-size: 13px;
+        }
+        .dataTables_wrapper .dataTables_paginate {
+            padding-top: 0 !important;
+            display: flex;
+            gap: 4px;
+        }
+        .dataTables_wrapper .dataTables_paginate .paginate_button {
+            padding: 6px 12px !important;
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 6px !important;
+            background: #ffffff !important;
+            color: #475569 !important;
+            font-weight: 500 !important;
+            font-size: 13px !important;
+            transition: all 0.2s ease;
+        }
+        .dataTables_wrapper .dataTables_paginate .paginate_button.current,
+        .dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
+            background: #22c55e !important;
+            color: #fff !important;
+            border: 1px solid #22c55e !important;
+            border-radius: 6px !important;
+        }
+        .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+            background: #f1f5f9 !important;
+            color: #1e293b !important;
+            border-color: #cbd5e1 !important;
+        }
     </style>
 
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="fw-bold text-slate-800"><span class="dashicons dashicons-welcome-learn-more text-success fs-3 pt-1"></span> Students Directory</h2>
-    </div>
-
-    <!-- Feedback Alerts Component Layer -->
-    <?php if ( ! empty( $error_msg ) ) : ?>
-        <div class="alert alert-danger border-0 shadow-sm mb-4 alert-dismissible fade show" role="alert">
-            <strong>Execution Halt:</strong> <?php echo esc_html( $error_msg ); ?>
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-    <?php endif; ?>
-    <?php if ( ! empty( $success_msg ) ) : ?>
-        <div class="alert alert-success border-0 shadow-sm mb-4 alert-dismissible fade show" role="alert">
-            <strong>Success Stack:</strong> <?php echo esc_html( $success_msg ); ?>
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-    <?php endif; ?>
-
-    <!-- Tab Content Engine Stack -->
-    <div class="tab-content" id="directoryTabsContent">
+    <div class="educore-dt-container">
         
-        <!-- TAB 1: ALL STUDENTS LIST VIEW -->
-        <div class="tab-pane fade <?php echo $active_tab === 'all-students' ? 'show active' : ''; ?>" id="all-students" role="tabpanel" aria-labelledby="all-students-tab">
-            <div class="bg-white p-4 rounded shadow-sm border">
-                <table class="table table-striped table-hover educore-datatable align-middle w-100">
-                    <thead>
-                        <tr>
-                            <th style="width: 60px;">Photo</th>
-                            <th>Student ID</th>
-                            <th>Name</th>
-                            <th>Class</th>
-                            <th>Section</th>
-                            <th>Roll</th>
-                            <th>Status</th>
-                            <th style="text-align: right; width: 120px;">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php if ( $students ) : foreach ( $students as $student ) : 
-                            $view_url   = admin_url( 'admin.php?page=school_management_system&tab=students&sub=view&id=' . $student->id );
-                            $edit_url   = admin_url( 'admin.php?page=school_management_system&tab=students&sub=edit&id=' . $student->id );
-                            $delete_url = wp_nonce_url( admin_url( 'admin.php?page=school_management_system&tab=students&sub=delete&id=' . $student->id ), 'delete_student_' . $student->id );
-                            $first_letter = mb_substr( $student->full_name, 0, 1, 'utf-8' );
+        <!-- External Advanced Bento Toolbar Grid -->
+        <div class="educore-dt-toolbar">
+            <div class="educore-dt-filter-box">
+                <!-- Class Custom Select Unit -->
+                <div class="educore-filter-group">
+                    <label for="educoreClassCustomFilter" style="font-weight: 600; color: #475569; font-size: 14px; white-space: nowrap;">
+                        <span class="dashicons dashicons-filter" style="font-size: 18px; vertical-align: middle; margin-right: 4px;"></span>
+                        <?php esc_html_e( 'Filter Class:', 'educore' ); ?>
+                    </label>
+                    <select id="educoreClassCustomFilter" class="educore-select-element">
+                        <option value=""><?php esc_html_e( 'Show All Classes', 'educore' ); ?></option>
+                        <?php foreach ( $available_classes as $class_name ) : ?>
+                            <option value="<?php echo esc_attr( $class_name ); ?>"><?php echo esc_html( $class_name ); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <!-- Dependent Dynamic Section Select Unit -->
+                <div class="educore-filter-group">
+                    <label for="educoreSectionCustomFilter" style="font-weight: 600; color: #475569; font-size: 14px; white-space: nowrap;">
+                        <?php esc_html_e( 'Section:', 'educore' ); ?>
+                    </label>
+                    <select id="educoreSectionCustomFilter" class="educore-select-element" disabled>
+                        <option value=""><?php esc_html_e( 'Select Class First', 'educore' ); ?></option>
+                    </select>
+                </div>
+            </div>
+            <div id="educoreDtSearchTarget"></div>
+        </div>
+
+        <!-- DOM Data Table Target -->
+        <table id="educoreStudentsMainTable" class="display stripe hover cell-border" style="width:100%">
+            <thead>
+                <tr>
+                    <th><?php esc_html_e( 'Student ID', 'educore' ); ?></th>
+                    <th><?php esc_html_e( 'Full Name', 'educore' ); ?></th>
+                    <th><?php esc_html_e( 'Academic Class', 'educore' ); ?></th>
+                    <th><?php esc_html_e( 'Roll No', 'educore' ); ?></th>
+                    <th><?php esc_html_e( 'Gender', 'educore' ); ?></th>
+                    <th><?php esc_html_e( 'Guardian Contacts', 'educore' ); ?></th>
+                    <th style="text-align: right; white-space: nowrap;"><?php esc_html_e( 'System Actions', 'educore' ); ?></th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php if ( ! empty( $students_records ) ) : ?>
+                    <?php foreach ( $students_records as $student ) : 
+                        $view_url   = admin_url( 'admin.php?page=school_management_system&tab=students&sub=view&id=' . absint( $student->id ) );
+                        $edit_url   = admin_url( 'admin.php?page=school_management_system&tab=students&sub=edit&id=' . absint( $student->id ) );
+                        $delete_url = wp_nonce_url( admin_url( 'admin.php?page=school_management_system&tab=students&sub=delete&id=' . absint( $student->id ) ), 'delete_student_' . $student->id );
+                        $gender_style = ( strtolower( $student->gender ) === 'male' ) ? 'gender-male' : 'gender-female';
                         ?>
-                        <tr>
+                        <tr data-class="<?php echo esc_attr( $student->class_name ); ?>" data-section="<?php echo esc_attr( $student->section_name ); ?>">
+                            <td class="fw-bold"><code><?php echo esc_html( $student->student_id ); ?></code></td>
                             <td>
-                                <?php if ( ! empty( $student->photo_url ) ) : ?>
-                                    <img src="<?php echo esc_url( $student->photo_url ); ?>" alt="Student" class="rounded-circle border shadow-sm" style="width: 40px; height: 40px; object-fit: cover;">
-                                <?php else : ?>
-                                    <div class="rounded-circle d-flex align-items-center justify-content-center border shadow-sm" style="width: 40px; height: 40px; background-color: #e6f3ef; color: #006a4e; font-weight: 700; font-size: 1.1rem;">
-                                        <?php echo esc_html( $first_letter ); ?>
-                                    </div>
-                                <?php endif; ?>
+                                <div style="font-weight: 600; color: #0f172a;"><?php echo esc_html( $student->full_name ); ?></div>
+                                <small style="color: #94a3b8; font-size: 11px;"><?php echo esc_html( $student->name_bn ); ?></small>
                             </td>
-                            <td><strong><?php echo esc_html( $student->student_id ); ?></strong></td>
-                            <td><?php echo esc_html( $student->full_name ); ?></td>
-                            <td><?php echo esc_html( $student->class_name ); ?></td>
-                            <td><?php echo esc_html( $student->section_name ); ?></td>
-                            <td><?php echo esc_html( $student->roll_no ); ?></td>
                             <td>
-                                <span class="badge <?php echo $student->status === 'Active' ? 'bg-success' : 'bg-danger'; ?>">
-                                    <?php echo esc_html( $student->status ); ?>
+                                <div style="font-weight: 500;"><?php echo esc_html( $student->class_name ); ?></div>
+                                <small style="color: #64748b; font-size: 11px;">Section: <?php echo esc_html( $student->section_name ); ?></small>
+                            </td>
+                            <td style="font-weight: 700; color: #334155;"><?php echo esc_html( $student->roll_no ); ?></td>
+                            <td>
+                                <span class="educore-badge-gender <?php echo esc_attr( $gender_style ); ?>">
+                                    <?php echo esc_html( $student->gender ); ?>
                                 </span>
                             </td>
+                            <td>
+                                <div style="font-weight: 500;"><?php echo esc_html( $student->guardian_name ); ?></div>
+                                <div style="font-size: 12px; color: #64748b;"><span class="dashicons dashicons-phone" style="font-size: 12px; width:12px; height:12px; vertical-align:middle;"></span> <?php echo esc_html( $student->student_phone ? $student->student_phone : $student->guardian_phone ); ?></div>
+                            </td>
                             <td style="text-align: right;">
-                                <div class="d-inline-flex gap-2">
-                                    <a href="<?php echo esc_url( $view_url ); ?>" class="btn btn-sm btn-info text-white action-btn-matrix" title="View Details">
-                                        <svg viewBox="0 0 24 24" style="width: 16px; height: 16px; fill: currentColor;"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+                                <div class="educore-row-actions">
+                                    <a href="<?php echo esc_url( $view_url ); ?>" class="educore-link-action action-view">
+                                        <span class="dashicons dashicons-visibility me-1" style="font-size: 16px;"></span> Profile
                                     </a>
-                                    <a href="<?php echo esc_url( $edit_url ); ?>" class="btn btn-sm btn-primary action-btn-matrix" title="Edit Record">
-                                        <svg viewBox="0 0 24 24" style="width: 16px; height: 16px; fill: currentColor;"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                                    <span style="color: #cbd5e1;">|</span>
+                                    <a href="<?php echo esc_url( $edit_url ); ?>" class="educore-link-action action-edit">
+                                        <span class="dashicons dashicons-edit me-1" style="font-size: 16px;"></span> Edit
                                     </a>
-                                    <a href="<?php echo esc_url( $delete_url ); ?>" class="btn btn-sm btn-danger action-btn-matrix" title="Delete Student" onclick="return confirm('Are you sure you want to delete this student permanently from schemas?');">
-                                        <svg viewBox="0 0 24 24" style="width: 16px; height: 16px; fill: currentColor;"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                                    <span style="color: #cbd5e1;">|</span>
+                                    <a href="<?php echo esc_url( $delete_url ); ?>" class="educore-link-action action-delete" onclick="return confirm('Are you sure you want to completely drop this student file?');">
+                                        <span class="dashicons dashicons-trash me-1" style="font-size: 16px;"></span> Delete
                                     </a>
                                 </div>
                             </td>
                         </tr>
-                        <?php endforeach; else: ?>
-                        <tr>
-                            <td colspan="8" class="text-center text-muted py-4">No student data packages available in repository.</td>
-                        </tr>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
-            </div>
-        </div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </tbody>
+        </table>
 
-        <!-- TAB 2: ADMIT/ADD NEW STUDENT FORM VIEW -->
-        <div class="tab-pane fade <?php echo $active_tab === 'add-student' ? 'show active' : ''; ?>" id="add-student" role="tabpanel" aria-labelledby="add-student-tab">
-            <div class="bg-white p-4 rounded shadow-sm border">
-                <h4 class="mb-4 text-success fw-bold border-bottom pb-2">Institutional Admission Interface</h4>
-                
-                <form method="POST" action="" enctype="multipart/form-data" id="educoreAdmissionForm">
-                    <?php wp_nonce_field( 'save_student_action', 'educore_student_nonce' ); ?>
-                    
-                    <div class="row">
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label fw-bold">Student ID (Unique/UID)</label>
-                            <input type="text" name="student_id" class="form-control" value="<?php echo isset($_POST['student_id']) ? esc_attr($_POST['student_id']) : ''; ?>" required>
-                        </div>
-                        <div class="col-md-8 mb-3">
-                            <label class="form-label fw-bold">Full Name (English)</label>
-                            <input type="text" name="full_name" class="form-control" value="<?php echo isset($_POST['full_name']) ? esc_attr($_POST['full_name']) : ''; ?>" required>
-                        </div>
-                    </div>
-
-                    <div class="row">
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label fw-bold">Class / Session</label>
-                            <input type="text" name="class_name" class="form-control" value="<?php echo isset($_POST['class_name']) ? esc_attr($_POST['class_name']) : ''; ?>" required>
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label fw-bold">Section / Group</label>
-                            <input type="text" name="section_name" class="form-control" value="<?php echo isset($_POST['section_name']) ? esc_attr($_POST['section_name']) : ''; ?>">
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label fw-bold">Class Roll Number</label>
-                            <input type="number" name="roll_no" class="form-control" value="<?php echo isset($_POST['roll_no']) ? esc_attr($_POST['roll_no']) : ''; ?>" required>
-                        </div>
-                    </div>
-
-                    <div class="row">
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label fw-bold">Date of Birth</label>
-                            <input type="date" name="dob" class="form-control" value="<?php echo isset($_POST['dob']) ? esc_attr($_POST['dob']) : ''; ?>">
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label fw-bold">Gender</label>
-                            <select name="gender" class="form-control">
-                                <option value="Male" <?php checked( isset($_POST['gender']) && $_POST['gender'] === 'Male' ); ?>>Male</option>
-                                <option value="Female" <?php checked( isset($_POST['gender']) && $_POST['gender'] === 'Female' ); ?>>Female</option>
-                                <option value="Other" <?php checked( isset($_POST['gender']) && $_POST['gender'] === 'Other' ); ?>>Other</option>
-                            </select>
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label fw-bold">Admission Date</label>
-                            <input type="date" name="admission_date" class="form-control" value="<?php echo isset($_POST['admission_date']) ? esc_attr($_POST['admission_date']) : date('Y-m-d'); ?>">
-                        </div>
-                    </div>
-
-                    <div class="row">
-                        <div class="col-md-12 mb-3">
-                            <label class="form-label fw-bold">Student Profile Photo</label>
-                            <input type="file" name="student_photo" class="form-control" accept="image/*">
-                            <div class="form-text text-muted">Accepted payload extensions: JPG, JPEG, PNG. Max 2MB threshold.</div>
-                        </div>
-                    </div>
-
-                    <h5 class="mb-3 text-success border-bottom pb-2 mt-4">Guardian Operational Communications</h5>
-
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label fw-bold">Legal Guardian Name</label>
-                            <input type="text" name="guardian_name" class="form-control" value="<?php echo isset($_POST['guardian_name']) ? esc_attr($_POST['guardian_name']) : ''; ?>" required>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label fw-bold">Guardian Primary Phone (SMS Node Target)</label>
-                            <input type="text" name="guardian_phone" class="form-control" value="<?php echo isset($_POST['guardian_phone']) ? esc_attr($_POST['guardian_phone']) : ''; ?>" required>
-                        </div>
-                    </div>
-
-                    <div class="row">
-                        <div class="col-md-8 mb-3">
-                            <label class="form-label fw-bold">Present Address Infrastructure</label>
-                            <textarea name="address" class="form-control" rows="2" placeholder="Vill/Road, Post Office, Upazila, District"><?php echo isset($_POST['address']) ? esc_textarea($_POST['address']) : ''; ?></textarea>
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label fw-bold">Account Lifecycle Status</label>
-                            <select name="status" class="form-control">
-                                <option value="Active" <?php checked( !isset($_POST['status']) || $_POST['status'] === 'Active' ); ?>>Active</option>
-                                <option value="Inactive" <?php checked( isset($_POST['status']) && $_POST['status'] === 'Inactive' ); ?>>Inactive</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <button type="submit" name="educore_save_student" class="btn btn-success px-5 py-2 mt-3" style="background-color: #006a4e; border: none; font-weight: 600;">
-                        Finalize Enrolment Stack
-                    </button>
-                </form>
-            </div>
-        </div>
-
+        <!-- Target Render Element for Re-positioned Footer Pagination Controls -->
+        <div id="educoreDtFooterTarget" class="educore-dt-footer-layout"></div>
     </div>
 
+    <!-- DataTables Engine Instantiation Handler Script -->
     <script type="text/javascript">
     jQuery(document).ready(function($) {
-        // Initialize Core DataTable Framework
         if ($.fn.DataTable) {
-            $('.educore-datatable').DataTable({
-                "pageLength": 15,
+            
+            // কাস্টম ফিল্টারিং প্লাগইন এক্সটেনশন (DOM ইন্ডিপেন্ডেন্ট ডাটা-অ্যাট্রিবিউট সার্চ ম্যাট্রিক্স)
+            $.fn.dataTable.ext.search.push(
+                function(settings, data, dataIndex) {
+                    var rowNode = tableInstance.row(dataIndex).node();
+                    var rowClass = $(rowNode).attr('data-class') || '';
+                    var rowSection = $(rowNode).attr('data-section') || '';
+                    
+                    var selectedClass = $('#educoreClassCustomFilter').val();
+                    var selectedSection = $('#educoreSectionCustomFilter').val();
+                    
+                    if (selectedClass && rowClass !== selectedClass) {
+                        return false;
+                    }
+                    if (selectedSection && rowSection !== selectedSection) {
+                        return false;
+                    }
+                    return true;
+                }
+            );
+
+            var tableInstance = $('#educoreStudentsMainTable').DataTable({
+                "pageLength": 20,
+                "lengthMenu": [10, 20, 50, 100],
                 "ordering": true,
+                "order": [[2, "asc"], [3, "asc"]], // Order by Class first, then Roll
                 "responsive": true,
-                "columnDefs": [
-                    { "orderable": false, "targets": [0, 7] }
-                ]
+                "dom": 't<"educore-dt-footer-internal"lip>',
+                "language": {
+                    "search": "",
+                    "searchPlaceholder": "Search anything instantly..."
+                }
             });
-        }
 
-        // Keep active tab state inside URL hash parameters to survive reload execution loops
-        var hash = window.location.hash;
-        if (hash) {
-            var triggerEl = document.querySelector('#directoryTabs button[data-bs-target="' + hash + '"]');
-            if (triggerEl) {
-                var tab = new bootstrap.Tab(triggerEl);
-                tab.show();
-            }
-        }
+            // ১. ক্লাস ড্রপডাউন পরিবর্তন ট্র্যাকার এবং সেকশন এক্সট্রাকশন ইঞ্জিন
+            $('#educoreClassCustomFilter').on('change', function() {
+                var selectedClass = $(this).val();
+                var sectionFilter = $('#educoreSectionCustomFilter');
+                
+                // সেকশন ফিল্টার রিসেট
+                sectionFilter.empty().append('<option value="">All Sections</option>');
 
-        // Sync tab state triggers into address string hashes
-        $('#directoryTabs button[data-bs-toggle="tab"]').on('shown.bs.tab', function (e) {
-            window.location.hash = $(e.target).attr('data-bs-target');
-        });
+                if (selectedClass) {
+                    var uniqueSections = [];
+
+                    // শুধুমাত্র ক্লাস ম্যাচ করা রো থেকে সেকশন এক্সট্রাক্ট করা
+                    $('#educoreStudentsMainTable tbody tr').each(function() {
+                        var rowClass = $(this).attr('data-class');
+                        var rowSection = $(this).attr('data-section');
+                        if (rowClass === selectedClass && rowSection && uniqueSections.indexOf(rowSection) === -1) {
+                            uniqueSections.push(rowSection);
+                        }
+                    });
+
+                    // ড্রপডাউন পপুলেট ও এনেবল করা
+                    if (uniqueSections.length > 0) {
+                        uniqueSections.sort();
+                        $.each(uniqueSections, function(index, value) {
+                            sectionFilter.append('<option value="' + value + '">' + value + '</option>');
+                        });
+                        sectionFilter.prop('disabled', false);
+                    } else {
+                        sectionFilter.prop('disabled', true);
+                    }
+                } else {
+                    sectionFilter.empty().append('<option value="">Select Class First</option>').prop('disabled', true);
+                }
+                
+                tableInstance.draw();
+            });
+
+            // ২. সেকশন ড্রপডাউন পরিবর্তন ট্র্যাকার
+            $('#educoreSectionCustomFilter').on('change', function() {
+                tableInstance.draw();
+            });
+
+            // সার্চ ফিল্ড এবং ফুটারে পেজিনেশন ব্লক কাস্টম কন্টেইনারে মুভ করা
+            $('.dataTables_filter').appendTo('#educoreDtSearchTarget');
+            $('.educore-dt-footer-internal').appendTo('#educoreDtFooterTarget');
+        }
     });
     </script>
     <?php

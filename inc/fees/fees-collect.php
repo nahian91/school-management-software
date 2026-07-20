@@ -1,90 +1,101 @@
 <?php
-if ( ! defined( 'ABSPATH' ) ) exit;
+if ( ! defined( 'ABSPATH' ) ) {
+    exit; // Exit if accessed directly
+}
 
 function educore_fees_collect_view() {
     global $wpdb;
     $table_students = $wpdb->prefix . 'sms_students';
     $table_fees     = $wpdb->prefix . 'sms_fees';
 
+    // Strict Security Control: Capability Check
+    if ( ! current_user_can( 'manage_options' ) ) {
+        wp_die( esc_html__( 'You do not have sufficient permissions to collect fees.', 'educore' ) );
+    }
+
     $db_error = '';
 
     // Secure Mutation Engine Form Submission Handler
-    if ( isset( $_POST['educore_collect_fee'] ) && wp_verify_nonce( $_POST['educore_fee_nonce'] ?? '', 'collect_fee_action' ) ) {
-        
-        $student_id  = absint( $_POST['student_id'] ?? 0 );
-        $amount      = max( 0, floatval( $_POST['amount'] ?? 0 ) );
-        $late_fine   = max( 0, floatval( $_POST['late_fine'] ?? 0 ) );
-        $discount    = max( 0, floatval( $_POST['discount'] ?? 0 ) );
-        $paid_amount = max( 0, floatval( $_POST['paid_amount'] ?? 0 ) );
-        
-        // Gross including Late Fine
-        $gross_total = $amount + $late_fine;
-        $net_payable = max( 0, $gross_total - $discount );
-        $due_amount  = max( 0, $net_payable - $paid_amount );
-        
-        // Payment Status Business Logic
-        $payment_status = 'Unpaid';
-        if ( $paid_amount >= $net_payable && $net_payable > 0 ) {
-            $payment_status = 'Paid';
-            $due_amount     = 0;
-        } elseif ( $paid_amount > 0 && $paid_amount < $net_payable ) {
-            $payment_status = 'Partial';
-        }
-
-        // Generate Unique Invoice ID
-        $invoice_id = 'INV-' . date( 'ym' ) . '-' . wp_rand( 10000, 99999 );
-
-        $data = array(
-            'invoice_id'     => $invoice_id,
-            'student_id'     => $student_id,
-            'fee_month'      => sanitize_text_field( $_POST['fee_month'] ?? '' ),
-            'fee_year'       => sanitize_text_field( $_POST['fee_year'] ?? '' ),
-            'fee_type'       => sanitize_text_field( $_POST['fee_type'] ?? '' ),
-            'amount'         => $amount,
-            'late_fine'      => $late_fine,
-            'discount'       => $discount,
-            'net_payable'    => $net_payable,
-            'paid_amount'    => $paid_amount,
-            'due_amount'     => $due_amount,
-            'payment_status' => $payment_status,
-            'payment_method' => sanitize_text_field( $_POST['payment_method'] ?? 'Cash' ),
-            'transaction_id' => sanitize_text_field( $_POST['transaction_id'] ?? '' ),
-            'remarks'        => sanitize_text_field( $_POST['remarks'] ?? '' ),
-            'payment_date'   => current_time( 'mysql' ),
-            'collected_by'   => get_current_user_id()
-        );
-
-        $format = array(
-            '%s', // invoice_id
-            '%d', // student_id
-            '%s', // fee_month
-            '%s', // fee_year
-            '%s', // fee_type
-            '%f', // amount
-            '%f', // late_fine
-            '%f', // discount
-            '%f', // net_payable
-            '%f', // paid_amount
-            '%f', // due_amount
-            '%s', // payment_status
-            '%s', // payment_method
-            '%s', // transaction_id
-            '%s', // remarks
-            '%s', // payment_date
-            '%d'  // collected_by
-        );
-
-        $inserted = $wpdb->insert( $table_fees, $data, $format );
-        
-        if ( $inserted ) {
-            if ( class_exists( 'IFSEdu_School_Management_System' ) ) {
-                IFSEdu_School_Management_System::log_activity( sprintf( "Collected fee invoice: (%s) Amount: %.2f", $invoice_id, $paid_amount ) );
+    if ( $_SERVER['REQUEST_METHOD'] === 'POST' && isset( $_POST['educore_collect_fee'] ) ) {
+        if ( isset( $_POST['educore_fee_nonce'] ) && wp_verify_nonce( $_POST['educore_fee_nonce'], 'collect_fee_action' ) ) {
+            
+            $student_id  = absint( $_POST['student_id'] ?? 0 );
+            $amount      = max( 0, floatval( $_POST['amount'] ?? 0 ) );
+            $late_fine   = max( 0, floatval( $_POST['late_fine'] ?? 0 ) );
+            $discount    = max( 0, floatval( $_POST['discount'] ?? 0 ) );
+            $paid_amount = max( 0, floatval( $_POST['paid_amount'] ?? 0 ) );
+            
+            // Gross including Late Fine
+            $gross_total = $amount + $late_fine;
+            $net_payable = max( 0, $gross_total - $discount );
+            $due_amount  = max( 0, $net_payable - $paid_amount );
+            
+            // Payment Status Business Logic
+            $payment_status = 'Unpaid';
+            if ( $paid_amount >= $net_payable && $net_payable > 0 ) {
+                $payment_status = 'Paid';
+                $due_amount     = 0;
+            } elseif ( $paid_amount > 0 && $paid_amount < $net_payable ) {
+                $payment_status = 'Partial';
             }
-            $print_url = admin_url( 'admin.php?page=school_management_system&tab=fees&sub=print&invoice=' . urlencode( $invoice_id ) );
-            echo '<script type="text/javascript">window.location.href="' . esc_url( $print_url ) . '";</script>';
-            exit;
+
+            // Generate Unique Invoice ID
+            $invoice_id = 'INV-' . date( 'ym' ) . '-' . wp_rand( 10000, 99999 );
+
+            $data = array(
+                'invoice_id'     => $invoice_id,
+                'student_id'     => $student_id,
+                'fee_month'      => sanitize_text_field( $_POST['fee_month'] ?? '' ),
+                'fee_year'       => absint( $_POST['fee_year'] ?? date('Y') ),
+                'fee_type'       => sanitize_text_field( $_POST['fee_type'] ?? '' ),
+                'amount'         => $amount,
+                'late_fine'      => $late_fine,
+                'discount'       => $discount,
+                'net_payable'    => $net_payable,
+                'paid_amount'    => $paid_amount,
+                'due_amount'     => $due_amount,
+                'payment_status' => $payment_status,
+                'payment_method' => sanitize_text_field( $_POST['payment_method'] ?? 'Cash' ),
+                'transaction_id' => sanitize_text_field( $_POST['transaction_id'] ?? '' ),
+                'remarks'        => sanitize_text_field( $_POST['remarks'] ?? '' ),
+                'payment_date'   => current_time( 'mysql' ),
+                'collected_by'   => get_current_user_id()
+            );
+
+            $format = array(
+                '%s', // invoice_id
+                '%d', // student_id
+                '%s', // fee_month
+                '%d', // fee_year
+                '%s', // fee_type
+                '%f', // amount
+                '%f', // late_fine
+                '%f', // discount
+                '%f', // net_payable
+                '%f', // paid_amount
+                '%f', // due_amount
+                '%s', // payment_status
+                '%s', // payment_method
+                '%s', // transaction_id
+                '%s', // remarks
+                '%s', // payment_date
+                '%d'  // collected_by
+            );
+
+            $inserted = $wpdb->insert( $table_fees, $data, $format );
+            
+            if ( $inserted ) {
+                if ( class_exists( 'IFSEdu_School_Management_System' ) ) {
+                    IFSEdu_School_Management_System::log_activity( sprintf( "Collected fee invoice: (%s) Amount: %.2f", $invoice_id, $paid_amount ) );
+                }
+                $print_url = admin_url( 'admin.php?page=school_management_system&tab=fees&sub=print&invoice=' . urlencode( $invoice_id ) );
+                echo '<script type="text/javascript">window.location.href="' . esc_url( $print_url ) . '";</script>';
+                exit;
+            } else {
+                $db_error = $wpdb->last_error ? $wpdb->last_error : 'Failed to write record to database. Verify mysql columns: late_fine, transaction_id, remarks.';
+            }
         } else {
-            $db_error = $wpdb->last_error ? $wpdb->last_error : 'Failed to write record to database. Verify mysql columns: late_fine, transaction_id, remarks.';
+            $db_error = __( 'Security check failed. Nonce confirmation mismatch.', 'educore' );
         }
     }
 
@@ -111,7 +122,7 @@ function educore_fees_collect_view() {
 
     <?php if ( ! empty( $db_error ) ) : ?>
         <div class="alert alert-danger shadow-sm border-0 mb-4 mx-auto" style="max-width: 900px;">
-            <strong>Database Error:</strong> <?php echo esc_html( $db_error ); ?>
+            <strong>Database Status Alert:</strong> <?php echo esc_html( $db_error ); ?>
         </div>
     <?php endif; ?>
 
@@ -132,7 +143,7 @@ function educore_fees_collect_view() {
                 <!-- Student Selector Component -->
                 <div class="mb-4">
                     <label class="form-label fw-semibold text-secondary"><?php esc_html_e( 'Select Target Student *', 'educore' ); ?></label>
-                    <select name="student_id" id="student_id" class="form-select form-select-lg" required>
+                    <select name="student_id" id="student_id" class="form-select form-select-lg shadow-none" required>
                         <option value=""><?php esc_html_e( '-- Search & Select Student --', 'educore' ); ?></option>
                         <?php if ( ! empty( $students ) ) : ?>
                             <?php foreach ( $students as $s ) : ?>
@@ -148,7 +159,7 @@ function educore_fees_collect_view() {
                 <div class="row g-3 mb-4">
                     <div class="col-md-4">
                         <label class="form-label fw-semibold text-secondary"><?php esc_html_e( 'Fee Category Type', 'educore' ); ?></label>
-                        <select name="fee_type" class="form-select" required>
+                        <select name="fee_type" class="form-select shadow-none" required>
                             <option value="Tuition Fee"><?php esc_html_e( 'Tuition Fee', 'educore' ); ?></option>
                             <option value="Admission Fee"><?php esc_html_e( 'Admission Fee', 'educore' ); ?></option>
                             <option value="Exam Fee"><?php esc_html_e( 'Exam Fee', 'educore' ); ?></option>
@@ -159,7 +170,7 @@ function educore_fees_collect_view() {
                     </div>
                     <div class="col-md-4">
                         <label class="form-label fw-semibold text-secondary"><?php esc_html_e( 'Billing Month', 'educore' ); ?></label>
-                        <select name="fee_month" class="form-select" required>
+                        <select name="fee_month" class="form-select shadow-none" required>
                             <?php foreach ( $months as $m ) : ?>
                                 <option value="<?php echo esc_attr( $m ); ?>" <?php selected( $current_month, $m ); ?>>
                                     <?php echo esc_html( $m ); ?>
@@ -169,7 +180,7 @@ function educore_fees_collect_view() {
                     </div>
                     <div class="col-md-4">
                         <label class="form-label fw-semibold text-secondary"><?php esc_html_e( 'Billing Year', 'educore' ); ?></label>
-                        <input type="number" name="fee_year" class="form-control" value="<?php echo esc_attr( $current_year ); ?>" required>
+                        <input type="number" name="fee_year" class="form-control shadow-none" value="<?php echo esc_attr( $current_year ); ?>" required>
                     </div>
                 </div>
 
@@ -177,15 +188,15 @@ function educore_fees_collect_view() {
                 <div class="row border-0 p-4 rounded-3 mb-4 g-3" style="background-color: #f8fafc; border: 1px dashed #cbd5e1 !important;">
                     <div class="col-md-3">
                         <label class="form-label fw-semibold text-dark"><?php esc_html_e( 'Base Amount (৳) *', 'educore' ); ?></label>
-                        <input type="number" step="0.01" name="amount" id="fee_amount" class="form-control bg-white fw-semibold" value="0.00" min="0" required>
+                        <input type="number" step="0.01" name="amount" id="fee_amount" class="form-control bg-white fw-semibold shadow-none" value="0.00" min="0" required>
                     </div>
                     <div class="col-md-3">
                         <label class="form-label fw-semibold text-danger"><?php esc_html_e( 'Late Fine (৳)', 'educore' ); ?></label>
-                        <input type="number" step="0.01" name="late_fine" id="fee_fine" class="form-control bg-white fw-semibold text-danger" value="0.00" min="0">
+                        <input type="number" step="0.01" name="late_fine" id="fee_fine" class="form-control bg-white fw-semibold text-danger shadow-none" value="0.00" min="0">
                     </div>
                     <div class="col-md-3">
                         <label class="form-label fw-semibold text-primary"><?php esc_html_e( 'Discount / Waiver (৳)', 'educore' ); ?></label>
-                        <input type="number" step="0.01" name="discount" id="fee_discount" class="form-control bg-white fw-semibold text-primary" value="0.00" min="0">
+                        <input type="number" step="0.01" name="discount" id="fee_discount" class="form-control bg-white fw-semibold text-primary shadow-none" value="0.00" min="0">
                         <div class="btn-group btn-group-sm mt-1 w-100" role="group">
                             <button type="button" class="btn btn-outline-secondary py-0 discount-btn" data-pct="5">5%</button>
                             <button type="button" class="btn btn-outline-secondary py-0 discount-btn" data-pct="10">10%</button>
@@ -194,7 +205,7 @@ function educore_fees_collect_view() {
                     </div>
                     <div class="col-md-3">
                         <label class="form-label fw-semibold text-success"><?php esc_html_e( 'Net Payable (৳)', 'educore' ); ?></label>
-                        <input type="number" id="fee_net" class="form-control border-0 fw-bold text-success fs-5" value="0.00" readonly style="background-color: #e2e8f0;">
+                        <input type="number" id="fee_net" class="form-control border-0 fw-bold text-success fs-5 shadow-none" value="0.00" readonly style="background-color: #e2e8f0;">
                     </div>
                 </div>
 
@@ -202,7 +213,7 @@ function educore_fees_collect_view() {
                 <div class="row g-3 mb-4">
                     <div class="col-md-4">
                         <label class="form-label fw-semibold text-secondary"><?php esc_html_e( 'Payment Method', 'educore' ); ?></label>
-                        <select name="payment_method" id="payment_method" class="form-select" required>
+                        <select name="payment_method" id="payment_method" class="form-select shadow-none" required>
                             <option value="Cash"><?php esc_html_e( 'Cash Clearing', 'educore' ); ?></option>
                             <option value="bKash"><?php esc_html_e( 'bKash Mobile Banking', 'educore' ); ?></option>
                             <option value="Nagad"><?php esc_html_e( 'Nagad Mobile Banking', 'educore' ); ?></option>
@@ -212,11 +223,11 @@ function educore_fees_collect_view() {
                     </div>
                     <div class="col-md-4">
                         <label class="form-label fw-semibold text-primary"><?php esc_html_e( 'Actually Paid (৳) *', 'educore' ); ?></label>
-                        <input type="number" step="0.01" name="paid_amount" id="fee_paid" class="form-control border-primary fw-bold text-primary" value="0.00" min="0" required>
+                        <input type="number" step="0.01" name="paid_amount" id="fee_paid" class="form-control border-primary fw-bold text-primary shadow-none" value="0.00" min="0" required>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label fw-semibold text-warning"><?php esc_html_e( 'Outstanding Due (৳)', 'educore' ); ?></label>
-                        <input type="number" id="fee_due" class="form-control border-0 fw-bold text-warning fs-5" value="0.00" readonly style="background-color: #fef3c7;">
+                        <input type="number" id="fee_due" class="form-control border-0 fw-bold text-warning fs-5 shadow-none" value="0.00" readonly style="background-color: #fef3c7;">
                     </div>
                 </div>
 
@@ -224,11 +235,11 @@ function educore_fees_collect_view() {
                 <div class="row g-3 mb-4">
                     <div class="col-md-6">
                         <label class="form-label fw-semibold text-secondary"><?php esc_html_e( 'Transaction / Reference ID', 'educore' ); ?></label>
-                        <input type="text" name="transaction_id" class="form-control" placeholder="e.g. TRX98234723 or Cheque No.">
+                        <input type="text" name="transaction_id" class="form-control shadow-none" placeholder="e.g. TRX98234723 or Cheque No.">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label fw-semibold text-secondary"><?php esc_html_e( 'Notes / Remarks', 'educore' ); ?></label>
-                        <input type="text" name="remarks" class="form-control" placeholder="e.g. Special approval for partial payment">
+                        <input type="text" name="remarks" class="form-control shadow-none" placeholder="e.g. Special approval for partial payment">
                     </div>
                 </div>
 
@@ -243,7 +254,7 @@ function educore_fees_collect_view() {
         </div>
     </div>
 
-    <!-- Calculations Script -->
+    <!-- Calculations Engine Script -->
     <script type="text/javascript">
     document.addEventListener('DOMContentLoaded', function() {
         const amtInput   = document.getElementById('fee_amount');
@@ -254,16 +265,20 @@ function educore_fees_collect_view() {
         const dueInput   = document.getElementById('fee_due');
         const discBtns   = document.querySelectorAll('.discount-btn');
 
-        function calculateLedgerMetrics() {
+        function calculateLedgerMetrics(updatePaidField = false) {
             let baseAmount = parseFloat(amtInput.value) || 0;
             let lateFine   = parseFloat(fineInput.value) || 0;
             let discount   = parseFloat(discInput.value) || 0;
-            let paidValue  = parseFloat(paidInput.value) || 0;
-
+            
             let grossTotal = baseAmount + lateFine;
             let netPayable = Math.max(0, grossTotal - discount);
             netInput.value = netPayable.toFixed(2);
 
+            if (updatePaidField) {
+                paidInput.value = netPayable.toFixed(2);
+            }
+
+            let paidValue   = parseFloat(paidInput.value) || 0;
             let outstandingDue = Math.max(0, netPayable - paidValue);
             dueInput.value = outstandingDue.toFixed(2);
         }
@@ -274,15 +289,15 @@ function educore_fees_collect_view() {
                 let baseAmount = parseFloat(amtInput.value) || 0;
                 let calculatedDiscount = (baseAmount * pct) / 100;
                 discInput.value = calculatedDiscount.toFixed(2);
-                calculateLedgerMetrics();
+                calculateLedgerMetrics(true);
             });
         });
 
         if (amtInput && fineInput && discInput && paidInput) {
-            amtInput.addEventListener('input', calculateLedgerMetrics);
-            fineInput.addEventListener('input', calculateLedgerMetrics);
-            discInput.addEventListener('input', calculateLedgerMetrics);
-            paidInput.addEventListener('input', calculateLedgerMetrics);
+            amtInput.addEventListener('input', function() { calculateLedgerMetrics(true); });
+            fineInput.addEventListener('input', function() { calculateLedgerMetrics(true); });
+            discInput.addEventListener('input', function() { calculateLedgerMetrics(false); });
+            paidInput.addEventListener('input', function() { calculateLedgerMetrics(false); });
         }
     });
     </script>

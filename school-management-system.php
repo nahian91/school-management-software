@@ -47,7 +47,7 @@ final class IFSEdu_School_Management_System {
         $files = array(
             'dashboard', 'students', 'attendance', 'fees', 
             'exams', 'staff', 'academics', 'communication', 
-            'reports', 'frontend-bridge', 'settings'
+            'reports', 'frontend-bridge', 'settings', 'notices'
         );
 
         foreach ( $files as $file ) {
@@ -327,6 +327,57 @@ final class IFSEdu_School_Management_System {
             PRIMARY KEY  (id)
         ) $charset_collate;";
         dbDelta( $sql_academic_units );
+
+        global $wpdb;
+$charset_collate = $wpdb->get_charset_collate();
+
+// 1. Notice & Events Table
+$table_notices = $wpdb->prefix . 'sms_notices';
+$sql_notices   = "CREATE TABLE $table_notices (
+    id bigint(20) NOT NULL AUTO_INCREMENT,
+    title varchar(255) NOT NULL,
+    notice_type varchar(50) DEFAULT 'Notice' NOT NULL,
+    priority varchar(20) DEFAULT 'Normal' NOT NULL,
+    target_audience varchar(50) DEFAULT 'All' NOT NULL,
+    description text NOT NULL,
+    event_date date DEFAULT NULL,
+    attachment_url varchar(255) DEFAULT '' NOT NULL,
+    created_by bigint(20) NOT NULL,
+    created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    status varchar(20) DEFAULT 'Published' NOT NULL,
+    PRIMARY KEY  (id)
+) $charset_collate;";
+
+// 2. Photo Albums Table
+$table_albums = $wpdb->prefix . 'sms_gallery_albums';
+$sql_albums   = "CREATE TABLE $table_albums (
+    id bigint(20) NOT NULL AUTO_INCREMENT,
+    title varchar(255) NOT NULL,
+    category varchar(100) DEFAULT 'General' NOT NULL,
+    event_date date DEFAULT NULL,
+    description text NOT NULL,
+    cover_image varchar(255) DEFAULT '' NOT NULL,
+    status varchar(20) DEFAULT 'Published' NOT NULL,
+    created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    PRIMARY KEY  (id)
+) $charset_collate;";
+
+// 3. Album Photos Table
+$table_photos = $wpdb->prefix . 'sms_gallery_photos';
+$sql_photos   = "CREATE TABLE $table_photos (
+    id bigint(20) NOT NULL AUTO_INCREMENT,
+    album_id bigint(20) NOT NULL,
+    image_url varchar(255) NOT NULL,
+    caption varchar(255) DEFAULT '' NOT NULL,
+    created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    PRIMARY KEY  (id),
+    KEY album_id_idx (album_id)
+) $charset_collate;";
+
+require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+dbDelta( $sql_notices );
+dbDelta( $sql_albums );
+dbDelta( $sql_photos );
     }
 
     /**
@@ -399,8 +450,8 @@ final class IFSEdu_School_Management_System {
                 'svg'   => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M96 0C43 0 0 43 0 96V416c0 53 43 96 96 96H384h32c17.7 0 32-14.3 32-32s-14.3-32-32-32V384c17.7 0 32-14.3 32-32V32c0-17.7-14.3-32-32-32H384 96zm0 384H352v64H96c-17.7 0-32-14.3-32-32s14.3-32 32-32zm32-240c0-8.8 7.2-16 16-16H336c8.8 0 16 7.2 16 16s-7.2 16-16 16H144c-8.8 0-16-7.2-16-16zm16 48H336c8.8 0 16 7.2 16 16s-7.2 16-16 16H144c-8.8 0-16-7.2-16-16s7.2-16 16-16z"/></svg>',
                 'roles' => array( 'administrator' )
             ),
-            'communication' => array(
-                'label' => __( 'SMS & Notice', 'ifsedu-sms' ),
+            'notice' => array(
+                'label' => __( 'Notices & Events', 'ifsedu-sms' ),
                 'svg'   => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M160 368c26.5 0 48 21.5 48 48v16l72.5-54.4c8.3-6.2 18.4-9.6 28.8-9.6H448c8.8 0 16-7.2 16-16V64c0-8.8-7.2-16-16-16H64c-8.8 0-16 7.2-16 16V352c0 8.8 7.2 16 16 16h96zm48 124l-.2 .2-5.1 3.8-17.1 12.8c-4.8 3.6-11.3 4.2-16.8 1.5s-8.8-8.2-8.8-14.3V474.7v-4.5V416H160c-53 0-96-43-96-96V64C64 11 107-32 160-32H448c53 0 96 43 96 96V352c0 53-43 96-96 96H309.3L208 504z"/></svg>',
                 'roles' => array( 'administrator' )
             ),
