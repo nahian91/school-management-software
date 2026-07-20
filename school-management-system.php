@@ -316,17 +316,46 @@ final class IFSEdu_School_Management_System {
         ) $charset_collate;";
         dbDelta( $sql_audit );
 
-        // Schema Model 8: Academic Units Architecture
-        $table_academic_units = $wpdb->prefix . 'sms_academic_units';
-        $sql_academic_units = "CREATE TABLE $table_academic_units (
-            id bigint(20) NOT NULL AUTO_INCREMENT,
-            unit_type varchar(50) NOT NULL,
-            class_name varchar(100) NOT NULL,
-            section_name varchar(100) DEFAULT '' NOT NULL,
-            dept_name varchar(100) DEFAULT '' NOT NULL,
-            PRIMARY KEY  (id)
-        ) $charset_collate;";
-        dbDelta( $sql_academic_units );
+        // 8. Academic Units Architecture
+$table_academic_units = $wpdb->prefix . 'sms_academic_units';
+$sql_academic_units = "CREATE TABLE $table_academic_units (
+    id bigint(20) NOT NULL AUTO_INCREMENT,
+    unit_type varchar(50) NOT NULL,
+    class_name varchar(100) NOT NULL,
+    section_name varchar(100) DEFAULT '' NOT NULL,
+    dept_name varchar(100) DEFAULT '' NOT NULL,
+    PRIMARY KEY (id)
+) $charset_collate;";
+dbDelta( $sql_academic_units );
+
+// 9. Academic Subjects
+$table_subjects = $wpdb->prefix . 'sms_subjects';
+$sql_subjects = "CREATE TABLE $table_subjects (
+    id bigint(20) NOT NULL AUTO_INCREMENT,
+    class_id bigint(20) NOT NULL,
+    subject_name varchar(150) NOT NULL,
+    subject_code varchar(50) DEFAULT '' NOT NULL,
+    subject_type varchar(20) DEFAULT 'Mandatory' NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY (class_id) REFERENCES $table_academic_units(id) ON DELETE CASCADE
+) $charset_collate;";
+dbDelta( $sql_subjects );
+
+// 10. Class Routine Management
+$table_routine = $wpdb->prefix . 'sms_routine';
+$sql_routine = "CREATE TABLE $table_routine (
+    id bigint(20) NOT NULL AUTO_INCREMENT,
+    class_id bigint(20) NOT NULL,
+    subject_id bigint(20) NOT NULL,
+    day_name varchar(20) NOT NULL,
+    start_time time NOT NULL,
+    end_time time NOT NULL,
+    room_no varchar(20) DEFAULT '' NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY (class_id) REFERENCES $table_academic_units(id) ON DELETE CASCADE,
+    FOREIGN KEY (subject_id) REFERENCES $table_subjects(id) ON DELETE CASCADE
+) $charset_collate;";
+dbDelta( $sql_routine );
 
         global $wpdb;
 $charset_collate = $wpdb->get_charset_collate();
