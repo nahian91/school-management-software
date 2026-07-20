@@ -8,92 +8,100 @@ function educore_students_list_view() {
     // Handle Enrolment Form Submission inside the Tab
     $success_msg = '';
     $error_msg   = '';
+    $active_tab  = 'all-students'; // Default fallback anchor matrix
 
     if ( isset( $_POST['educore_save_student'] ) && wp_verify_nonce( $_POST['educore_student_nonce'], 'save_student_action' ) ) {
         $student_uid = sanitize_text_field( $_POST['student_id'] );
+        $active_tab  = 'add-student'; // Route focus to form view upon submission thread
         
-        // Duplication Check
+        // Duplication Check Matrix
         $check_duplicate = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM $table_name WHERE student_id = %s", $student_uid ) );
 
         if ( $check_duplicate ) {
             $error_msg = 'The Student ID "' . esc_html($student_uid) . '" is already assigned to another record.';
         } else {
             $photo_url = '';
-            // Photo Upload Process
+            // Photo Upload Process System Engine
             if ( ! empty( $_FILES['student_photo']['name'] ) ) {
                 require_once ABSPATH . 'wp-admin/includes/file.php';
                 $uploaded_file = wp_handle_upload( $_FILES['student_photo'], array( 'test_form' => false ) );
                 if ( ! isset( $uploaded_file['error'] ) ) {
                     $photo_url = $uploaded_file['url'];
+                } else {
+                    $error_msg = 'Photo Upload Error: ' . esc_html( $uploaded_file['error'] );
                 }
             }
 
-            $data = array(
-                'student_id'     => $student_uid,
-                'full_name'      => sanitize_text_field( $_POST['full_name'] ),
-                'class_name'     => sanitize_text_field( $_POST['class_name'] ),
-                'section_name'   => sanitize_text_field( $_POST['section_name'] ),
-                'roll_no'        => intval( $_POST['roll_no'] ),
-                'dob'            => sanitize_text_field( $_POST['dob'] ),
-                'gender'         => sanitize_text_field( $_POST['gender'] ),
-                'guardian_name'  => sanitize_text_field( $_POST['guardian_name'] ),
-                'guardian_phone' => sanitize_text_field( $_POST['guardian_phone'] ),
-                'address'        => sanitize_textarea_field( $_POST['address'] ),
-                'admission_date' => sanitize_text_field( $_POST['admission_date'] ),
-                'photo_url'      => $photo_url,
-                'status'         => sanitize_text_field( $_POST['status'] )
-            );
+            if ( empty( $error_msg ) ) {
+                $data = array(
+                    'student_id'     => $student_uid,
+                    'full_name'      => sanitize_text_field( $_POST['full_name'] ),
+                    'class_name'     => sanitize_text_field( $_POST['class_name'] ),
+                    'section_name'   => sanitize_text_field( $_POST['section_name'] ),
+                    'roll_no'        => intval( $_POST['roll_no'] ),
+                    'dob'            => sanitize_text_field( $_POST['dob'] ),
+                    'gender'         => sanitize_text_field( $_POST['gender'] ),
+                    'guardian_name'  => sanitize_text_field( $_POST['guardian_name'] ),
+                    'guardian_phone' => sanitize_text_field( $_POST['guardian_phone'] ),
+                    'address'        => sanitize_textarea_field( $_POST['address'] ),
+                    'admission_date' => sanitize_text_field( $_POST['admission_date'] ),
+                    'photo_url'      => $photo_url,
+                    'status'         => sanitize_text_field( $_POST['status'] )
+                );
 
-            $inserted = $wpdb->insert( $table_name, $data );
-            if ( $inserted ) {
-                $success_msg = 'New student enrolled and added successfully.';
-                $_POST = array(); // Clear state
+                $inserted = $wpdb->insert( $table_name, $data );
+                if ( $inserted ) {
+                    $success_msg = 'New student enrolled and added successfully.';
+                    $_POST = array(); // Wipe transactional state
+                    $active_tab = 'all-students'; // On success, pivot back to directory list layout
+                } else {
+                    $error_msg = 'Database insertion failed. Please check system schemas.';
+                }
             }
-            if ( function_exists( 'educore_log_activity' ) ) {
-                educore_log_activity("Saved student record via Directory Tab: " . $data['full_name']);
-            }
+        }
+
+        if ( class_exists( 'IFSEdu_School_Management_System' ) && isset( $data['full_name'] ) ) {
+            IFSEdu_School_Management_System::log_activity("Saved student record via Directory Tab: " . $data['full_name']);
         }
     }
 
-    // Fetch refreshed list
+    // Fetch refreshed list core query
     $students = $wpdb->get_results( "SELECT * FROM $table_name ORDER BY id DESC" );
     ?>
 
     <style>
-        .dnt-directory-tabs .nav-link { color: #64748b; font-weight: 600; border: none; border-bottom: 2px solid transparent; padding: 10px 20px; }
+        .dnt-directory-tabs .nav-link { color: #64748b; font-weight: 600; border: none; border-bottom: 2px solid transparent; padding: 10px 20px; background: transparent; }
         .dnt-directory-tabs .nav-link.active { color: #006a4e !important; background: transparent !important; border-color: #006a4e !important; }
+        .educore-datatable thead th { background-color: #f8fafc; color: #334155; font-weight: 600; border-bottom: 2px solid #e2e8f0; }
+        .action-btn-matrix { width: 32px; height: 32px; padding: 0; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
     </style>
 
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2><span class="dashicons dashicons-welcome-learn-more"></span> Students Directory</h2>
+        <h2 class="fw-bold text-slate-800"><span class="dashicons dashicons-welcome-learn-more text-success fs-3 pt-1"></span> Students Directory</h2>
     </div>
 
-    <!-- Feedback Alerts Component -->
+    <!-- Feedback Alerts Component Layer -->
     <?php if ( ! empty( $error_msg ) ) : ?>
-        <div class="alert alert-danger border-0 shadow-sm mb-4"><?php echo esc_html( $error_msg ); ?></div>
+        <div class="alert alert-danger border-0 shadow-sm mb-4 alert-dismissible fade show" role="alert">
+            <strong>Execution Halt:</strong> <?php echo esc_html( $error_msg ); ?>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
     <?php endif; ?>
     <?php if ( ! empty( $success_msg ) ) : ?>
-        <div class="alert alert-success border-0 shadow-sm mb-4"><?php echo esc_html( $success_msg ); ?></div>
+        <div class="alert alert-success border-0 shadow-sm mb-4 alert-dismissible fade show" role="alert">
+            <strong>Success Stack:</strong> <?php echo esc_html( $success_msg ); ?>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
     <?php endif; ?>
 
-    <!-- Navigation Tab Links -->
-    <ul class="nav nav-tabs dnt-directory-tabs mb-4" id="directoryTabs" role="tablist">
-        <li class="nav-item" role="presentation">
-            <button class="nav-link active" id="all-students-tab" data-bs-toggle="tab" data-bs-target="#all-students" type="button" role="tab">All Students</button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="add-student-tab" data-bs-toggle="tab" data-bs-target="#add-student" type="button" role="tab">+ Add Student</button>
-        </li>
-    </ul>
-
-    <!-- Tab Content Engine -->
+    <!-- Tab Content Engine Stack -->
     <div class="tab-content" id="directoryTabsContent">
         
         <!-- TAB 1: ALL STUDENTS LIST VIEW -->
-        <div class="tab-pane fade show active" id="all-students" role="tabpanel">
+        <div class="tab-pane fade <?php echo $active_tab === 'all-students' ? 'show active' : ''; ?>" id="all-students" role="tabpanel" aria-labelledby="all-students-tab">
             <div class="bg-white p-4 rounded shadow-sm border">
-                <table class="table table-striped table-hover educore-datatable align-middle">
-                    <thead style="background-color: #f8fafc;">
+                <table class="table table-striped table-hover educore-datatable align-middle w-100">
+                    <thead>
                         <tr>
                             <th style="width: 60px;">Photo</th>
                             <th>Student ID</th>
@@ -102,7 +110,7 @@ function educore_students_list_view() {
                             <th>Section</th>
                             <th>Roll</th>
                             <th>Status</th>
-                            <th style="text-align: right;">Actions</th>
+                            <th style="text-align: right; width: 120px;">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -134,54 +142,58 @@ function educore_students_list_view() {
                             </td>
                             <td style="text-align: right;">
                                 <div class="d-inline-flex gap-2">
-                                    <a href="<?php echo esc_url( $view_url ); ?>" class="btn btn-sm btn-info text-white d-inline-flex align-items-center justify-content-center" title="View Details" style="width: 32px; height: 32px; padding: 0; border-radius: 6px;">
+                                    <a href="<?php echo esc_url( $view_url ); ?>" class="btn btn-sm btn-info text-white action-btn-matrix" title="View Details">
                                         <svg viewBox="0 0 24 24" style="width: 16px; height: 16px; fill: currentColor;"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
                                     </a>
-                                    <a href="<?php echo esc_url( $edit_url ); ?>" class="btn btn-sm btn-primary d-inline-flex align-items-center justify-content-center" title="Edit Record" style="width: 32px; height: 32px; padding: 0; border-radius: 6px;">
+                                    <a href="<?php echo esc_url( $edit_url ); ?>" class="btn btn-sm btn-primary action-btn-matrix" title="Edit Record">
                                         <svg viewBox="0 0 24 24" style="width: 16px; height: 16px; fill: currentColor;"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
                                     </a>
-                                    <a href="<?php echo esc_url( $delete_url ); ?>" class="btn btn-sm btn-danger d-inline-flex align-items-center justify-content-center" title="Delete Student" onclick="return confirm('Are you sure you want to delete this student?');" style="width: 32px; height: 32px; padding: 0; border-radius: 6px;">
+                                    <a href="<?php echo esc_url( $delete_url ); ?>" class="btn btn-sm btn-danger action-btn-matrix" title="Delete Student" onclick="return confirm('Are you sure you want to delete this student permanently from schemas?');">
                                         <svg viewBox="0 0 24 24" style="width: 16px; height: 16px; fill: currentColor;"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
                                     </a>
                                 </div>
                             </td>
                         </tr>
-                        <?php endforeach; endif; ?>
+                        <?php endforeach; else: ?>
+                        <tr>
+                            <td colspan="8" class="text-center text-muted py-4">No student data packages available in repository.</td>
+                        </tr>
+                        <?php endif; ?>
                     </tbody>
                 </table>
             </div>
         </div>
 
         <!-- TAB 2: ADMIT/ADD NEW STUDENT FORM VIEW -->
-        <div class="tab-pane fade" id="add-student" role="tabpanel">
+        <div class="tab-pane fade <?php echo $active_tab === 'add-student' ? 'show active' : ''; ?>" id="add-student" role="tabpanel" aria-labelledby="add-student-tab">
             <div class="bg-white p-4 rounded shadow-sm border">
-                <h3 class="mb-4">Admit New Student</h3>
+                <h4 class="mb-4 text-success fw-bold border-bottom pb-2">Institutional Admission Interface</h4>
                 
-                <form method="POST" action="" enctype="multipart/form-data">
+                <form method="POST" action="" enctype="multipart/form-data" id="educoreAdmissionForm">
                     <?php wp_nonce_field( 'save_student_action', 'educore_student_nonce' ); ?>
                     
                     <div class="row">
                         <div class="col-md-4 mb-3">
-                            <label class="form-label fw-bold">Student ID (Unique)</label>
+                            <label class="form-label fw-bold">Student ID (Unique/UID)</label>
                             <input type="text" name="student_id" class="form-control" value="<?php echo isset($_POST['student_id']) ? esc_attr($_POST['student_id']) : ''; ?>" required>
                         </div>
                         <div class="col-md-8 mb-3">
-                            <label class="form-label fw-bold">Full Name</label>
+                            <label class="form-label fw-bold">Full Name (English)</label>
                             <input type="text" name="full_name" class="form-control" value="<?php echo isset($_POST['full_name']) ? esc_attr($_POST['full_name']) : ''; ?>" required>
                         </div>
                     </div>
 
                     <div class="row">
                         <div class="col-md-4 mb-3">
-                            <label class="form-label fw-bold">Class</label>
+                            <label class="form-label fw-bold">Class / Session</label>
                             <input type="text" name="class_name" class="form-control" value="<?php echo isset($_POST['class_name']) ? esc_attr($_POST['class_name']) : ''; ?>" required>
                         </div>
                         <div class="col-md-4 mb-3">
-                            <label class="form-label fw-bold">Section</label>
+                            <label class="form-label fw-bold">Section / Group</label>
                             <input type="text" name="section_name" class="form-control" value="<?php echo isset($_POST['section_name']) ? esc_attr($_POST['section_name']) : ''; ?>">
                         </div>
                         <div class="col-md-4 mb-3">
-                            <label class="form-label fw-bold">Roll Number</label>
+                            <label class="form-label fw-bold">Class Roll Number</label>
                             <input type="number" name="roll_no" class="form-control" value="<?php echo isset($_POST['roll_no']) ? esc_attr($_POST['roll_no']) : ''; ?>" required>
                         </div>
                     </div>
@@ -194,13 +206,14 @@ function educore_students_list_view() {
                         <div class="col-md-4 mb-3">
                             <label class="form-label fw-bold">Gender</label>
                             <select name="gender" class="form-control">
-                                <option value="Male">Male</option>
-                                <option value="Female">Female</option>
+                                <option value="Male" <?php checked( isset($_POST['gender']) && $_POST['gender'] === 'Male' ); ?>>Male</option>
+                                <option value="Female" <?php checked( isset($_POST['gender']) && $_POST['gender'] === 'Female' ); ?>>Female</option>
+                                <option value="Other" <?php checked( isset($_POST['gender']) && $_POST['gender'] === 'Other' ); ?>>Other</option>
                             </select>
                         </div>
                         <div class="col-md-4 mb-3">
                             <label class="form-label fw-bold">Admission Date</label>
-                            <input type="date" name="admission_date" class="form-control" value="<?php echo date('Y-m-d'); ?>">
+                            <input type="date" name="admission_date" class="form-control" value="<?php echo isset($_POST['admission_date']) ? esc_attr($_POST['admission_date']) : date('Y-m-d'); ?>">
                         </div>
                     </div>
 
@@ -208,40 +221,39 @@ function educore_students_list_view() {
                         <div class="col-md-12 mb-3">
                             <label class="form-label fw-bold">Student Profile Photo</label>
                             <input type="file" name="student_photo" class="form-control" accept="image/*">
-                            <div class="form-text text-muted">Accepted formats: JPG, JPEG, PNG.</div>
+                            <div class="form-text text-muted">Accepted payload extensions: JPG, JPEG, PNG. Max 2MB threshold.</div>
                         </div>
                     </div>
 
-                    <hr class="my-4">
-                    <h5 class="mb-3 text-muted">Guardian & Contact Information</h5>
+                    <h5 class="mb-3 text-success border-bottom pb-2 mt-4">Guardian Operational Communications</h5>
 
                     <div class="row">
                         <div class="col-md-6 mb-3">
-                            <label class="form-label fw-bold">Guardian Name</label>
+                            <label class="form-label fw-bold">Legal Guardian Name</label>
                             <input type="text" name="guardian_name" class="form-control" value="<?php echo isset($_POST['guardian_name']) ? esc_attr($_POST['guardian_name']) : ''; ?>" required>
                         </div>
                         <div class="col-md-6 mb-3">
-                            <label class="form-label fw-bold">Guardian Phone (SMS)</label>
+                            <label class="form-label fw-bold">Guardian Primary Phone (SMS Node Target)</label>
                             <input type="text" name="guardian_phone" class="form-control" value="<?php echo isset($_POST['guardian_phone']) ? esc_attr($_POST['guardian_phone']) : ''; ?>" required>
                         </div>
                     </div>
 
                     <div class="row">
                         <div class="col-md-8 mb-3">
-                            <label class="form-label fw-bold">Present Address</label>
-                            <textarea name="address" class="form-control" rows="2"><?php echo isset($_POST['address']) ? esc_textarea($_POST['address']) : ''; ?></textarea>
+                            <label class="form-label fw-bold">Present Address Infrastructure</label>
+                            <textarea name="address" class="form-control" rows="2" placeholder="Vill/Road, Post Office, Upazila, District"><?php echo isset($_POST['address']) ? esc_textarea($_POST['address']) : ''; ?></textarea>
                         </div>
                         <div class="col-md-4 mb-3">
-                            <label class="form-label fw-bold">Account Status</label>
+                            <label class="form-label fw-bold">Account Lifecycle Status</label>
                             <select name="status" class="form-control">
-                                <option value="Active">Active</option>
-                                <option value="Inactive">Inactive</option>
+                                <option value="Active" <?php checked( !isset($_POST['status']) || $_POST['status'] === 'Active' ); ?>>Active</option>
+                                <option value="Inactive" <?php checked( isset($_POST['status']) && $_POST['status'] === 'Inactive' ); ?>>Inactive</option>
                             </select>
                         </div>
                     </div>
 
                     <button type="submit" name="educore_save_student" class="btn btn-success px-5 py-2 mt-3" style="background-color: #006a4e; border: none; font-weight: 600;">
-                        Complete Admission
+                        Finalize Enrolment Stack
                     </button>
                 </form>
             </div>
@@ -249,17 +261,35 @@ function educore_students_list_view() {
 
     </div>
 
-    <script>
+    <script type="text/javascript">
     jQuery(document).ready(function($) {
-        $('.educore-datatable').DataTable({
-            "pageLength": 15,
-            "ordering": true,
-            "columnDefs": [
-                { "orderable": false, "targets": [0, 7] }
-            ]
+        // Initialize Core DataTable Framework
+        if ($.fn.DataTable) {
+            $('.educore-datatable').DataTable({
+                "pageLength": 15,
+                "ordering": true,
+                "responsive": true,
+                "columnDefs": [
+                    { "orderable": false, "targets": [0, 7] }
+                ]
+            });
+        }
+
+        // Keep active tab state inside URL hash parameters to survive reload execution loops
+        var hash = window.location.hash;
+        if (hash) {
+            var triggerEl = document.querySelector('#directoryTabs button[data-bs-target="' + hash + '"]');
+            if (triggerEl) {
+                var tab = new bootstrap.Tab(triggerEl);
+                tab.show();
+            }
+        }
+
+        // Sync tab state triggers into address string hashes
+        $('#directoryTabs button[data-bs-toggle="tab"]').on('shown.bs.tab', function (e) {
+            window.location.hash = $(e.target).attr('data-bs-target');
         });
     });
     </script>
     <?php
 }
-?>

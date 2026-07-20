@@ -47,7 +47,7 @@ final class IFSEdu_School_Management_System {
         $files = array(
             'dashboard', 'students', 'attendance', 'fees', 
             'exams', 'staff', 'academics', 'communication', 
-            'reports', 'settings'
+            'reports', 'frontend-bridge', 'settings'
         );
 
         foreach ( $files as $file ) {
@@ -114,7 +114,8 @@ final class IFSEdu_School_Management_System {
      * Styles & Dynamic Assets Loading Processor
      */
     public function enqueue_admin_assets( $hook ) {
-        if ( 'toplevel_page_school_management_system' !== $hook ) {
+        // Enqueue if it's our top level page or any corresponding dynamic submenus mapped to it
+        if ( strpos( $hook, 'school_management_system' ) === false ) {
             return;
         }
 
@@ -131,8 +132,7 @@ final class IFSEdu_School_Management_System {
         wp_enqueue_script( 'datepicker', EDUCORE_URL . 'assets/js/bootstrap-datepicker.js', array( 'jquery' ), EDUCORE_VERSION, true );
         wp_enqueue_script( 'educore-main', EDUCORE_URL . 'assets/js/main.js', array( 'jquery' ), EDUCORE_VERSION, true );
     }
-
-    /**
+/**
      * Global Database Migration & Update Engine (Strict dbDelta Compliant)
      */
     public function execute_database_migration() {
@@ -140,22 +140,50 @@ final class IFSEdu_School_Management_System {
         $charset_collate = $wpdb->get_charset_collate();
         require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
-        // Schema Model 1: Students Base
+        // Schema Model 1: Students Base (Expanded for Multi-Step Form)
         $table_students = $wpdb->prefix . 'sms_students';
         $sql_students = "CREATE TABLE $table_students (
             id bigint(20) NOT NULL AUTO_INCREMENT,
             student_id varchar(50) NOT NULL,
             full_name varchar(255) NOT NULL,
+            name_bn varchar(255) DEFAULT '' NOT NULL,
             class_name varchar(50) NOT NULL,
-            section_name varchar(50) NOT NULL,
+            section_name varchar(50) DEFAULT '' NOT NULL,
             roll_no int(11) NOT NULL,
+            admission_date date DEFAULT '1970-01-01' NOT NULL,
+            birth_reg_no varchar(50) DEFAULT '' NOT NULL,
             dob date DEFAULT '1970-01-01' NOT NULL,
+            birth_place varchar(100) DEFAULT '' NOT NULL,
             gender varchar(20) DEFAULT 'Male' NOT NULL,
             blood_group varchar(10) DEFAULT '' NOT NULL,
+            religion varchar(50) DEFAULT '' NOT NULL,
+            nationality varchar(50) DEFAULT 'Bangladeshi' NOT NULL,
+            student_email varchar(100) DEFAULT '' NOT NULL,
+            student_phone varchar(50) DEFAULT '' NOT NULL,
+            quota varchar(50) DEFAULT 'General' NOT NULL,
+            father_name varchar(255) DEFAULT '' NOT NULL,
+            father_name_bn varchar(255) DEFAULT '' NOT NULL,
+            father_nid varchar(50) DEFAULT '' NOT NULL,
+            father_phone varchar(50) DEFAULT '' NOT NULL,
+            father_profession varchar(100) DEFAULT '' NOT NULL,
+            mother_name varchar(255) DEFAULT '' NOT NULL,
+            mother_name_bn varchar(255) DEFAULT '' NOT NULL,
+            mother_nid varchar(50) DEFAULT '' NOT NULL,
+            mother_phone varchar(50) DEFAULT '' NOT NULL,
+            mother_profession varchar(100) DEFAULT '' NOT NULL,
             guardian_name varchar(255) NOT NULL,
             guardian_phone varchar(50) NOT NULL,
+            guardian_relation varchar(50) DEFAULT '' NOT NULL,
+            guardian_nid varchar(50) DEFAULT '' NOT NULL,
+            guardian_income varchar(50) DEFAULT '' NOT NULL,
+            prev_school_name varchar(255) DEFAULT '' NOT NULL,
+            prev_eiin varchar(50) DEFAULT '' NOT NULL,
+            prev_class varchar(50) DEFAULT '' NOT NULL,
+            prev_gpa varchar(20) DEFAULT '' NOT NULL,
             address text NOT NULL,
-            admission_date date DEFAULT '1970-01-01' NOT NULL,
+            permanent_address text NOT NULL,
+            residential_status varchar(50) DEFAULT '' NOT NULL,
+            co_curricular text NOT NULL,
             photo_url varchar(255) DEFAULT '' NOT NULL,
             status varchar(30) DEFAULT 'Active' NOT NULL,
             PRIMARY KEY  (id),
@@ -163,17 +191,42 @@ final class IFSEdu_School_Management_System {
         ) $charset_collate;";
         dbDelta( $sql_students );
 
-        // Schema Model 2: Staff Matrix
+        // Schema Model 2: Staff Matrix (Full 35-Column Architecture)
         $table_staff = $wpdb->prefix . 'sms_staff';
         $sql_staff = "CREATE TABLE $table_staff (
             id bigint(20) NOT NULL AUTO_INCREMENT,
             wp_user_id bigint(20) DEFAULT NULL,
             full_name varchar(255) NOT NULL,
+            name_bn varchar(255) DEFAULT '' NOT NULL,
+            father_name varchar(255) DEFAULT '' NOT NULL,
+            mother_name varchar(255) DEFAULT '' NOT NULL,
             designation varchar(100) NOT NULL,
+            staff_type varchar(50) DEFAULT '' NOT NULL,
+            pay_grade varchar(50) DEFAULT '' NOT NULL,
+            index_no varchar(50) DEFAULT '' NOT NULL,
+            nid_no varchar(50) DEFAULT '' NOT NULL,
+            dob date DEFAULT '1970-01-01' NOT NULL,
+            gender varchar(20) DEFAULT 'Male' NOT NULL,
             phone varchar(50) NOT NULL,
+            whatsapp_no varchar(50) DEFAULT '' NOT NULL,
             email varchar(100) NOT NULL,
+            blood_group varchar(10) DEFAULT '' NOT NULL,
+            quota_type varchar(50) DEFAULT 'General' NOT NULL,
             joining_date date DEFAULT '1970-01-01' NOT NULL,
             salary decimal(10,2) DEFAULT '0.00' NOT NULL,
+            subject_expert varchar(255) DEFAULT '' NOT NULL,
+            highest_degree varchar(255) DEFAULT '' NOT NULL,
+            emergency_name varchar(255) DEFAULT '' NOT NULL,
+            emergency_phone varchar(50) DEFAULT '' NOT NULL,
+            emergency_relation varchar(50) DEFAULT '' NOT NULL,
+            bank_name varchar(255) DEFAULT '' NOT NULL,
+            bank_acc_no varchar(100) DEFAULT '' NOT NULL,
+            bank_routing varchar(50) DEFAULT '' NOT NULL,
+            address text NOT NULL,
+            permanent_address text NOT NULL,
+            linkedin_url varchar(255) DEFAULT '' NOT NULL,
+            facebook_url varchar(255) DEFAULT '' NOT NULL,
+            website_url varchar(255) DEFAULT '' NOT NULL,
             profile_image varchar(255) DEFAULT '' NOT NULL,
             status varchar(30) DEFAULT 'Active' NOT NULL,
             PRIMARY KEY  (id)
@@ -187,14 +240,14 @@ final class IFSEdu_School_Management_System {
             student_id bigint(20) NOT NULL,
             attendance_date date NOT NULL,
             status varchar(20) DEFAULT 'Present' NOT NULL,
-            remarks text DEFAULT '' NOT NULL,
+            remarks text NOT NULL,
             recorded_by bigint(20) NOT NULL,
             PRIMARY KEY  (id),
             KEY student_date_idx (student_id, attendance_date)
         ) $charset_collate;";
         dbDelta( $sql_attendance );
 
-        // Schema Model 4: Accountancy Ledger Fees
+        // Schema Model 4: Accountancy Ledger Fees (Fully Synced with Fee Collection Engine)
         $table_fees = $wpdb->prefix . 'sms_fees';
         $sql_fees = "CREATE TABLE $table_fees (
             id bigint(20) NOT NULL AUTO_INCREMENT,
@@ -204,12 +257,15 @@ final class IFSEdu_School_Management_System {
             fee_year varchar(10) NOT NULL,
             fee_type varchar(50) DEFAULT 'Tuition Fee' NOT NULL,
             amount decimal(10,2) DEFAULT '0.00' NOT NULL,
+            late_fine decimal(10,2) DEFAULT '0.00' NOT NULL,
             discount decimal(10,2) DEFAULT '0.00' NOT NULL,
             net_payable decimal(10,2) DEFAULT '0.00' NOT NULL,
             paid_amount decimal(10,2) DEFAULT '0.00' NOT NULL,
             due_amount decimal(10,2) DEFAULT '0.00' NOT NULL,
             payment_status varchar(20) DEFAULT 'Unpaid' NOT NULL,
             payment_method varchar(30) DEFAULT 'Cash' NOT NULL,
+            transaction_id varchar(100) DEFAULT '' NOT NULL,
+            remarks text NOT NULL,
             payment_date datetime DEFAULT '1970-01-01 00:00:00' NOT NULL,
             collected_by bigint(20) NOT NULL,
             PRIMARY KEY  (id),
@@ -255,10 +311,22 @@ final class IFSEdu_School_Management_System {
             user_role varchar(50) NOT NULL,
             action_performed text NOT NULL,
             ip_address varchar(45) NOT NULL,
-            timestamp datetime DEFAULT '1970-01-01 00:00:00' NOT NULL,
+            timestamp datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
             PRIMARY KEY  (id)
         ) $charset_collate;";
         dbDelta( $sql_audit );
+
+        // Schema Model 8: Academic Units Architecture
+        $table_academic_units = $wpdb->prefix . 'sms_academic_units';
+        $sql_academic_units = "CREATE TABLE $table_academic_units (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            unit_type varchar(50) NOT NULL,
+            class_name varchar(100) NOT NULL,
+            section_name varchar(100) DEFAULT '' NOT NULL,
+            dept_name varchar(100) DEFAULT '' NOT NULL,
+            PRIMARY KEY  (id)
+        ) $charset_collate;";
+        dbDelta( $sql_academic_units );
     }
 
     /**
@@ -292,25 +360,10 @@ final class IFSEdu_School_Management_System {
     }
 
     /**
-     * Mount Core Dashboard Admin Navigation Routing Nodes
+     * Data map engine providing uniform data arrays for both sidebars and WP hooks
      */
-    public function mount_core_erp_menu() {
-        add_menu_page(
-            __( 'EduCore - School Management System', 'ifsedu-sms' ),
-            __( 'School ERP', 'ifsedu-sms' ),
-            'read', 
-            'school_management_system',
-            array( $this, 'render_dynamic_router_interface' ), 
-            'dashicons-welcome-learn-more',
-            20
-        );
-    }
-
-    /**
-     * Component Render Router Module Interface
-     */
-    public function render_dynamic_router_interface() {
-        $all_tabs = array(
+    private function get_tabs_config() {
+        return array(
             'dashboard' => array(
                 'label' => __( 'Dashboard', 'ifsedu-sms' ),
                 'svg'   => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 544 512"><path d="M528 0H16C7.2 0 0 7.2 0 16v480c0 8.8 7.2 16 16 16h512c8.8 0 16-7.2 16-16V16c0-8.8-7.2-16-16-16zM272 248v-88c0-4.4 3.6-8 8-8h184c4.4 0 8 3.6 8 8v88c0 4.4-3.6 8-8 8H280c-4.4 0-8-3.6-8-8zm0 176v-88c0-4.4 3.6-8 8-8h184c4.4 0 8 3.6 8 8v88c0 4.4-3.6 8-8 8H280c-4.4 0-8-3.6-8-8zM72 152c0-4.4 3.6-8 8-8h112c4.4 0 8 3.6 8 8v208c0 4.4-3.6 8-8 8H80c-4.4 0-8-3.6-8-8V152z"/></svg>',
@@ -367,6 +420,54 @@ final class IFSEdu_School_Management_System {
                 'roles' => array()
             ),
         );
+    }
+
+    /**
+     * Mount Core Dashboard Admin Navigation Routing Nodes
+     */
+    public function mount_core_erp_menu() {
+        // Main ERP Dashboard entry point
+        add_menu_page(
+            __( 'EduCore - School Management System', 'ifsedu-sms' ),
+            __( 'School ERP', 'ifsedu-sms' ),
+            'read', 
+            'school_management_system',
+            array( $this, 'render_dynamic_router_interface' ), 
+            'dashicons-welcome-learn-more',
+            20
+        );
+
+        $tabs = $this->get_tabs_config();
+
+        // Dynamically append sub-menus under our core tree to sync WP admin nodes natively
+        foreach ( $tabs as $slug => $config ) {
+            // Skip logout action link as a standalone physical submenu framework layout page
+            if ( 'logout' === $slug ) {
+                continue;
+            }
+
+            // Enforce custom internal capability filter based on configurations
+            $cap = 'read';
+            if ( in_array( 'administrator', $config['roles'], true ) ) {
+                $cap = 'manage_options';
+            }
+
+            add_submenu_page(
+                'school_management_system',
+                $config['label'] . ' - ' . __( 'School ERP', 'ifsedu-sms' ),
+                $config['label'],
+                $cap,
+                'school_management_system&tab=' . $slug,
+                array( $this, 'render_dynamic_router_interface' )
+            );
+        }
+    }
+
+    /**
+     * Component Render Router Module Interface
+     */
+    public function render_dynamic_router_interface() {
+        $all_tabs = $this->get_tabs_config();
 
         $active_tab = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'] ) : 'dashboard';
         if ( ! array_key_exists( $active_tab, $all_tabs ) ) {
@@ -462,7 +563,7 @@ final class IFSEdu_School_Management_System {
      */
     public function inject_dashboard_white_label_layout() {
         $screen = get_current_screen();
-        if ( $screen && 'toplevel_page_school_management_system' === $screen->id ) {
+        if ( $screen && strpos( $screen->id, 'school_management_system' ) !== false ) {
             ?>
             <style>
                 #wpadminbar, #adminmenu, #adminmenuback, #adminmenuwrap, #wpfooter { display: none !important; }
@@ -545,7 +646,7 @@ final class IFSEdu_School_Management_System {
         set_transient( 'educore_captcha_' . $captcha_token, ( $num1 + $num2 ), 300 );
         ?>
         <div class="educore-captcha-container">
-            <label class="educore-captcha-label" for="educore_captcha_answer"><?php esc_html_to_e( 'Security Verification', 'ifsedu-sms' ); ?></label>
+            <label class="educore-captcha-label" for="educore_captcha_answer"><?php esc_html_e( 'Security Verification', 'ifsedu-sms' ); ?></label>
             <p style="margin: 0 0 8px 0; color: #718096; font-size: 13px;">
                 <?php printf( esc_html__( 'Please solve: %1$d + %2$d = ?', 'ifsedu-sms' ), $num1, $num2 ); ?>
             </p>
@@ -559,7 +660,8 @@ final class IFSEdu_School_Management_System {
      * Validate Captcha Computations on Log In Process
      */
     public function validate_mathematical_captcha( $user, $username, $password ) {
-        if ( is_wp_error( $user ) ) { 
+        // Bypass if it's already an error or if it isn't an interactive POST request submission
+        if ( is_wp_error( $user ) || 'POST' !== $_SERVER['REQUEST_METHOD'] || empty( $_POST['log'] ) ) { 
             return $user; 
         }
 

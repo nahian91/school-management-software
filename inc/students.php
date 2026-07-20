@@ -8,3 +8,5 @@ require_once plugin_dir_path(__FILE__) . 'students/student-tabs.php';
 require_once plugin_dir_path(__FILE__) . 'students/student-list.php';
 require_once plugin_dir_path(__FILE__) . 'students/student-add-edit.php';
 require_once plugin_dir_path(__FILE__) . 'students/student-view.php';
+require_once plugin_dir_path(__FILE__) . 'students/student-admit-card.php';
+require_once plugin_dir_path(__FILE__) . 'students/student-id-card.php';
