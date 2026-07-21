@@ -6,22 +6,23 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Render the Core Students Datatable powered by DataTables.js Engine
  * Database Scope: sms_students
+ * File: students-list-view.php
  */
 function educore_students_list_view() {
     global $wpdb;
     $table_students = $wpdb->prefix . 'sms_students';
 
-    // ১. ওয়ার্ডপ্রেস স্ট্যান্ডার্ড অনুযায়ী রানটাইমে ডাটাটেবিল অ্যাসেটস ইনজেক্ট করা
+    // ১. ওয়ার্ডপ্রেস স্ট্যান্ডার্ড অনুযায়ী রানটাইমে ডাটাটেবিল অ্যাসেটস ইনজেক্ট করা
     wp_enqueue_style( 'datatables-cdn', 'https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css', array(), '1.13.6' );
     wp_enqueue_script( 'datatables-cdn-js', 'https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js', array( 'jquery' ), '1.13.6', true );
 
-    // ২. ডাটাবেজ থেকে সরাসরি সমস্ত অ্যাক্টিভ স্টুডেন্টদের ডাটা লোড
+    // ২. ডাটাবেজ থেকে সরাসরি সমস্ত অ্যাক্টিভ স্টুডেন্টদের ডাটা লোড (Natural Numeric Roll Sorting)
     $students_records = $wpdb->get_results( 
-        "SELECT * FROM {$table_students} WHERE status = 'Active' ORDER BY class_name ASC, roll_no ASC" 
+        "SELECT * FROM {$table_students} WHERE status = 'Active' ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC, CAST(roll_no AS UNSIGNED) ASC, roll_no ASC" 
     );
 
     // ৩. এক্সট্রাক্ট ক্লাস ফর ড্রপডাউন এক্সটার্নাল ফিল্টারিং
-    $available_classes = $wpdb->get_col( "SELECT DISTINCT class_name FROM {$table_students} WHERE status = 'Active' AND class_name != '' ORDER BY class_name ASC" );
+    $available_classes = $wpdb->get_col( "SELECT DISTINCT class_name FROM {$table_students} WHERE status = 'Active' AND class_name != '' ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC" );
     ?>
 
     <style>
@@ -180,9 +181,9 @@ function educore_students_list_view() {
         }
         .dataTables_wrapper .dataTables_paginate .paginate_button.current,
         .dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
-            background: #22c55e !important;
+            background: #006a4e !important;
             color: #fff !important;
-            border: 1px solid #22c55e !important;
+            border: 1px solid #006a4e !important;
             border-radius: 6px !important;
         }
         .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
@@ -248,17 +249,21 @@ function educore_students_list_view() {
                         $gender_style = ( strtolower( trim( $student->gender ) ) === 'male' ) ? 'gender-male' : 'gender-female';
                         $phone_display= ! empty( $student->student_phone ) ? $student->student_phone : $student->guardian_phone;
                         ?>
-                        <tr data-class="<?php echo esc_attr( $student->class_name ); ?>" data-section="<?php echo esc_attr( $student->section_name ); ?>">
+                        <tr data-class="<?php echo esc_attr( trim( $student->class_name ) ); ?>" data-section="<?php echo esc_attr( trim( $student->section_name ) ); ?>">
                             <td class="fw-bold"><code><?php echo esc_html( $student->student_id ); ?></code></td>
                             <td>
                                 <div style="font-weight: 600; color: #0f172a;"><?php echo esc_html( $student->full_name ); ?></div>
-                                <small style="color: #94a3b8; font-size: 11px;"><?php echo esc_html( $student->name_bn ); ?></small>
+                                <?php if ( ! empty( $student->name_bn ) ) : ?>
+                                    <small style="color: #94a3b8; font-size: 11px;"><?php echo esc_html( $student->name_bn ); ?></small>
+                                <?php endif; ?>
                             </td>
                             <td>
                                 <div style="font-weight: 500;"><?php echo esc_html( $student->class_name ); ?></div>
-                                <small style="color: #64748b; font-size: 11px;">Section: <?php echo esc_html( $student->section_name ); ?></small>
+                                <small style="color: #64748b; font-size: 11px;">Section: <?php echo esc_html( $student->section_name ? $student->section_name : 'N/A' ); ?></small>
                             </td>
-                            <td style="font-weight: 700; color: #334155;"><?php echo esc_html( $student->roll_no ); ?></td>
+                            <td style="font-weight: 700; color: #334155;" data-order="<?php echo esc_attr( intval( $student->roll_no ) ); ?>">
+                                #<?php echo esc_html( $student->roll_no ); ?>
+                            </td>
                             <td>
                                 <span class="educore-badge-gender <?php echo esc_attr( $gender_style ); ?>">
                                     <?php echo esc_html( ucfirst( $student->gender ) ); ?>
@@ -298,7 +303,31 @@ function educore_students_list_view() {
     jQuery(document).ready(function($) {
         if ($.fn.DataTable) {
 
-            // ১. ডাটাটেবিল ইন্সট্যান্স আগে ডিক্লেয়ার করা (DOM Structure 'f' সহ যুক্ত করা হয়েছে)
+            // ১. কাস্টম ফিল্টার রেজিস্টার আগে করা হচ্ছে (ইনিশিয়ালাইজেশনের পূর্বে)
+            $.fn.dataTable.ext.search.push(
+                function(settings, data, dataIndex) {
+                    if (settings.nTable.id !== 'educoreStudentsMainTable') {
+                        return true;
+                    }
+
+                    var rowNode = settings.aoData[dataIndex].nTr;
+                    var rowClass = $.trim($(rowNode).attr('data-class') || '');
+                    var rowSection = $.trim($(rowNode).attr('data-section') || '');
+                    
+                    var selectedClass = $.trim($('#educoreClassCustomFilter').val() || '');
+                    var selectedSection = $.trim($('#educoreSectionCustomFilter').val() || '');
+                    
+                    if (selectedClass !== '' && rowClass !== selectedClass) {
+                        return false;
+                    }
+                    if (selectedSection !== '' && rowSection !== selectedSection) {
+                        return false;
+                    }
+                    return true;
+                }
+            );
+
+            // ২. ডাটাটেবিল ইন্সট্যান্স তৈরি
             var tableInstance = $('#educoreStudentsMainTable').DataTable({
                 "pageLength": 20,
                 "lengthMenu": [10, 20, 50, 100],
@@ -312,47 +341,23 @@ function educore_students_list_view() {
                 }
             });
 
-            // ২. কাস্টম ডাটাটেবিল ফিল্টারিং এক্সটেনশন রেজিস্টার
-            $.fn.dataTable.ext.search.push(
-                function(settings, data, dataIndex) {
-                    if (settings.nTable.id !== 'educoreStudentsMainTable') {
-                        return true;
-                    }
-
-                    var rowNode = tableInstance.row(dataIndex).node();
-                    var rowClass = $(rowNode).attr('data-class') || '';
-                    var rowSection = $(rowNode).attr('data-section') || '';
-                    
-                    var selectedClass = $('#educoreClassCustomFilter').val();
-                    var selectedSection = $('#educoreSectionCustomFilter').val();
-                    
-                    if (selectedClass && rowClass !== selectedClass) {
-                        return false;
-                    }
-                    if (selectedSection && rowSection !== selectedSection) {
-                        return false;
-                    }
-                    return true;
-                }
-            );
-
-            // ৩. ক্লাস ড্রপডাউন চেইঞ্জ লজিক + ডায়নামিক সেকশন পপুলেশন (Using DataTables API)
+            // ৩. ক্লাস ফিল্টার চেইঞ্জ হ্যান্ডলার ও ডায়নামিক সেকশন পপুলেশন
             $('#educoreClassCustomFilter').on('change', function() {
-                var selectedClass = $(this).val();
+                var selectedClass = $.trim($(this).val());
                 var sectionFilter = $('#educoreSectionCustomFilter');
                 
-                sectionFilter.empty().append('<option value="">All Sections</option>');
+                sectionFilter.val('').empty().append('<option value="">All Sections</option>');
 
-                if (selectedClass) {
+                if (selectedClass !== '') {
                     var uniqueSections = [];
 
-                    // DataTables API দিয়ে সরাসরি সমস্ত রো ট্রেভার্স করা (Hidden/Paginated rows সহ)
+                    // API দিয়ে সব রো স্ক্যান করা
                     tableInstance.rows().every(function() {
                         var node = this.node();
-                        var rowClass = $(node).attr('data-class');
-                        var rowSection = $(node).attr('data-section');
+                        var rowClass = $.trim($(node).attr('data-class') || '');
+                        var rowSection = $.trim($(node).attr('data-section') || '');
 
-                        if (rowClass === selectedClass && rowSection && uniqueSections.indexOf(rowSection) === -1) {
+                        if (rowClass === selectedClass && rowSection !== '' && $.inArray(rowSection, uniqueSections) === -1) {
                             uniqueSections.push(rowSection);
                         }
                     });
@@ -379,7 +384,7 @@ function educore_students_list_view() {
                 tableInstance.draw();
             });
 
-            // ৫. সার্চ বক্স ও ফুটার পেজিনেশন সঠিক কন্টেইনারে অ্যাপেন্ড করা
+            // ৫. UI Element Placement Adjustments
             $('.dataTables_filter').appendTo('#educoreDtSearchTarget');
             $('.educore-dt-footer-internal').appendTo('#educoreDtFooterTarget');
         }
