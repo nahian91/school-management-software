@@ -1,5 +1,7 @@
 <?php
-if ( ! defined( 'ABSPATH' ) ) exit;
+if ( ! defined( 'ABSPATH' ) ) {
+    exit; // Exit if accessed directly
+}
 
 /**
  * Helper: Convert BDT Numeric Amount into Words
@@ -52,7 +54,7 @@ if ( ! function_exists( 'educore_number_to_words' ) ) {
             }
         }
 
-        $result = implode( ' ', $str ) . ' Taka';
+        $result = implode( ' ', array_filter( $str ) ) . ' Taka';
         if ( $paisa > 0 ) {
             $result .= ' and ' . $paisa . ' Paisa';
         }
@@ -60,17 +62,22 @@ if ( ! function_exists( 'educore_number_to_words' ) ) {
     }
 }
 
+/**
+ * Invoice Print Controller
+ * File: fees-invoice-print.php
+ * Custom Prefixes Applied: dpt-, afdp-
+ */
 function educore_fees_invoice_print_view() {
     global $wpdb;
 
     // Security Check
     if ( ! current_user_can( 'manage_options' ) ) {
-        wp_die( esc_html__( 'You do not have sufficient permissions to view or print payment receipts.', 'educore' ) );
+        wp_die( esc_html__( 'You do not have sufficient permissions to view or print payment receipts.', 'ifsedu-sms' ) );
     }
 
     $invoice_id = isset( $_GET['invoice'] ) ? sanitize_text_field( $_GET['invoice'] ) : '';
     if ( empty( $invoice_id ) ) {
-        echo '<div class="alert alert-danger">No invoice identifier provided.</div>';
+        echo '<div class="afdp-alert-danger">' . esc_html__( 'No invoice identifier provided.', 'ifsedu-sms' ) . '</div>';
         return;
     }
 
@@ -87,7 +94,7 @@ function educore_fees_invoice_print_view() {
     $receipt = $wpdb->get_row( $query );
 
     if ( ! $receipt ) {
-        echo '<div class="alert alert-danger">Invoice receipt record not found in system schema.</div>';
+        echo '<div class="afdp-alert-danger">' . esc_html__( 'Invoice receipt record not found in system schema.', 'ifsedu-sms' ) . '</div>';
         return;
     }
 
@@ -97,108 +104,281 @@ function educore_fees_invoice_print_view() {
     ?>
 
     <style>
-        .invoice-print-wrapper {
-            background: #ffffff;
-            padding: 20px;
-            font-family: Arial, sans-serif;
-            color: #0f172a;
-        }
-        .receipt-card {
-            border: 2px solid #000000;
-            border-radius: 6px;
-            padding: 15px;
-            background: #ffffff;
-            position: relative;
-            height: 100%;
-        }
-        .receipt-card-header {
-            border-bottom: 2px double #000000;
-            padding-bottom: 8px;
-            margin-bottom: 12px;
-            text-align: center;
-        }
-        .copy-type-badge {
-            background-color: #000000;
-            color: #ffffff;
-            font-size: 0.75rem;
-            font-weight: 700;
-            padding: 2px 10px;
-            border-radius: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        .table-receipt-data td, .table-receipt-data th {
-            padding: 4px 6px;
-            font-size: 0.82rem;
-            vertical-align: middle;
-        }
-        .table-receipt-data th {
-            background-color: #f1f5f9;
-            border-bottom: 1px solid #000;
-        }
-        .signature-line-box {
-            border-top: 1px solid #000000;
-            width: 120px;
-            text-align: center;
-            font-size: 0.75rem;
-            font-weight: 700;
-            padding-top: 3px;
+        /* ==========================================================================
+           FEES INVOICE PRINT - NEO-BENTO & PRINT ENGINE
+           ========================================================================== */
+        .afdp-print-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 24px;
         }
 
-        /* Printable Cut Rules */
+        .dpt-btn-print {
+            padding: 10px 24px;
+            background: #006a4e;
+            color: #ffffff;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 800;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 12px rgba(0, 106, 78, 0.2);
+            transition: all 0.2s ease;
+        }
+
+        .dpt-btn-print:hover {
+            background: #00523c;
+            transform: translateY(-1px);
+        }
+
+        .dpt-btn-back {
+            padding: 10px 20px;
+            background: #ffffff;
+            color: #475569;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 700;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .dpt-btn-back:hover {
+            background: #f8fafc;
+            color: #0f172a;
+        }
+
+        .invoice-print-wrapper {
+            background: #ffffff;
+            padding: 10px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            color: #0f172a;
+        }
+
+        .dpt-triplicate-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+
+        .receipt-card {
+            border: 1.5px solid #0f172a;
+            border-radius: 8px;
+            padding: 14px;
+            background: #ffffff;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-sizing: border-box;
+            position: relative;
+        }
+
+        .receipt-card-header {
+            border-bottom: 2px double #0f172a;
+            padding-bottom: 8px;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .receipt-school-title {
+            font-weight: 800;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            margin: 0 0 4px 0;
+            color: #006a4e;
+        }
+
+        .copy-type-badge {
+            background-color: #0f172a;
+            color: #ffffff;
+            font-size: 10px;
+            font-weight: 800;
+            padding: 2px 8px;
+            border-radius: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: inline-block;
+        }
+
+        .table-receipt-data {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+            margin-bottom: 10px;
+        }
+
+        .table-receipt-data td, 
+        .table-receipt-data th {
+            padding: 4px 6px;
+            vertical-align: middle;
+        }
+
+        .table-receipt-data th {
+            background-color: #f1f5f9;
+            border-top: 1px solid #0f172a;
+            border-bottom: 1px solid #0f172a;
+            font-weight: 800;
+            text-align: left;
+        }
+
+        .dpt-bordered-table {
+            border: 1px solid #e2e8f0;
+        }
+
+        .dpt-bordered-table td, 
+        .dpt-bordered-table th {
+            border: 1px solid #e2e8f0;
+        }
+
+        .words-box {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            padding: 6px;
+            border-radius: 6px;
+            font-size: 10px;
+            margin-bottom: 12px;
+            line-height: 1.3;
+        }
+
+        .signature-area {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            margin-top: 15px;
+            padding-top: 5px;
+        }
+
+        .signature-line-box {
+            border-top: 1px dashed #0f172a;
+            width: 90px;
+            text-align: center;
+            font-size: 9px;
+            font-weight: 700;
+            padding-top: 2px;
+            color: #334155;
+        }
+
+        .afdp-alert-danger {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #991b1b;
+            padding: 14px 18px;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 13.5px;
+            margin: 20px auto;
+            max-width: 600px;
+            text-align: center;
+        }
+
+        /* Printable Cut Rules & Page Mechanics */
         @media print {
-            body * { visibility: hidden; }
-            #educore-printable-receipt-area, #educore-printable-receipt-area * { visibility: visible; }
+            @page {
+                size: A4 landscape;
+                margin: 8mm;
+            }
+            body {
+                background: #ffffff !important;
+                color: #000000 !important;
+            }
+            body * { 
+                visibility: hidden; 
+            }
+            #educore-printable-receipt-area, 
+            #educore-printable-receipt-area * { 
+                visibility: visible; 
+            }
             #educore-printable-receipt-area {
                 position: absolute;
                 left: 0;
                 top: 0;
                 width: 100%;
+                padding: 0;
             }
-            .no-print { display: none !important; }
-            .col-md-4 { width: 33.3333% !important; float: left !important; }
-            .receipt-card { border: 1px solid #000 !important; }
+            .no-print { 
+                display: none !important; 
+            }
+            .dpt-triplicate-grid {
+                grid-template-columns: repeat(3, 1fr) !important;
+                gap: 10mm !important;
+            }
+            .receipt-card { 
+                border: 1px solid #000000 !important; 
+                box-shadow: none !important;
+            }
+            .receipt-school-title {
+                color: #000000 !important;
+            }
+            .copy-type-badge {
+                background-color: #000000 !important;
+                color: #ffffff !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .words-box {
+                background: #ffffff !important;
+                border: 1px solid #000000 !important;
+            }
+            .table-receipt-data th {
+                background-color: #f1f5f9 !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
         }
     </style>
 
     <!-- Top Action Toolbar -->
-    <div class="mb-4 no-print text-center">
-        <button onclick="window.print();" class="btn btn-success btn-lg px-5 fw-bold" style="background-color: #006a4e; border: none;">
-            <span class="dashicons dashicons-printer align-middle me-1"></span> Print 3-Part Receipt Coupon
+    <div class="afdp-print-toolbar no-print">
+        <button onclick="window.print();" class="dpt-btn-print">
+            <span class="dashicons dashicons-printer" style="font-size:16px; width:16px; height:16px;"></span>
+            <?php esc_html_e( 'Print 3-Part Receipt Coupon', 'ifsedu-sms' ); ?>
         </button>
-        <a href="<?php echo esc_url( $back_url ); ?>" class="btn btn-outline-secondary btn-lg ms-2">Back to Fees</a>
+        <a href="<?php echo esc_url( $back_url ); ?>" class="dpt-btn-back">
+            <span class="dashicons dashicons-arrow-left-alt" style="font-size:14px; width:14px; height:14px;"></span>
+            <?php esc_html_e( 'Back to Fee Directory', 'ifsedu-sms' ); ?>
+        </a>
     </div>
 
     <!-- Printable Receipt Container (Renders 3 Copies for Triplicate Invoice) -->
     <div class="invoice-print-wrapper" id="educore-printable-receipt-area">
-        <div class="row g-3">
+        <div class="dpt-triplicate-grid">
             <?php foreach ( $copies as $copy_label ) : ?>
-                <div class="col-md-4">
-                    <div class="receipt-card">
-                        
+                <div class="receipt-card">
+                    <div>
                         <!-- Header -->
                         <div class="receipt-card-header">
-                            <h5 class="fw-bold m-0 text-uppercase" style="letter-spacing: 0.5px; font-size: 1.05rem;">
+                            <h5 class="receipt-school-title">
                                 <?php echo esc_html( $school_name ); ?>
                             </h5>
-                            <div class="my-1">
+                            <div style="margin: 3px 0;">
                                 <span class="copy-type-badge"><?php echo esc_html( $copy_label ); ?></span>
                             </div>
-                            <small class="text-muted d-block" style="font-size: 0.75rem;">Official Money Receipt</small>
+                            <span style="font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 0.3px; font-weight: 700;">
+                                <?php esc_html_e( 'Money Receipt', 'ifsedu-sms' ); ?>
+                            </span>
                         </div>
 
-                        <!-- Meta Info -->
-                        <table class="w-100 table-receipt-data mb-2">
+                        <!-- Meta Info Table -->
+                        <table class="table-receipt-data">
                             <tr>
                                 <td><strong>Invoice:</strong> #<?php echo esc_html( $receipt->invoice_id ); ?></td>
-                                <td class="text-end"><strong>Date:</strong> <?php echo date( 'd-M-Y', strtotime( $receipt->payment_date ) ); ?></td>
+                                <td style="text-align: right;"><strong>Date:</strong> <?php echo esc_html( date( 'd-M-Y', strtotime( $receipt->payment_date ) ) ); ?></td>
                             </tr>
                             <tr>
                                 <td><strong>Student ID:</strong> <?php echo esc_html( $receipt->s_id ? $receipt->s_id : 'N/A' ); ?></td>
-                                <td class="text-end"><strong>Roll:</strong> <?php echo esc_html( $receipt->roll_no ? $receipt->roll_no : 'N/A' ); ?></td>
+                                <td style="text-align: right;"><strong>Roll:</strong> <?php echo esc_html( $receipt->roll_no ? $receipt->roll_no : 'N/A' ); ?></td>
                             </tr>
                             <tr>
-                                <td colspan="2"><strong>Name:</strong> <span class="text-uppercase"><?php echo esc_html( $receipt->full_name ? $receipt->full_name : 'Unknown' ); ?></span></td>
+                                <td colspan="2"><strong>Name:</strong> <span style="text-transform: uppercase; font-weight: 700;"><?php echo esc_html( $receipt->full_name ? $receipt->full_name : 'N/A' ); ?></span></td>
                             </tr>
                             <tr>
                                 <td colspan="2"><strong>Class:</strong> <?php echo esc_html( $receipt->class_name ); ?> <?php echo ! empty( $receipt->section_name ) ? '(Sec: ' . esc_html( $receipt->section_name ) . ')' : ''; ?></td>
@@ -206,64 +386,69 @@ function educore_fees_invoice_print_view() {
                         </table>
 
                         <!-- Breakdown Table -->
-                        <table class="table table-bordered table-receipt-data mb-2">
+                        <table class="table-receipt-data dpt-bordered-table">
                             <thead>
                                 <tr>
-                                    <th>Description</th>
-                                    <th class="text-end">Amount (BDT)</th>
+                                    <th><?php esc_html_e( 'Description', 'ifsedu-sms' ); ?></th>
+                                    <th style="text-align: right;"><?php esc_html_e( 'Amount (BDT)', 'ifsedu-sms' ); ?></th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr>
                                     <td>
                                         <strong><?php echo esc_html( $receipt->fee_type ); ?></strong><br>
-                                        <small class="text-muted">(<?php echo esc_html( ucfirst($receipt->fee_month) . ' ' . $receipt->fee_year ); ?>)</small>
+                                        <span style="font-size: 9.5px; color: #64748b;">(<?php echo esc_html( ucfirst( $receipt->fee_month ) . ' ' . $receipt->fee_year ); ?>)</span>
                                     </td>
-                                    <td class="text-end"><?php echo number_format( $receipt->amount, 2 ); ?></td>
+                                    <td style="text-align: right; font-weight: 600;"><?php echo esc_html( number_format( $receipt->amount, 2 ) ); ?></td>
                                 </tr>
-                                <?php if ( $receipt->discount > 0 ) : ?>
+                                <?php if ( floatval( $receipt->late_fine ) > 0 ) : ?>
                                 <tr>
-                                    <td class="text-end text-muted">Discount / Waiver (-)</td>
-                                    <td class="text-end text-muted"><?php echo number_format( $receipt->discount, 2 ); ?></td>
+                                    <td style="color: #dc2626;">Late Fine (+)</td>
+                                    <td style="text-align: right; color: #dc2626; font-weight: 600;"><?php echo esc_html( number_format( $receipt->late_fine, 2 ) ); ?></td>
+                                </tr>
+                                <?php endif; ?>
+                                <?php if ( floatval( $receipt->discount ) > 0 ) : ?>
+                                <tr>
+                                    <td style="color: #2563eb;">Discount / Waiver (-)</td>
+                                    <td style="text-align: right; color: #2563eb; font-weight: 600;"><?php echo esc_html( number_format( $receipt->discount, 2 ) ); ?></td>
                                 </tr>
                                 <?php endif; ?>
                                 <tr>
-                                    <td class="text-end fw-bold">Net Payable</td>
-                                    <td class="text-end fw-bold">৳<?php echo number_format( $receipt->net_payable, 2 ); ?></td>
+                                    <td style="font-weight: 700; background: #f8fafc;">Net Payable</td>
+                                    <td style="text-align: right; font-weight: 800; background: #f8fafc;">৳<?php echo esc_html( number_format( $receipt->net_payable, 2 ) ); ?></td>
                                 </tr>
                                 <tr>
-                                    <td class="text-end fw-bold text-success">Paid Amount</td>
-                                    <td class="text-end fw-bold text-success">৳<?php echo number_format( $receipt->paid_amount, 2 ); ?></td>
+                                    <td style="font-weight: 800; color: #006a4e;">Paid Amount</td>
+                                    <td style="text-align: right; font-weight: 800; color: #006a4e;">৳<?php echo esc_html( number_format( $receipt->paid_amount, 2 ) ); ?></td>
                                 </tr>
-                                <?php if ( $receipt->due_amount > 0 ) : ?>
+                                <?php if ( floatval( $receipt->due_amount ) > 0 ) : ?>
                                 <tr>
-                                    <td class="text-end fw-bold text-danger">Due Balance</td>
-                                    <td class="text-end fw-bold text-danger">৳<?php echo number_format( $receipt->due_amount, 2 ); ?></td>
+                                    <td style="font-weight: 700; color: #dc2626;">Due Balance</td>
+                                    <td style="text-align: right; font-weight: 800; color: #dc2626;">৳<?php echo esc_html( number_format( $receipt->due_amount, 2 ) ); ?></td>
                                 </tr>
                                 <?php endif; ?>
                             </tbody>
                         </table>
 
                         <!-- Amount in Words -->
-                        <div class="p-2 bg-light border rounded mb-3" style="font-size: 0.75rem;">
+                        <div class="words-box">
                             <strong>In Words:</strong> <em><?php echo esc_html( educore_number_to_words( $receipt->paid_amount ) ); ?></em>
                         </div>
-
-                        <!-- Footer Signatures -->
-                        <div class="d-flex justify-content-between align-items-end mt-4 pt-2">
-                            <div class="signature-line-box">
-                                Student / Guardian
-                            </div>
-                            <div class="signature-line-box">
-                                Cashier / Officer
-                            </div>
-                        </div>
-
                     </div>
+
+                    <!-- Footer Signatures -->
+                    <div class="signature-area">
+                        <div class="signature-line-box">
+                            <?php esc_html_e( 'Student / Guardian', 'ifsedu-sms' ); ?>
+                        </div>
+                        <div class="signature-line-box">
+                            <?php esc_html_e( 'Cashier / Officer', 'ifsedu-sms' ); ?>
+                        </div>
+                    </div>
+
                 </div>
             <?php endforeach; ?>
         </div>
     </div>
     <?php
 }
-?>

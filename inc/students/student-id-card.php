@@ -5,6 +5,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * High-End Academic ID Card Engine & Layout Compiler
+ * Dynamic QR Code & Barcode Engine Integrated
  * Custom Prefixes Applied: dpt-, afdp-
  * Standard CR80 Grid Metrics System Incorporated
  */
@@ -18,6 +19,7 @@ function educore_student_id_card_view() {
 
     // Filter values
     $selected_unit_id = isset( $_GET['academic_unit_id'] ) ? intval( $_GET['academic_unit_id'] ) : 0;
+    $code_type        = isset( $_GET['code_type'] ) ? sanitize_text_field( $_GET['code_type'] ) : 'barcode'; // barcode, qrcode, both
     
     $students = array();
     $selected_unit = null;
@@ -42,6 +44,10 @@ function educore_student_id_card_view() {
         }
     }
     ?>
+
+    <!-- Lightweight Canvas & SVG Code Generators -->
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 
     <style>
         /* ==========================================================================
@@ -82,7 +88,7 @@ function educore_student_id_card_view() {
         /* Form Structure Grid Wrapper */
         .dpt-form-grid-wrapper {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 20px;
             align-items: flex-end;
         }
@@ -201,14 +207,14 @@ function educore_student_id_card_view() {
             font-weight: 600;
         }
         .id-card-body {
-            padding: 10px;
+            padding: 8px 10px;
             display: flex;
-            gap: 12px;
+            gap: 10px;
             align-items: flex-start;
         }
         .id-photo-frame {
-            width: 75px;
-            height: 92px;
+            width: 70px;
+            height: 85px;
             border: 1px solid #cbd5e1;
             border-radius: 6px;
             overflow: hidden;
@@ -224,30 +230,66 @@ function educore_student_id_card_view() {
             object-fit: cover;
         }
         .id-card-table {
-            font-size: 0.76rem;
+            font-size: 0.72rem;
             width: 100%;
             border-collapse: collapse;
         }
         .id-card-table td {
-            padding: 2px 0;
+            padding: 1px 0;
             vertical-align: top;
             border: none !important;
         }
         .id-card-table td strong {
             color: #0f172a;
         }
+
+        /* Dynamic Code Display Elements */
+        .id-code-area {
+            position: absolute;
+            bottom: 26px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #f8fafc;
+            border: 1px dashed #cbd5e1;
+            padding: 2px 6px;
+            border-radius: 4px;
+            height: 38px;
+            box-sizing: border-box;
+        }
+        .id-barcode-svg {
+            max-height: 32px;
+            width: auto;
+            max-width: 100%;
+            display: block;
+            margin: 0 auto;
+        }
+        .id-qrcode-box {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .id-qrcode-box img {
+            width: 32px !important;
+            height: 32px !important;
+        }
+
         .id-card-footer {
             position: absolute;
             bottom: 0;
             left: 0;
             width: 100%;
             background: #f1f5f9;
-            padding: 5px 12px;
+            padding: 4px 10px;
             border-top: 1px solid #e2e8f0;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            font-size: 0.68rem;
+            font-size: 0.65rem;
             box-sizing: border-box;
         }
         .id-card-footer span strong {
@@ -318,6 +360,10 @@ function educore_student_id_card_view() {
                 background-color: #006a4e !important;
                 color: #ffffff !important;
             }
+            .id-code-area {
+                background: #ffffff !important;
+                border: 1px solid #e2e8f0 !important;
+            }
             .id-card-footer {
                 background-color: #f1f5f9 !important;
                 border-top: 1px solid #e2e8f0 !important;
@@ -350,6 +396,15 @@ function educore_student_id_card_view() {
                     </select>
                 </div>
 
+                <div class="dpt-input-block">
+                    <label>Verification Code Type</label>
+                    <select name="code_type">
+                        <option value="barcode" <?php selected( $code_type, 'barcode' ); ?>>Barcode Only (Code128)</option>
+                        <option value="qrcode" <?php selected( $code_type, 'qrcode' ); ?>>QR Code Only (Profile URL)</option>
+                        <option value="both" <?php selected( $code_type, 'both' ); ?>>Both (Barcode + QR Code)</option>
+                    </select>
+                </div>
+
                 <div class="dpt-action-block">
                     <button type="submit" class="dpt-btn dpt-btn-primary">
                         <span class="dashicons dashicons-filter"></span> Fetch Records
@@ -368,7 +423,9 @@ function educore_student_id_card_view() {
             <div id="educore-printable-id-area">
                 <?php if ( ! empty( $students ) ) : ?>
                     <div class="dpt-id-cards-container">
-                        <?php foreach ( $students as $student ) : ?>
+                        <?php foreach ( $students as $student ) : 
+                            $profile_url = site_url( '/student-verify/?uid=' . esc_attr( $student->student_id ) );
+                        ?>
                             <div class="id-card-wrapper">
                                 <div class="id-card-box">
                                     
@@ -390,12 +447,12 @@ function educore_student_id_card_view() {
                                         
                                         <table class="id-card-table">
                                             <tr>
-                                                <td style="color:#64748b; width:32%;">ID No:</td>
+                                                <td style="color:#64748b; width:30%;">ID No:</td>
                                                 <td><strong><?php echo esc_html( $student->student_id ); ?></strong></td>
                                             </tr>
                                             <tr>
                                                 <td style="color:#64748b;">Name:</td>
-                                                <td><strong style="text-transform: uppercase;"><?php echo esc_html( $student->full_name ); ?></strong></td>
+                                                <td><strong style="text-transform: uppercase; font-size: 0.70rem;"><?php echo esc_html( $student->full_name ); ?></strong></td>
                                             </tr>
                                             <tr>
                                                 <td style="color:#64748b;">Class/Year:</td>
@@ -415,11 +472,24 @@ function educore_student_id_card_view() {
                                             </tr>
                                         </table>
                                     </div>
+
+                                    <!-- Code Generator Placement Area -->
+                                    <div class="id-code-area">
+                                        <?php if ( $code_type === 'barcode' || $code_type === 'both' ) : ?>
+                                            <div style="flex: 1; text-align: center;">
+                                                <svg class="id-barcode-svg" data-barcode="<?php echo esc_attr( $student->student_id ); ?>"></svg>
+                                            </div>
+                                        <?php endif; ?>
+
+                                        <?php if ( $code_type === 'qrcode' || $code_type === 'both' ) : ?>
+                                            <div class="id-qrcode-box" data-qrcode="<?php echo esc_url( $profile_url ); ?>"></div>
+                                        <?php endif; ?>
+                                    </div>
                                     
                                     <!-- Card Verification Footer -->
                                     <div class="id-card-footer">
                                         <span>Blood: <strong><?php echo esc_html( $student->blood_group ? $student->blood_group : 'N/A' ); ?></strong></span>
-                                        <span style="font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.25px; font-size: 0.62rem; border-top: 1px dashed #94a3b8; padding-top: 2px;">Principal</span>
+                                        <span style="font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.25px; font-size: 0.60rem; border-top: 1px dashed #94a3b8; padding-top: 2px;">Principal Signature</span>
                                     </div>
                                     
                                 </div>
@@ -440,5 +510,42 @@ function educore_student_id_card_view() {
             </div>
         <?php endif; ?>
     </div>
+
+    <!-- Live Client-Side Code Initialization Engine -->
+    <script type="text/javascript">
+    document.addEventListener("DOMContentLoaded", function() {
+        // Render Barcodes
+        var barcodeElements = document.querySelectorAll('.id-barcode-svg');
+        barcodeElements.forEach(function(el) {
+            var val = el.getAttribute('data-barcode');
+            if (val) {
+                JsBarcode(el, val, {
+                    format: "CODE128",
+                    lineColor: "#0f172a",
+                    width: 1.2,
+                    height: 26,
+                    displayValue: false,
+                    margin: 0
+                });
+            }
+        });
+
+        // Render QR Codes
+        var qrcodeElements = document.querySelectorAll('.id-qrcode-box');
+        qrcodeElements.forEach(function(el) {
+            var url = el.getAttribute('data-qrcode');
+            if (url) {
+                new QRCode(el, {
+                    text: url,
+                    width: 32,
+                    height: 32,
+                    colorDark: "#0f172a",
+                    colorLight: "#ffffff",
+                    correctLevel: QRCode.CorrectLevel.L
+                });
+            }
+        });
+    });
+    </script>
     <?php
 }

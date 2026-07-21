@@ -5,6 +5,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * High-End Academic Daily Attendance Roster Matrix & Interactivity Engine
+ * File: attendance-tab.php
  * Custom Prefixes Applied: dpt-, afdp-
  * Architecture: Elite Bento Box Interface with In-Memory Caching and Kinetic States
  */
@@ -17,12 +18,17 @@ function educore_attendance_tab() {
 
     // Strict Security Control: Capability Check
     if ( ! current_user_can( 'manage_options' ) ) {
-        wp_die( esc_html__( 'You do not have sufficient permissions to manage attendance configurations.', 'educore' ) );
+        wp_die( esc_html__( 'You do not have sufficient permissions to manage attendance configurations.', 'ifsedu-sms' ) );
     }
 
-    // 1. Handle Form Submission (Save Attendance Data via Single Optimized Execution)
-    if ( isset( $_POST['educore_save_attendance'] ) && wp_verify_nonce( $_POST['educore_attendance_nonce'], 'save_attendance_action' ) ) {
-        $attendance_date = sanitize_text_field( $_POST['attendance_date'] );
+    // 1. Filter Inputs Configuration with POST/GET fallback for URL persistence
+    $filter_class   = isset( $_REQUEST['class_name'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['class_name'] ) ) : '';
+    $filter_section = isset( $_REQUEST['section_name'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['section_name'] ) ) : '';
+    $filter_date    = isset( $_REQUEST['attendance_date'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['attendance_date'] ) ) : current_time( 'Y-m-d' );
+
+    // 2. Handle Form Submission (Save Attendance Data via Single Optimized Execution)
+    if ( isset( $_POST['educore_save_attendance'] ) && isset( $_POST['educore_attendance_nonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['educore_attendance_nonce'] ) ), 'save_attendance_action' ) ) {
+        $attendance_date = isset( $_POST['attendance_date'] ) ? sanitize_text_field( wp_unslash( $_POST['attendance_date'] ) ) : current_time( 'Y-m-d' );
         $attendance_data = isset( $_POST['attendance'] ) ? (array) $_POST['attendance'] : array();
         $current_user_id = get_current_user_id();
 
@@ -42,13 +48,16 @@ function educore_attendance_tab() {
 
             foreach ( $attendance_data as $student_id => $status ) {
                 $student_id = intval( $student_id );
-                $status     = sanitize_text_field( $status );
+                $status     = sanitize_text_field( wp_unslash( $status ) );
 
                 if ( isset( $existing_records[ $student_id ] ) ) {
                     // Update existing record using pre-fetched internal ID
                     $wpdb->update( 
                         $table_attendance, 
-                        array( 'status' => $status, 'recorded_by' => $current_user_id ), 
+                        array( 
+                            'status'      => $status, 
+                            'recorded_by' => $current_user_id 
+                        ), 
                         array( 'id' => intval( $existing_records[ $student_id ]->id ) ),
                         array( '%s', '%d' ),
                         array( '%d' )
@@ -63,7 +72,7 @@ function educore_attendance_tab() {
                             'status'          => $status,
                             'remarks'         => '',
                             'recorded_by'     => $current_user_id
-                        ),
+                        ), 
                         array( '%d', '%s', '%s', '%s', '%d' )
                     );
                 }
@@ -71,31 +80,44 @@ function educore_attendance_tab() {
             }
         }
 
-        echo '<div class="afdp-success-banner"><span class="dashicons dashicons-yes-alt"></span> Attendance records successfully parsed and updated for ' . intval( $saved_count ) . ' students.</div>';
+        echo '<div class="afdp-success-banner"><span class="dashicons dashicons-yes-alt"></span> ' . sprintf( esc_html__( 'Attendance records successfully parsed and updated for %d students.', 'ifsedu-sms' ), intval( $saved_count ) ) . '</div>';
         
         if ( class_exists( 'IFSEdu_School_Management_System' ) ) {
             IFSEdu_School_Management_System::log_activity( "Recorded daily attendance grid for Date: " . $attendance_date );
         }
     }
 
-    // 2. Filter Inputs Configuration
-    $filter_class   = isset( $_GET['class_name'] ) ? sanitize_text_field( $_GET['class_name'] ) : '';
-    $filter_section = isset( $_GET['section_name'] ) ? sanitize_text_field( $_GET['section_name'] ) : '';
-    $filter_date    = isset( $_GET['attendance_date'] ) ? sanitize_text_field( $_GET['attendance_date'] ) : current_time('Y-m-d');
-
     // 3. Fetch Classes & Sections Dynamically from Academic Units Table
-    $classes = $wpdb->get_col( "SELECT DISTINCT class_name FROM {$table_units} ORDER BY class_name ASC" );
+    $classes = $wpdb->get_col( "SELECT DISTINCT class_name FROM {$table_units} ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC" );
     
     // Build Sections and Department Groups list safely
     $raw_sections = $wpdb->get_results( "SELECT DISTINCT section_name, dept_name FROM {$table_units} WHERE section_name != '' OR dept_name != ''" );
     $sections     = array();
     if ( ! empty( $raw_sections ) ) {
         foreach ( $raw_sections as $sec_obj ) {
-            if ( ! empty( $sec_obj->section_name ) ) $sections[] = $sec_obj->section_name;
-            if ( ! empty( $sec_obj->dept_name ) )    $sections[] = $sec_obj->dept_name;
+            if ( ! empty( $sec_obj->section_name ) ) {
+                $sections[] = $sec_obj->section_name;
+            }
+            if ( ! empty( $sec_obj->dept_name ) ) {
+                $sections[] = $sec_obj->dept_name;
+            }
         }
         $sections = array_unique( $sections );
     }
+
+    // Preserve Current Page Context URL
+    $page_slug   = isset( $_GET['page'] ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : 'school_management_system';
+    $tab_slug    = isset( $_GET['tab'] ) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : 'attendance';
+    $current_url = add_query_arg(
+        array(
+            'page'            => $page_slug,
+            'tab'             => $tab_slug,
+            'class_name'      => $filter_class,
+            'section_name'    => $filter_section,
+            'attendance_date' => $filter_date,
+        ),
+        admin_url( 'admin.php' )
+    );
     ?>
 
     <style>
@@ -413,25 +435,25 @@ function educore_attendance_tab() {
     <div class="dpt-attendance-root">
         
         <div class="afdp-header-block no-print">
-            <h2><span class="dashicons dashicons-clipboard"></span> Daily Attendance Matrix</h2>
+            <h2><span class="dashicons dashicons-clipboard"></span> <?php esc_html_e( 'Daily Attendance Matrix', 'ifsedu-sms' ); ?></h2>
         </div>
 
         <!-- Filter Console Bento Box Block -->
         <div class="dpt-bento-card">
-            <form method="GET" action="">
-                <input type="hidden" name="page" value="school_management_system">
-                <input type="hidden" name="tab" value="attendance">
+            <form method="GET" action="<?php echo esc_url( admin_url( 'admin.php' ) ); ?>">
+                <input type="hidden" name="page" value="<?php echo esc_attr( $page_slug ); ?>">
+                <input type="hidden" name="tab" value="<?php echo esc_attr( $tab_slug ); ?>">
                 
                 <div class="dpt-form-row">
                     <div class="dpt-form-group">
-                        <label class="dpt-form-label">Select Target Date <span style="color:#ef4444;">*</span></label>
+                        <label class="dpt-form-label"><?php esc_html_e( 'Select Target Date', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
                         <input type="date" name="attendance_date" class="dpt-input-field" value="<?php echo esc_attr( $filter_date ); ?>" required>
                     </div>
                     
                     <div class="dpt-form-group">
-                        <label class="dpt-form-label">Academic Class / Year <span style="color:#ef4444;">*</span></label>
+                        <label class="dpt-form-label"><?php esc_html_e( 'Academic Class / Year', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
                         <select name="class_name" class="dpt-select-field" required>
-                            <option value="">-- Select Class --</option>
+                            <option value=""><?php esc_html_e( '-- Select Class --', 'ifsedu-sms' ); ?></option>
                             <?php foreach ( $classes as $cls ) : ?>
                                 <option value="<?php echo esc_attr( $cls ); ?>" <?php selected( $filter_class, $cls ); ?>><?php echo esc_html( $cls ); ?></option>
                             <?php endforeach; ?>
@@ -439,9 +461,9 @@ function educore_attendance_tab() {
                     </div>
                     
                     <div class="dpt-form-group">
-                        <label class="dpt-form-label">Section / Group</label>
+                        <label class="dpt-form-label"><?php esc_html_e( 'Section / Group', 'ifsedu-sms' ); ?></label>
                         <select name="section_name" class="dpt-select-field">
-                            <option value="">-- All Sections / Groups --</option>
+                            <option value=""><?php esc_html_e( '-- All Sections / Groups --', 'ifsedu-sms' ); ?></option>
                             <?php foreach ( $sections as $sec ) : ?>
                                 <option value="<?php echo esc_attr( $sec ); ?>" <?php selected( $filter_section, $sec ); ?>><?php echo esc_html( $sec ); ?></option>
                             <?php endforeach; ?>
@@ -449,7 +471,7 @@ function educore_attendance_tab() {
                     </div>
                     
                     <div class="dpt-form-group">
-                        <button type="submit" class="dpt-btn-submit-trigger" style="width: 100%;">Load Roster Structure</button>
+                        <button type="submit" class="dpt-btn-submit-trigger" style="width: 100%;"><?php esc_html_e( 'Load Roster Structure', 'ifsedu-sms' ); ?></button>
                     </div>
                 </div>
             </form>
@@ -467,9 +489,8 @@ function educore_attendance_tab() {
                 $sql_args[] = $filter_section;
             }
 
-            $query .= " ORDER BY roll_no ASC";
+            $query .= " ORDER BY CAST(roll_no AS UNSIGNED) ASC, roll_no ASC";
             
-            // Bulletproof approach using call_user_func_array to prevent any variable unpacking parse errors
             $prep_roster_query = call_user_func_array( array( $wpdb, 'prepare' ), array_merge( array( $query ), $sql_args ) );
             $students = $wpdb->get_results( $prep_roster_query );
 
@@ -489,43 +510,45 @@ function educore_attendance_tab() {
                     <!-- Dynamic Metrics Real-time Analytics Dashboard Header -->
                     <div class="afdp-roster-meta-bar">
                         <div class="afdp-roster-title">
-                            <h4>Mark Attendance: <span style="color: #006a4e;"><?php echo esc_html( $filter_class . ( $filter_section ? ' (' . $filter_section . ')' : '' ) ); ?></span></h4>
-                            <small>Target Date: <?php echo date('d F, Y', strtotime($filter_date)); ?></small>
+                            <h4><?php esc_html_e( 'Mark Attendance:', 'ifsedu-sms' ); ?> <span style="color: #006a4e;"><?php echo esc_html( $filter_class . ( $filter_section ? ' (' . $filter_section . ')' : '' ) ); ?></span></h4>
+                            <small><?php esc_html_e( 'Target Date:', 'ifsedu-sms' ); ?> <?php echo esc_html( date_i18n( 'd F, Y', strtotime( $filter_date ) ) ); ?></small>
                         </div>
                         
                         <!-- Live Stats Dynamic Counters Grid -->
                         <div class="dpt-counter-cluster">
-                            <span class="dpt-badge-pill dpt-badge-total">Total: <span id="cnt-total"><?php echo count($students); ?></span></span>
-                            <span class="dpt-badge-pill dpt-badge-present">Present: <span id="cnt-present">0</span></span>
-                            <span class="dpt-badge-pill dpt-badge-absent">Absent: <span id="cnt-absent">0</span></span>
-                            <span class="dpt-badge-pill dpt-badge-late">Late: <span id="cnt-late">0</span></span>
+                            <span class="dpt-badge-pill dpt-badge-total"><?php esc_html_e( 'Total:', 'ifsedu-sms' ); ?> <span id="cnt-total"><?php echo count( $students ); ?></span></span>
+                            <span class="dpt-badge-pill dpt-badge-present"><?php esc_html_e( 'Present:', 'ifsedu-sms' ); ?> <span id="cnt-present">0</span></span>
+                            <span class="dpt-badge-pill dpt-badge-absent"><?php esc_html_e( 'Absent:', 'ifsedu-sms' ); ?> <span id="cnt-absent">0</span></span>
+                            <span class="dpt-badge-pill dpt-badge-late"><?php esc_html_e( 'Late:', 'ifsedu-sms' ); ?> <span id="cnt-late">0</span></span>
                         </div>
                     </div>
 
                     <!-- Global Action Automation Controllers Bar -->
                     <div class="afdp-bulk-automation-row no-print">
                         <div class="afdp-bulk-label">
-                            <span class="dashicons dashicons-admin-tools"></span> Bulk Operations:
+                            <span class="dashicons dashicons-admin-tools"></span> <?php esc_html_e( 'Bulk Operations:', 'ifsedu-sms' ); ?>
                         </div>
                         <div class="afdp-bulk-actions">
-                            <button type="button" class="dpt-bulk-btn" data-target-status="Present">Set All Present</button>
-                            <button type="button" class="dpt-bulk-btn" data-target-status="Absent">Set All Absent</button>
-                            <button type="button" class="dpt-bulk-btn" data-target-status="Late">Set All Late</button>
+                            <button type="button" class="dpt-bulk-btn" data-target-status="Present"><?php esc_html_e( 'Set All Present', 'ifsedu-sms' ); ?></button>
+                            <button type="button" class="dpt-bulk-btn" data-target-status="Absent"><?php esc_html_e( 'Set All Absent', 'ifsedu-sms' ); ?></button>
+                            <button type="button" class="dpt-bulk-btn" data-target-status="Late"><?php esc_html_e( 'Set All Late', 'ifsedu-sms' ); ?></button>
                         </div>
                     </div>
                     
-                    <form method="POST" action="" id="educoreAttendanceSubmitEngine">
+                    <form method="POST" action="<?php echo esc_url( $current_url ); ?>" id="educoreAttendanceSubmitEngine">
                         <?php wp_nonce_field( 'save_attendance_action', 'educore_attendance_nonce' ); ?>
                         <input type="hidden" name="attendance_date" value="<?php echo esc_attr( $filter_date ); ?>">
+                        <input type="hidden" name="class_name" value="<?php echo esc_attr( $filter_class ); ?>">
+                        <input type="hidden" name="section_name" value="<?php echo esc_attr( $filter_section ); ?>">
 
                         <div class="dpt-table-responsive">
                             <table class="dpt-attendance-matrix-table">
                                 <thead>
                                     <tr>
-                                        <th style="width: 12%;">Roll No</th>
-                                        <th style="width: 18%;">Student ID</th>
-                                        <th style="width: 40%;">Student Name</th>
-                                        <th style="width: 30%; text-align: center;">Attendance Status</th>
+                                        <th style="width: 12%;"><?php esc_html_e( 'Roll No', 'ifsedu-sms' ); ?></th>
+                                        <th style="width: 18%;"><?php esc_html_e( 'Student ID', 'ifsedu-sms' ); ?></th>
+                                        <th style="width: 40%;"><?php esc_html_e( 'Student Name', 'ifsedu-sms' ); ?></th>
+                                        <th style="width: 30%; text-align: center;"><?php esc_html_e( 'Attendance Status', 'ifsedu-sms' ); ?></th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -541,13 +564,13 @@ function educore_attendance_tab() {
                                         <td style="text-align: center;">
                                             <div class="afdp-radio-pill-group">
                                                 <input type="radio" class="afdp-radio-pill-item status-radio-node" name="attendance[<?php echo $student_internal_id; ?>]" id="present_<?php echo $student_internal_id; ?>" value="Present" <?php checked( $current_status, 'Present' ); ?>>
-                                                <label class="afdp-radio-pill-label" for="present_<?php echo $student_internal_id; ?>">Present</label>
+                                                <label class="afdp-radio-pill-label" for="present_<?php echo $student_internal_id; ?>"><?php esc_html_e( 'Present', 'ifsedu-sms' ); ?></label>
 
                                                 <input type="radio" class="afdp-radio-pill-item status-radio-node" name="attendance[<?php echo $student_internal_id; ?>]" id="absent_<?php echo $student_internal_id; ?>" value="Absent" <?php checked( $current_status, 'Absent' ); ?>>
-                                                <label class="afdp-radio-pill-label" for="absent_<?php echo $student_internal_id; ?>">Absent</label>
+                                                <label class="afdp-radio-pill-label" for="absent_<?php echo $student_internal_id; ?>"><?php esc_html_e( 'Absent', 'ifsedu-sms' ); ?></label>
 
                                                 <input type="radio" class="afdp-radio-pill-item status-radio-node" name="attendance[<?php echo $student_internal_id; ?>]" id="late_<?php echo $student_internal_id; ?>" value="Late" <?php checked( $current_status, 'Late' ); ?>>
-                                                <label class="afdp-radio-pill-label" for="late_<?php echo $student_internal_id; ?>">Late</label>
+                                                <label class="afdp-radio-pill-label" for="late_<?php echo $student_internal_id; ?>"><?php esc_html_e( 'Late', 'ifsedu-sms' ); ?></label>
                                             </div>
                                         </td>
                                     </tr>
@@ -558,7 +581,7 @@ function educore_attendance_tab() {
 
                         <div class="mt-4 text-end" style="margin-top: 24px; border-top: 1px solid #e2e8f0; padding-top: 16px;">
                             <button type="submit" name="educore_save_attendance" class="dpt-btn-submit-trigger" style="padding: 0 32px; height: 44px; font-size: 14px;">
-                                Commit & Save Roster Stack
+                                <?php esc_html_e( 'Commit & Save Roster Stack', 'ifsedu-sms' ); ?>
                             </button>
                         </div>
                     </form>
@@ -598,9 +621,9 @@ function educore_attendance_tab() {
                 </script>
                 <?php
             } else {
-                echo '<div class="afdp-fallback-card"><span class="dashicons dashicons-warning"></span><p>No active students found matching current Class/Section requirements.</p></div>';
+                echo '<div class="afdp-fallback-card"><span class="dashicons dashicons-warning"></span><p>' . esc_html__( 'No active students found matching current Class/Section requirements.', 'ifsedu-sms' ) . '</p></div>';
             }
         } else {
-            echo '<div class="afdp-fallback-card"><span class="dashicons dashicons-info"></span><p>Select a target Date and Class above to load the attendance workspace.</p></div>';
+            echo '<div class="afdp-fallback-card"><span class="dashicons dashicons-info"></span><p>' . esc_html__( 'Select a target Date and Class above to load the attendance workspace.', 'ifsedu-sms' ) . '</p></div>';
         }
     }

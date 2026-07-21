@@ -5,6 +5,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * High-End Academic Financial Fees Sub-Navigation Engine & Router Matrix
+ * File: fees-tab.php
  * Custom Prefixes Applied: dpt-, afdp-
  * Architecture: Bento Layout Viewports with Integrated Hardware Print Lockdown
  */
@@ -22,7 +23,8 @@ function educore_fees_tab() {
            ========================================================================== */
         .dpt-fees-nav-root {
             margin: 20px 20px 24px 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+            color: #0f172a;
         }
 
         /* Modern Bento Top Header Frame Block */
@@ -161,12 +163,14 @@ function educore_fees_tab() {
             <div class="dpt-nav-button-group">
                 <a href="<?php echo esc_url( $all_fees_url ); ?>" 
                    class="dpt-nav-link <?php echo ( $sub_tab === 'list' ) ? 'dpt-nav-link-active' : 'dpt-nav-link-inactive'; ?>">
-                    <span class="dashicons dashicons-money-alt"></span> All Fee Invoices
+                    <span class="dashicons dashicons-money-alt"></span>
+                    <?php esc_html_e( 'All Fee Invoices', 'ifsedu-sms' ); ?>
                 </a>
                 
                 <a href="<?php echo esc_url( $collect_url ); ?>" 
                    class="dpt-nav-link <?php echo ( $sub_tab === 'collect' ) ? 'dpt-nav-link-active' : 'dpt-nav-link-inactive'; ?>">
-                    <span class="dashicons dashicons-plus-alt2"></span> + Collect Student Fee
+                    <span class="dashicons dashicons-plus-alt2"></span>
+                    <?php esc_html_e( '+ Collect Student Fee', 'ifsedu-sms' ); ?>
                 </a>
             </div>
 
@@ -174,7 +178,7 @@ function educore_fees_tab() {
                 <div>
                     <span class="afdp-context-badge">
                         <span class="dashicons dashicons-printer" style="font-size:14px; width:14px; height:14px;"></span>
-                        Printing Invoice Receipt
+                        <?php esc_html_e( 'Printing Invoice Receipt', 'ifsedu-sms' ); ?>
                     </span>
                 </div>
             <?php endif; ?>
@@ -188,7 +192,7 @@ function educore_fees_tab() {
                     if ( function_exists( 'educore_fees_collect_view' ) ) {
                         educore_fees_collect_view();
                     } else {
-                        echo '<div class="afdp-notice-card"><span class="dashicons dashicons-info" style="vertical-align:middle; margin-right:6px;"></span> Fee Collection module is initializing. Define <code>educore_fees_collect_view()</code>.</div>';
+                        echo '<div class="afdp-notice-card"><span class="dashicons dashicons-info" style="vertical-align:middle; margin-right:6px;"></span> ' . esc_html__( 'Fee Collection module is initializing. Define educore_fees_collect_view().', 'ifsedu-sms' ) . '</div>';
                     }
                     break;
 
@@ -196,7 +200,7 @@ function educore_fees_tab() {
                     if ( function_exists( 'educore_fees_invoice_print_view' ) ) {
                         educore_fees_invoice_print_view();
                     } else {
-                        echo '<div class="afdp-notice-card"><span class="dashicons dashicons-info" style="vertical-align:middle; margin-right:6px;"></span> Invoice Print module is initializing. Define <code>educore_fees_invoice_print_view()</code>.</div>';
+                        echo '<div class="afdp-notice-card"><span class="dashicons dashicons-info" style="vertical-align:middle; margin-right:6px;"></span> ' . esc_html__( 'Invoice Print module is initializing. Define educore_fees_invoice_print_view().', 'ifsedu-sms' ) . '</div>';
                     }
                     break;
 
@@ -205,7 +209,7 @@ function educore_fees_tab() {
                     if ( function_exists( 'educore_fees_list_view' ) ) {
                         educore_fees_list_view();
                     } else {
-                        echo '<div class="afdp-notice-card"><span class="dashicons dashicons-info" style="vertical-align:middle; margin-right:6px;"></span> Fees List View module is initializing. Define <code>educore_fees_list_view()</code>.</div>';
+                        echo '<div class="afdp-notice-card"><span class="dashicons dashicons-info" style="vertical-align:middle; margin-right:6px;"></span> ' . esc_html__( 'Fees List View module is initializing. Define educore_fees_list_view().', 'ifsedu-sms' ) . '</div>';
                     }
                     break;
             }

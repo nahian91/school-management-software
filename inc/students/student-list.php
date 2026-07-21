@@ -11,17 +11,17 @@ function educore_students_list_view() {
     global $wpdb;
     $table_students = $wpdb->prefix . 'sms_students';
 
-    // ১. ডাটাবেজ থেকে সরাসরি সমস্ত অ্যাক্টিভ স্টুডেন্টদের ডাটা লোড
-    $students_records = $wpdb->get_results( 
-        "SELECT * FROM $table_students WHERE status = 'Active' ORDER BY class_name ASC, roll_no ASC" 
-    );
-
-    // ২. ওয়ার্ডপ্রেস অ্যাকশন হুক ব্যবহার করে রানটাইমে ডাটাটেবিল অ্যাসেটস ইনজেক্ট করা
+    // ১. ওয়ার্ডপ্রেস স্ট্যান্ডার্ড অনুযায়ী রানটাইমে ডাটাটেবিল অ্যাসেটস ইনজেক্ট করা
     wp_enqueue_style( 'datatables-cdn', 'https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css', array(), '1.13.6' );
     wp_enqueue_script( 'datatables-cdn-js', 'https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js', array( 'jquery' ), '1.13.6', true );
 
+    // ২. ডাটাবেজ থেকে সরাসরি সমস্ত অ্যাক্টিভ স্টুডেন্টদের ডাটা লোড
+    $students_records = $wpdb->get_results( 
+        "SELECT * FROM {$table_students} WHERE status = 'Active' ORDER BY class_name ASC, roll_no ASC" 
+    );
+
     // ৩. এক্সট্রাক্ট ক্লাস ফর ড্রপডাউন এক্সটার্নাল ফিল্টারিং
-    $available_classes = $wpdb->get_col( "SELECT DISTINCT class_name FROM $table_students WHERE status = 'Active' ORDER BY class_name ASC" );
+    $available_classes = $wpdb->get_col( "SELECT DISTINCT class_name FROM {$table_students} WHERE status = 'Active' AND class_name != '' ORDER BY class_name ASC" );
     ?>
 
     <style>
@@ -205,9 +205,11 @@ function educore_students_list_view() {
                     </label>
                     <select id="educoreClassCustomFilter" class="educore-select-element">
                         <option value=""><?php esc_html_e( 'Show All Classes', 'educore' ); ?></option>
-                        <?php foreach ( $available_classes as $class_name ) : ?>
-                            <option value="<?php echo esc_attr( $class_name ); ?>"><?php echo esc_html( $class_name ); ?></option>
-                        <?php endforeach; ?>
+                        <?php if ( ! empty( $available_classes ) ) : ?>
+                            <?php foreach ( $available_classes as $class_name ) : ?>
+                                <option value="<?php echo esc_attr( $class_name ); ?>"><?php echo esc_html( $class_name ); ?></option>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
                     </select>
                 </div>
 
@@ -240,10 +242,11 @@ function educore_students_list_view() {
             <tbody>
                 <?php if ( ! empty( $students_records ) ) : ?>
                     <?php foreach ( $students_records as $student ) : 
-                        $view_url   = admin_url( 'admin.php?page=school_management_system&tab=students&sub=view&id=' . absint( $student->id ) );
-                        $edit_url   = admin_url( 'admin.php?page=school_management_system&tab=students&sub=edit&id=' . absint( $student->id ) );
-                        $delete_url = wp_nonce_url( admin_url( 'admin.php?page=school_management_system&tab=students&sub=delete&id=' . absint( $student->id ) ), 'delete_student_' . $student->id );
-                        $gender_style = ( strtolower( $student->gender ) === 'male' ) ? 'gender-male' : 'gender-female';
+                        $view_url     = admin_url( 'admin.php?page=school_management_system&tab=students&sub=view&id=' . absint( $student->id ) );
+                        $edit_url     = admin_url( 'admin.php?page=school_management_system&tab=students&sub=edit&id=' . absint( $student->id ) );
+                        $delete_url   = wp_nonce_url( admin_url( 'admin.php?page=school_management_system&tab=students&sub=delete&id=' . absint( $student->id ) ), 'delete_student_' . $student->id );
+                        $gender_style = ( strtolower( trim( $student->gender ) ) === 'male' ) ? 'gender-male' : 'gender-female';
+                        $phone_display= ! empty( $student->student_phone ) ? $student->student_phone : $student->guardian_phone;
                         ?>
                         <tr data-class="<?php echo esc_attr( $student->class_name ); ?>" data-section="<?php echo esc_attr( $student->section_name ); ?>">
                             <td class="fw-bold"><code><?php echo esc_html( $student->student_id ); ?></code></td>
@@ -258,12 +261,12 @@ function educore_students_list_view() {
                             <td style="font-weight: 700; color: #334155;"><?php echo esc_html( $student->roll_no ); ?></td>
                             <td>
                                 <span class="educore-badge-gender <?php echo esc_attr( $gender_style ); ?>">
-                                    <?php echo esc_html( $student->gender ); ?>
+                                    <?php echo esc_html( ucfirst( $student->gender ) ); ?>
                                 </span>
                             </td>
                             <td>
                                 <div style="font-weight: 500;"><?php echo esc_html( $student->guardian_name ); ?></div>
-                                <div style="font-size: 12px; color: #64748b;"><span class="dashicons dashicons-phone" style="font-size: 12px; width:12px; height:12px; vertical-align:middle;"></span> <?php echo esc_html( $student->student_phone ? $student->student_phone : $student->guardian_phone ); ?></div>
+                                <div style="font-size: 12px; color: #64748b;"><span class="dashicons dashicons-phone" style="font-size: 12px; width:12px; height:12px; vertical-align:middle;"></span> <?php echo esc_html( $phone_display ); ?></div>
                             </td>
                             <td style="text-align: right;">
                                 <div class="educore-row-actions">
@@ -275,7 +278,7 @@ function educore_students_list_view() {
                                         <span class="dashicons dashicons-edit me-1" style="font-size: 16px;"></span> Edit
                                     </a>
                                     <span style="color: #cbd5e1;">|</span>
-                                    <a href="<?php echo esc_url( $delete_url ); ?>" class="educore-link-action action-delete" onclick="return confirm('Are you sure you want to completely drop this student file?');">
+                                    <a href="<?php echo esc_url( $delete_url ); ?>" class="educore-link-action action-delete" onclick="return confirm('<?php echo esc_js( __( 'Are you sure you want to completely drop this student file?', 'educore' ) ); ?>');">
                                         <span class="dashicons dashicons-trash me-1" style="font-size: 16px;"></span> Delete
                                     </a>
                                 </div>
@@ -294,10 +297,28 @@ function educore_students_list_view() {
     <script type="text/javascript">
     jQuery(document).ready(function($) {
         if ($.fn.DataTable) {
-            
-            // কাস্টম ফিল্টারিং প্লাগইন এক্সটেনশন (DOM ইন্ডিপেন্ডেন্ট ডাটা-অ্যাট্রিবিউট সার্চ ম্যাট্রিক্স)
+
+            // ১. ডাটাটেবিল ইন্সট্যান্স আগে ডিক্লেয়ার করা (DOM Structure 'f' সহ যুক্ত করা হয়েছে)
+            var tableInstance = $('#educoreStudentsMainTable').DataTable({
+                "pageLength": 20,
+                "lengthMenu": [10, 20, 50, 100],
+                "ordering": true,
+                "order": [[2, "asc"], [3, "asc"]],
+                "responsive": true,
+                "dom": 'f t <"educore-dt-footer-internal"lip>',
+                "language": {
+                    "search": "",
+                    "searchPlaceholder": "Search anything..."
+                }
+            });
+
+            // ২. কাস্টম ডাটাটেবিল ফিল্টারিং এক্সটেনশন রেজিস্টার
             $.fn.dataTable.ext.search.push(
                 function(settings, data, dataIndex) {
+                    if (settings.nTable.id !== 'educoreStudentsMainTable') {
+                        return true;
+                    }
+
                     var rowNode = tableInstance.row(dataIndex).node();
                     var rowClass = $(rowNode).attr('data-class') || '';
                     var rowSection = $(rowNode).attr('data-section') || '';
@@ -315,40 +336,27 @@ function educore_students_list_view() {
                 }
             );
 
-            var tableInstance = $('#educoreStudentsMainTable').DataTable({
-                "pageLength": 20,
-                "lengthMenu": [10, 20, 50, 100],
-                "ordering": true,
-                "order": [[2, "asc"], [3, "asc"]], // Order by Class first, then Roll
-                "responsive": true,
-                "dom": 't<"educore-dt-footer-internal"lip>',
-                "language": {
-                    "search": "",
-                    "searchPlaceholder": "Search anything instantly..."
-                }
-            });
-
-            // ১. ক্লাস ড্রপডাউন পরিবর্তন ট্র্যাকার এবং সেকশন এক্সট্রাকশন ইঞ্জিন
+            // ৩. ক্লাস ড্রপডাউন চেইঞ্জ লজিক + ডায়নামিক সেকশন পপুলেশন (Using DataTables API)
             $('#educoreClassCustomFilter').on('change', function() {
                 var selectedClass = $(this).val();
                 var sectionFilter = $('#educoreSectionCustomFilter');
                 
-                // সেকশন ফিল্টার রিসেট
                 sectionFilter.empty().append('<option value="">All Sections</option>');
 
                 if (selectedClass) {
                     var uniqueSections = [];
 
-                    // শুধুমাত্র ক্লাস ম্যাচ করা রো থেকে সেকশন এক্সট্রাক্ট করা
-                    $('#educoreStudentsMainTable tbody tr').each(function() {
-                        var rowClass = $(this).attr('data-class');
-                        var rowSection = $(this).attr('data-section');
+                    // DataTables API দিয়ে সরাসরি সমস্ত রো ট্রেভার্স করা (Hidden/Paginated rows সহ)
+                    tableInstance.rows().every(function() {
+                        var node = this.node();
+                        var rowClass = $(node).attr('data-class');
+                        var rowSection = $(node).attr('data-section');
+
                         if (rowClass === selectedClass && rowSection && uniqueSections.indexOf(rowSection) === -1) {
                             uniqueSections.push(rowSection);
                         }
                     });
 
-                    // ড্রপডাউন পপুলেট ও এনেবল করা
                     if (uniqueSections.length > 0) {
                         uniqueSections.sort();
                         $.each(uniqueSections, function(index, value) {
@@ -362,15 +370,16 @@ function educore_students_list_view() {
                     sectionFilter.empty().append('<option value="">Select Class First</option>').prop('disabled', true);
                 }
                 
+                // রি-ড্র ডাটাটেবিল
                 tableInstance.draw();
             });
 
-            // ২. সেকশন ড্রপডাউন পরিবর্তন ট্র্যাকার
+            // ৪. সেকশন ফিল্টার ট্র্যাকার
             $('#educoreSectionCustomFilter').on('change', function() {
                 tableInstance.draw();
             });
 
-            // সার্চ ফিল্ড এবং ফুটারে পেজিনেশন ব্লক কাস্টম কন্টেইনারে মুভ করা
+            // ৫. সার্চ বক্স ও ফুটার পেজিনেশন সঠিক কন্টেইনারে অ্যাপেন্ড করা
             $('.dataTables_filter').appendTo('#educoreDtSearchTarget');
             $('.educore-dt-footer-internal').appendTo('#educoreDtFooterTarget');
         }
