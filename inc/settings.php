@@ -18,14 +18,36 @@ function educore_settings_tab() {
     if ( isset( $_POST['educore_save_settings'] ) && wp_verify_nonce( $_POST['educore_settings_nonce'], 'save_settings_action' ) ) {
         
         $settings = array(
-            'educore_school_name'    => sanitize_text_field( $_POST['school_name'] ),
-            'educore_eiin_number'    => sanitize_text_field( $_POST['eiin_number'] ),
-            'educore_institute_code' => sanitize_text_field( $_POST['institute_code'] ),
-            'educore_school_address' => sanitize_textarea_field( $_POST['school_address'] ),
-            'educore_school_phone'   => sanitize_text_field( $_POST['school_phone'] ),
-            'educore_school_email'   => sanitize_email( $_POST['school_email'] ),
-            'educore_currency'       => sanitize_text_field( $_POST['currency_symbol'] ),
-            'educore_school_logo'    => esc_url_raw( $_POST['school_logo'] ),
+            // Basic Identity & Institutional Meta
+            'educore_school_name'         => sanitize_text_field( $_POST['school_name'] ),
+            'educore_school_tagline'      => sanitize_text_field( $_POST['school_tagline'] ),
+            'educore_eiin_number'         => sanitize_text_field( $_POST['eiin_number'] ),
+            'educore_institute_code'      => sanitize_text_field( $_POST['institute_code'] ),
+            'educore_estd_year'           => sanitize_text_field( $_POST['estd_year'] ),
+            'educore_school_type'         => sanitize_text_field( $_POST['school_type'] ),
+
+            // Media & Asset URIs
+            'educore_school_logo'         => esc_url_raw( $_POST['school_logo'] ),
+            'educore_principal_sig'       => esc_url_raw( $_POST['principal_sig'] ),
+
+            // Academic Recognition & Licensing
+            'educore_board_affiliation'   => sanitize_text_field( $_POST['board_affiliation'] ),
+            'educore_accreditation'       => sanitize_text_field( $_POST['accreditation'] ),
+            'educore_approval_no'         => sanitize_text_field( $_POST['approval_no'] ),
+            'educore_regulatory_body'     => sanitize_text_field( $_POST['regulatory_body'] ),
+
+            // Institutional Infrastructure
+            'educore_campus_type'         => sanitize_text_field( $_POST['campus_type'] ),
+            'educore_campus_area'         => sanitize_text_field( $_POST['campus_area'] ),
+            'educore_total_classrooms'    => sanitize_text_field( $_POST['total_classrooms'] ),
+            'educore_has_library'         => sanitize_text_field( $_POST['has_library'] ),
+            'educore_has_lab'             => sanitize_text_field( $_POST['has_lab'] ),
+
+            // Financial Credentials Baseline
+            'educore_bank_name'           => sanitize_text_field( $_POST['bank_name'] ),
+            'educore_bank_account_no'     => sanitize_text_field( $_POST['bank_account_no'] ),
+            'educore_bank_branch'         => sanitize_text_field( $_POST['bank_branch'] ),
+            'educore_bank_routing'        => sanitize_text_field( $_POST['bank_routing'] ),
         );
 
         foreach ( $settings as $key => $value ) {
@@ -39,15 +61,32 @@ function educore_settings_tab() {
         }
     }
 
-    // Retrieve existing settings (or defaults)
-    $school_name    = get_option( 'educore_school_name', get_bloginfo( 'name' ) );
-    $eiin_number    = get_option( 'educore_eiin_number', '' );
-    $institute_code = get_option( 'educore_institute_code', '' );
-    $school_address = get_option( 'educore_school_address', '' );
-    $school_phone   = get_option( 'educore_school_phone', '' );
-    $school_email   = get_option( 'educore_school_email', get_bloginfo( 'admin_email' ) );
-    $currency       = get_option( 'educore_currency', '৳' );
-    $school_logo    = get_option( 'educore_school_logo', '' );
+    // Retrieve existing settings
+    $school_name         = get_option( 'educore_school_name', get_bloginfo( 'name' ) );
+    $school_tagline      = get_option( 'educore_school_tagline', '' );
+    $eiin_number         = get_option( 'educore_eiin_number', '' );
+    $institute_code      = get_option( 'educore_institute_code', '' );
+    $estd_year           = get_option( 'educore_estd_year', '' );
+    $school_type         = get_option( 'educore_school_type', 'co_ed' );
+
+    $school_logo         = get_option( 'educore_school_logo', '' );
+    $principal_sig       = get_option( 'educore_principal_sig', '' );
+
+    $board_affiliation   = get_option( 'educore_board_affiliation', '' );
+    $accreditation       = get_option( 'educore_accreditation', 'A+' );
+    $approval_no         = get_option( 'educore_approval_no', '' );
+    $regulatory_body     = get_option( 'educore_regulatory_body', '' );
+
+    $campus_type         = get_option( 'educore_campus_type', 'own' );
+    $campus_area         = get_option( 'educore_campus_area', '' );
+    $total_classrooms    = get_option( 'educore_total_classrooms', '' );
+    $has_library         = get_option( 'educore_has_library', 'yes' );
+    $has_lab             = get_option( 'educore_has_lab', 'yes' );
+
+    $bank_name           = get_option( 'educore_bank_name', '' );
+    $bank_account_no     = get_option( 'educore_bank_account_no', '' );
+    $bank_branch         = get_option( 'educore_bank_branch', '' );
+    $bank_routing        = get_option( 'educore_bank_routing', '' );
     ?>
 
     <style>
@@ -113,7 +152,7 @@ function educore_settings_tab() {
             opacity: 0.9;
         }
 
-        /* Tactical Notification Nodes */
+        /* Dynamic Flash Notification */
         .afdp-alert-node {
             border-radius: 12px;
             padding: 16px 20px;
@@ -138,18 +177,9 @@ function educore_settings_tab() {
             box-shadow: 0 4px 12px rgba(16, 185, 129, 0.08);
         }
 
-        /* Bento Grid Architecture */
-        .dpt-bento-grid {
-            display: grid;
-            grid-template-columns: 2.2fr 1fr;
-            gap: 24px;
-            align-items: start;
-        }
-
-        @media (max-width: 1080px) {
-            .dpt-bento-grid {
-                grid-template-columns: 1fr;
-            }
+        /* Full Width Container */
+        .dpt-bento-container {
+            max-width: 100%;
         }
 
         /* Elegant Bento Block / Card Framework */
@@ -193,8 +223,9 @@ function educore_settings_tab() {
         }
 
         .dpt-text-emerald { color: #006a4e; }
-        .dpt-text-indigo { color: #4f46e5; }
-        .dpt-text-slate { color: #64748b; }
+        .dpt-text-purple { color: #8b5cf6; }
+        .dpt-text-blue { color: #2563eb; }
+        .dpt-text-amber { color: #d97706; }
 
         /* Structural Field Layout Matrices */
         .dpt-row-matrix {
@@ -214,10 +245,6 @@ function educore_settings_tab() {
             }
         }
 
-        .dpt-field-group {
-            margin-bottom: 20px;
-        }
-
         .dpt-label {
             display: block;
             font-size: 13px;
@@ -232,7 +259,7 @@ function educore_settings_tab() {
         }
 
         .dpt-input-text, 
-        .dpt-textarea {
+        .dpt-select {
             width: 100%;
             height: 44px;
             border: 1px solid #cbd5e1;
@@ -246,15 +273,16 @@ function educore_settings_tab() {
             box-sizing: border-box;
         }
 
-        .dpt-textarea {
-            height: auto;
-            padding: 12px 16px;
-            resize: vertical;
-            line-height: 1.5;
+        .dpt-select {
+            appearance: none;
+            background-image: url('data:image/svg+xml;utf8,<svg fill="%2364748b" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>');
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 40px;
         }
 
         .dpt-input-text:focus, 
-        .dpt-textarea:focus {
+        .dpt-select:focus {
             border-color: #006a4e;
             background-color: #ffffff;
             box-shadow: 0 0 0 4px rgba(0, 106, 78, 0.1);
@@ -383,73 +411,6 @@ function educore_settings_tab() {
         .dpt-btn-submit-trigger:active {
             transform: translateY(0);
         }
-
-        /* Sidebar Metadata Systems */
-        .dpt-sys-list {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-
-        .dpt-sys-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px 0;
-            font-size: 13px;
-            border-bottom: 1px dashed #e2e8f0;
-        }
-
-        .dpt-sys-item:last-child {
-            border-bottom: none;
-            padding-bottom: 0;
-        }
-
-        .dpt-sys-item strong {
-            color: #64748b;
-            font-weight: 600;
-        }
-
-        .dpt-sys-item span {
-            font-weight: 700;
-            color: #0f172a;
-            background: #f1f5f9;
-            padding: 4px 10px;
-            border-radius: 6px;
-            font-size: 12px;
-        }
-
-        /* Module Info Extension Notice Block */
-        .dpt-extension-box {
-            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-            border: 1px solid #e2e8f0;
-            border-radius: 14px;
-            padding: 20px;
-        }
-
-        .dpt-ext-heading {
-            font-size: 13.5px;
-            font-weight: 800;
-            color: #006a4e;
-            margin: 0 0 8px 0;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .dpt-ext-heading .dashicons {
-            font-size: 18px;
-            width: 18px;
-            height: 18px;
-        }
-
-        .dpt-ext-desc {
-            margin: 0;
-            font-size: 12.5px;
-            color: #475569;
-            line-height: 1.6;
-            font-weight: 500;
-        }
     </style>
 
     <div class="dpt-settings-root">
@@ -458,9 +419,9 @@ function educore_settings_tab() {
         <div class="afdp-header-frame">
             <div class="afdp-header-content">
                 <h2>
-                    <span class="dashicons dashicons-admin-settings"></span> System Settings & Institutional Profile
+                    <span class="dashicons dashicons-admin-settings"></span> Institutional Profile & Setup
                 </h2>
-                <p>Configure global school identity, contact baselines, metadata parameters, and regional configurations.</p>
+                <p>Configure primary school identity, official accreditations, campus infrastructure, and financial information.</p>
             </div>
         </div>
 
@@ -471,43 +432,63 @@ function educore_settings_tab() {
             </div>
         <?php endif; ?>
 
-        <!-- Bento Grid Core Matrix -->
-        <div class="dpt-bento-grid">
-            
-            <!-- Left Grid: Primary Configuration Form -->
-            <div>
-                <form method="POST" action="">
-                    <?php wp_nonce_field( 'save_settings_action', 'educore_settings_nonce' ); ?>
+        <!-- Full Width Bento Container -->
+        <div class="dpt-bento-container">
+            <form method="POST" action="">
+                <?php wp_nonce_field( 'save_settings_action', 'educore_settings_nonce' ); ?>
 
-                    <!-- Block 1: Identity & Crest -->
-                    <div class="dpt-bento-block">
-                        <div class="dpt-bento-title">
-                            <div class="dpt-bento-title-text dpt-text-emerald">
-                                <span class="dashicons dashicons-bank"></span> Institutional Identity
-                            </div>
+                <!-- Block 1: Identity & Crest -->
+                <div class="dpt-bento-block">
+                    <div class="dpt-bento-title">
+                        <div class="dpt-bento-title-text dpt-text-emerald">
+                            <span class="dashicons dashicons-bank"></span> Institutional Identity & Crest
                         </div>
+                    </div>
 
-                        <!-- School Name -->
-                        <div class="dpt-field-group">
+                    <!-- School Name & Tagline -->
+                    <div class="dpt-row-matrix">
+                        <div>
                             <label class="dpt-label">Official Institution Name <span>*</span></label>
                             <input type="text" name="school_name" class="dpt-input-text" value="<?php echo esc_attr( $school_name ); ?>" required>
                             <small class="dpt-help-text">Appears on transcripts, invoices, ID cards, and official reports.</small>
                         </div>
-
-                        <!-- EIIN & Institute Code Matrix -->
-                        <div class="dpt-row-matrix">
-                            <div>
-                                <label class="dpt-label">EIIN Number</label>
-                                <input type="text" name="eiin_number" class="dpt-input-text" value="<?php echo esc_attr( $eiin_number ); ?>" placeholder="e.g. 130892">
-                            </div>
-                            <div>
-                                <label class="dpt-label">Institute / Government Code</label>
-                                <input type="text" name="institute_code" class="dpt-input-text" value="<?php echo esc_attr( $institute_code ); ?>" placeholder="e.g. 2011">
-                            </div>
+                        <div>
+                            <label class="dpt-label">Motto / Tagline</label>
+                            <input type="text" name="school_tagline" class="dpt-input-text" value="<?php echo esc_attr( $school_tagline ); ?>" placeholder="e.g. Education for Enlightenment">
                         </div>
+                    </div>
 
-                        <!-- School Crest Uploader -->
-                        <div class="dpt-field-group" style="margin-bottom:0;">
+                    <!-- EIIN & Institute Code -->
+                    <div class="dpt-row-matrix">
+                        <div>
+                            <label class="dpt-label">EIIN Number</label>
+                            <input type="text" name="eiin_number" class="dpt-input-text" value="<?php echo esc_attr( $eiin_number ); ?>" placeholder="e.g. 130892">
+                        </div>
+                        <div>
+                            <label class="dpt-label">Institute / Board Code</label>
+                            <input type="text" name="institute_code" class="dpt-input-text" value="<?php echo esc_attr( $institute_code ); ?>" placeholder="e.g. 2011">
+                        </div>
+                    </div>
+
+                    <!-- Established Year & Type -->
+                    <div class="dpt-row-matrix">
+                        <div>
+                            <label class="dpt-label">Established Year</label>
+                            <input type="text" name="estd_year" class="dpt-input-text" value="<?php echo esc_attr( $estd_year ); ?>" placeholder="e.g. 1995">
+                        </div>
+                        <div>
+                            <label class="dpt-label">Institution Category</label>
+                            <select name="school_type" class="dpt-select">
+                                <option value="co_ed" <?php selected( $school_type, 'co_ed' ); ?>>Co-Educational</option>
+                                <option value="boys" <?php selected( $school_type, 'boys' ); ?>>Boys School</option>
+                                <option value="girls" <?php selected( $school_type, 'girls' ); ?>>Girls School</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- School Crest & Principal Signature Uploader Matrix -->
+                    <div class="dpt-row-matrix" style="margin-bottom:0;">
+                        <div>
                             <label class="dpt-label">Institutional Crest / Logo</label>
                             <div class="dpt-logo-uploader-card">
                                 <div class="dpt-logo-preview-box" id="dpt-logo-preview">
@@ -520,7 +501,7 @@ function educore_settings_tab() {
                                 <input type="hidden" name="school_logo" id="dpt_school_logo_val" value="<?php echo esc_url( $school_logo ); ?>">
                                 <div class="dpt-logo-actions">
                                     <button type="button" class="dpt-btn-upload" id="dpt_upload_logo_btn">
-                                        <span class="dashicons dashicons-upload"></span> Select Image
+                                        <span class="dashicons dashicons-upload"></span> Select Logo
                                     </button>
                                     <button type="button" class="dpt-btn-remove" id="dpt_remove_logo_btn" style="<?php echo empty( $school_logo ) ? 'display:none;' : ''; ?>">
                                         Remove
@@ -528,133 +509,192 @@ function educore_settings_tab() {
                                 </div>
                             </div>
                         </div>
-                    </div>
-
-                    <!-- Block 2: Communication & Location -->
-                    <div class="dpt-bento-block">
-                        <div class="dpt-bento-title">
-                            <div class="dpt-bento-title-text dpt-text-indigo">
-                                <span class="dashicons dashicons-location"></span> Contact & Location Baseline
+                        <div>
+                            <label class="dpt-label">Principal / Authority Signature</label>
+                            <div class="dpt-logo-uploader-card">
+                                <div class="dpt-logo-preview-box" id="dpt-sig-preview">
+                                    <?php if ( ! empty( $principal_sig ) ) : ?>
+                                        <img src="<?php echo esc_url( $principal_sig ); ?>" alt="Principal Signature">
+                                    <?php else : ?>
+                                        <span class="dashicons dashicons-edit" style="font-size:32px; width:32px; height:32px; color:#94a3b8;"></span>
+                                    <?php endif; ?>
+                                </div>
+                                <input type="hidden" name="principal_sig" id="dpt_principal_sig_val" value="<?php echo esc_url( $principal_sig ); ?>">
+                                <div class="dpt-logo-actions">
+                                    <button type="button" class="dpt-btn-upload" id="dpt_upload_sig_btn">
+                                        <span class="dashicons dashicons-upload"></span> Select Signature
+                                    </button>
+                                    <button type="button" class="dpt-btn-remove" id="dpt_remove_sig_btn" style="<?php echo empty( $principal_sig ) ? 'display:none;' : ''; ?>">
+                                        Remove
+                                    </button>
+                                </div>
                             </div>
                         </div>
-
-                        <!-- Contact & Email Matrix -->
-                        <div class="dpt-row-matrix">
-                            <div>
-                                <label class="dpt-label">Official Phone Number</label>
-                                <input type="text" name="school_phone" class="dpt-input-text" value="<?php echo esc_attr( $school_phone ); ?>" placeholder="+880 1XXX-XXXXXX">
-                            </div>
-                            <div>
-                                <label class="dpt-label">Official Email Address</label>
-                                <input type="email" name="school_email" class="dpt-input-text" value="<?php echo esc_attr( $school_email ); ?>">
-                            </div>
-                        </div>
-
-                        <!-- Address Textarea Grid -->
-                        <div class="dpt-field-group">
-                            <label class="dpt-label">Institutional Physical Address</label>
-                            <textarea name="school_address" class="dpt-textarea" rows="3" placeholder="Road/Village, Upazila, District, Post Code"><?php echo esc_textarea( $school_address ); ?></textarea>
-                        </div>
-
-                        <!-- Currency Symbol -->
-                        <div class="dpt-field-group" style="margin-bottom:0;">
-                            <label class="dpt-label">Default Currency Symbol</label>
-                            <input type="text" name="currency_symbol" class="dpt-input-text" value="<?php echo esc_attr( $currency ); ?>" placeholder="e.g. ৳, $, BDT" style="max-width: 200px;">
-                        </div>
                     </div>
+                </div>
 
-                    <!-- Submission Trigger Container -->
-                    <div class="dpt-submit-wrapper">
-                        <button type="submit" name="educore_save_settings" class="dpt-btn-submit-trigger">
-                            <span class="dashicons dashicons-saved"></span> Save Institutional Settings
-                        </button>
-                    </div>
-                </form>
-            </div>
-
-            <!-- Right Grid: Architectural Metadata & Extension Sidebar -->
-            <div>
-                <!-- System Information Card -->
+                <!-- Block 2: Academic Recognition & Licensing -->
                 <div class="dpt-bento-block">
                     <div class="dpt-bento-title">
-                        <div class="dpt-bento-title-text dpt-text-slate">
-                            <span class="dashicons dashicons-info"></span> Engine Metadata
+                        <div class="dpt-bento-title-text dpt-text-purple">
+                            <span class="dashicons dashicons-awards"></span> Academic Recognition & Licensing
                         </div>
                     </div>
-                    
-                    <ul class="dpt-sys-list">
-                        <li class="dpt-sys-item">
-                            <strong>System Core</strong>
-                            <span>v1.0.0</span>
-                        </li>
-                        <li class="dpt-sys-item">
-                            <strong>Developer</strong>
-                            <span>DevNahian</span>
-                        </li>
-                        <li class="dpt-sys-item">
-                            <strong>PHP Engine</strong>
-                            <span><?php echo esc_html( phpversion() ); ?></span>
-                        </li>
-                        <li class="dpt-sys-item">
-                            <strong>WordPress Core</strong>
-                            <span>v<?php echo esc_html( get_bloginfo('version') ); ?></span>
-                        </li>
-                        <li class="dpt-sys-item">
-                            <strong>Server Date</strong>
-                            <span><?php echo esc_html( date('d M, Y') ); ?></span>
-                        </li>
-                    </ul>
-                </div>
-                
-                <!-- Extensions / Quick Guidance Node -->
-                <div class="dpt-extension-box">
-                    <h6 class="dpt-ext-heading">
-                        <span class="dashicons dashicons-sos"></span> Module Gateway Guidance
-                    </h6>
-                    <p class="dpt-ext-desc">
-                        To configure SMS notification gateways, print design templates, or custom grading schemes, visit the corresponding <strong>Academic</strong> or <strong>Communication</strong> modules from the main sidebar.
-                    </p>
-                </div>
-            </div>
 
+                    <div class="dpt-row-matrix">
+                        <div>
+                            <label class="dpt-label">Board / University Affiliation</label>
+                            <input type="text" name="board_affiliation" class="dpt-input-text" value="<?php echo esc_attr( $board_affiliation ); ?>" placeholder="e.g. BISE Dhaka / Cambridge International">
+                        </div>
+                        <div>
+                            <label class="dpt-label">Accreditation Grade / Status</label>
+                            <input type="text" name="accreditation" class="dpt-input-text" value="<?php echo esc_attr( $accreditation ); ?>" placeholder="e.g. Grade A+ / ISO 9001 Certified">
+                        </div>
+                    </div>
+
+                    <div class="dpt-row-matrix" style="margin-bottom:0;">
+                        <div>
+                            <label class="dpt-label">Govt. Approval / License No.</label>
+                            <input type="text" name="approval_no" class="dpt-input-text" value="<?php echo esc_attr( $approval_no ); ?>" placeholder="e.g. MOE/REG/2026/8892">
+                        </div>
+                        <div>
+                            <label class="dpt-label">Primary Regulatory Body</label>
+                            <input type="text" name="regulatory_body" class="dpt-input-text" value="<?php echo esc_attr( $regulatory_body ); ?>" placeholder="e.g. Ministry of Education">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Block 3: Institutional Infrastructure Matrix -->
+                <div class="dpt-bento-block">
+                    <div class="dpt-bento-title">
+                        <div class="dpt-bento-title-text dpt-text-blue">
+                            <span class="dashicons dashicons-admin-multisite"></span> Institutional Infrastructure
+                        </div>
+                    </div>
+
+                    <div class="dpt-row-matrix">
+                        <div>
+                            <label class="dpt-label">Campus Ownership Type</label>
+                            <select name="campus_type" class="dpt-select">
+                                <option value="own" <?php selected( $campus_type, 'own' ); ?>>Own Permanent Campus</option>
+                                <option value="rented" <?php selected( $campus_type, 'rented' ); ?>>Rented Premises</option>
+                                <option value="trust" <?php selected( $campus_type, 'trust' ); ?>>Trust / Lease Property</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="dpt-label">Total Campus Area (Acres/Sq Ft)</label>
+                            <input type="text" name="campus_area" class="dpt-input-text" value="<?php echo esc_attr( $campus_area ); ?>" placeholder="e.g. 3.5 Acres">
+                        </div>
+                        <div>
+                            <label class="dpt-label">Total Active Classrooms</label>
+                            <input type="number" name="total_classrooms" class="dpt-input-text" value="<?php echo esc_attr( $total_classrooms ); ?>" placeholder="e.g. 48">
+                        </div>
+                    </div>
+
+                    <div class="dpt-row-matrix" style="margin-bottom:0;">
+                        <div>
+                            <label class="dpt-label">Central Library Facility</label>
+                            <select name="has_library" class="dpt-select">
+                                <option value="yes" <?php selected( $has_library, 'yes' ); ?>>Available (Digital & Physical)</option>
+                                <option value="physical_only" <?php selected( $has_library, 'physical_only' ); ?>>Physical Library Only</option>
+                                <option value="no" <?php selected( $has_library, 'no' ); ?>>Not Available</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="dpt-label">Science & Computer Labs</label>
+                            <select name="has_lab" class="dpt-select">
+                                <option value="yes" <?php selected( $has_lab, 'yes' ); ?>>Fully Equipped Multi-Labs</option>
+                                <option value="basic" <?php selected( $has_lab, 'basic' ); ?>>Basic Lab Facilities</option>
+                                <option value="no" <?php selected( $has_lab, 'no' ); ?>>Not Available</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Block 4: Financial Credentials Baseline -->
+                <div class="dpt-bento-block">
+                    <div class="dpt-bento-title">
+                        <div class="dpt-bento-title-text dpt-text-amber">
+                            <span class="dashicons dashicons-money-alt"></span> Primary Financial & Bank Credentials
+                        </div>
+                    </div>
+
+                    <div class="dpt-row-matrix">
+                        <div>
+                            <label class="dpt-label">Official Bank Name</label>
+                            <input type="text" name="bank_name" class="dpt-input-text" value="<?php echo esc_attr( $bank_name ); ?>" placeholder="e.g. Sonali Bank PLC">
+                        </div>
+                        <div>
+                            <label class="dpt-label">Account Number</label>
+                            <input type="text" name="bank_account_no" class="dpt-input-text" value="<?php echo esc_attr( $bank_account_no ); ?>" placeholder="e.g. 001122334455">
+                        </div>
+                    </div>
+
+                    <div class="dpt-row-matrix" style="margin-bottom:0;">
+                        <div>
+                            <label class="dpt-label">Branch Name</label>
+                            <input type="text" name="bank_branch" class="dpt-input-text" value="<?php echo esc_attr( $bank_branch ); ?>" placeholder="e.g. Main Branch">
+                        </div>
+                        <div>
+                            <label class="dpt-label">Routing Number</label>
+                            <input type="text" name="bank_routing" class="dpt-input-text" value="<?php echo esc_attr( $bank_routing ); ?>" placeholder="e.g. 120271890">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Submission Trigger Container -->
+                <div class="dpt-submit-wrapper">
+                    <button type="submit" name="educore_save_settings" class="dpt-btn-submit-trigger">
+                        <span class="dashicons dashicons-saved"></span> Save Institutional Settings
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 
     <!-- Media Uploader JS Handler -->
     <script type="text/javascript">
         jQuery(document).ready(function($) {
-            var mediaUploader;
+            
+            // Helper function for WordPress Media Library Trigger
+            function initMediaUploader(btnId, valInputId, previewBoxId, removeBtnId, dialogTitle) {
+                var mediaUploader;
 
-            $('#dpt_upload_logo_btn').on('click', function(e) {
-                e.preventDefault();
+                $(btnId).on('click', function(e) {
+                    e.preventDefault();
 
-                if (mediaUploader) {
+                    if (mediaUploader) {
+                        mediaUploader.open();
+                        return;
+                    }
+
+                    mediaUploader = wp.media({
+                        title: dialogTitle,
+                        button: { text: 'Use Selected Media' },
+                        multiple: false
+                    });
+
+                    mediaUploader.on('select', function() {
+                        var attachment = mediaUploader.state().get('selection').first().toJSON();
+                        $(valInputId).val(attachment.url);
+                        $(previewBoxId).html('<img src="' + attachment.url + '" alt="Selected Media">');
+                        $(removeBtnId).show();
+                    });
+
                     mediaUploader.open();
-                    return;
-                }
-
-                mediaUploader = wp.media({
-                    title: 'Select Institutional Logo',
-                    button: { text: 'Use This Logo' },
-                    multiple: false
                 });
 
-                mediaUploader.on('select', function() {
-                    var attachment = mediaUploader.state().get('selection').first().toJSON();
-                    $('#dpt_school_logo_val').val(attachment.url);
-                    $('#dpt-logo-preview').html('<img src="' + attachment.url + '" alt="School Logo">');
-                    $('#dpt_remove_logo_btn').show();
+                $(removeBtnId).on('click', function(e) {
+                    e.preventDefault();
+                    $(valInputId).val('');
+                    $(previewBoxId).html('<span class="dashicons dashicons-format-image" style="font-size:32px; width:32px; height:32px; color:#94a3b8;"></span>');
+                    $(this).hide();
                 });
+            }
 
-                mediaUploader.open();
-            });
-
-            $('#dpt_remove_logo_btn').on('click', function(e) {
-                e.preventDefault();
-                $('#dpt_school_logo_val').val('');
-                $('#dpt-logo-preview').html('<span class="dashicons dashicons-format-image" style="font-size:32px; width:32px; height:32px; color:#94a3b8;"></span>');
-                $(this).hide();
-            });
+            // Initialize Logo & Signature Uploaders
+            initMediaUploader('#dpt_upload_logo_btn', '#dpt_school_logo_val', '#dpt-logo-preview', '#dpt_remove_logo_btn', 'Select Institutional Logo');
+            initMediaUploader('#dpt_upload_sig_btn', '#dpt_principal_sig_val', '#dpt-sig-preview', '#dpt_remove_sig_btn', 'Select Principal/Authority Signature');
         });
     </script>
     <?php

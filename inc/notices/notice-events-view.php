@@ -55,7 +55,8 @@ function educore_notice_events_single_view( $type = 'notice' ) {
         $priority_class = 'dpt-priority-urgent';
     }
 
-    $status_class = ( $item->status === 'Published' ) ? 'dpt-status-published' : 'dpt-status-draft';
+    $status_class   = ( $item->status === 'Published' ) ? 'dpt-status-published' : 'dpt-status-draft';
+    $featured_image = isset( $item->featured_image ) ? $item->featured_image : '';
     ?>
 
     <style>
@@ -121,6 +122,33 @@ function educore_notice_events_single_view( $type = 'notice' ) {
             margin: 0 0 8px 0;
             letter-spacing: -0.5px;
             line-height: 1.3;
+        }
+
+        /* Hero Featured Image Banner Frame */
+        .dpt-hero-featured-banner {
+            width: 100%;
+            max-height: 420px;
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 24px;
+            border: 1px solid #e2e8f0;
+            background: #f8fafc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .dpt-hero-featured-banner img {
+            width: 100%;
+            height: 100%;
+            max-height: 420px;
+            object-fit: cover;
+            display: block;
+            transition: transform 0.3s ease;
+        }
+
+        .dpt-hero-featured-banner img:hover {
+            transform: scale(1.01);
         }
 
         /* Metadata Bento Metrics Strip */
@@ -285,6 +313,15 @@ function educore_notice_events_single_view( $type = 'notice' ) {
                     </span>
                 </div>
             </div>
+
+            <!-- Hero Featured Image Banner Node (if available) -->
+            <?php if ( ! empty( $featured_image ) ) : ?>
+                <div class="dpt-hero-featured-banner">
+                    <a href="<?php echo esc_url( $featured_image ); ?>" target="_blank" title="<?php esc_attr_e( 'View Full Image', 'ifsedu-sms' ); ?>">
+                        <img src="<?php echo esc_url( $featured_image ); ?>" alt="<?php echo esc_attr( $item->title ); ?>">
+                    </a>
+                </div>
+            <?php endif; ?>
 
             <!-- Metadata Metrics Grid -->
             <div class="dpt-meta-grid">

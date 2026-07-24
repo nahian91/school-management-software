@@ -5,35 +5,47 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * Render the Core Students Datatable powered by DataTables.js Engine
- * Database Scope: sms_students
+ * Database Scope: sms_students & sms_academic_units
  * File: students-list-view.php
  */
 function educore_students_list_view() {
     global $wpdb;
     $table_students = $wpdb->prefix . 'sms_students';
+    $table_units    = $wpdb->prefix . 'sms_academic_units';
 
-    // ১. ওয়ার্ডপ্রেস স্ট্যান্ডার্ড অনুযায়ী রানটাইমে ডাটাটেবিল অ্যাসেটস ইনজেক্ট করা
+    // 1. WP Enqueue DataTables Assets
     wp_enqueue_style( 'datatables-cdn', 'https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css', array(), '1.13.6' );
     wp_enqueue_script( 'datatables-cdn-js', 'https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js', array( 'jquery' ), '1.13.6', true );
 
-    // ২. ডাটাবেজ থেকে সরাসরি সমস্ত অ্যাক্টিভ স্টুডেন্টদের ডাটা লোড (Natural Numeric Roll Sorting)
+    // 2. Fetch Active Student Records (Natural Numeric Roll Sorting)
     $students_records = $wpdb->get_results( 
         "SELECT * FROM {$table_students} WHERE status = 'Active' ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC, CAST(roll_no AS UNSIGNED) ASC, roll_no ASC" 
     );
 
-    // ৩. এক্সট্রাক্ট ক্লাস ফর ড্রপডাউন এক্সটার্নাল ফিল্টারিং
-    $available_classes = $wpdb->get_col( "SELECT DISTINCT class_name FROM {$table_students} WHERE status = 'Active' AND class_name != '' ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC" );
+    // 3. Fetch ALL Classes directly from Academic Units Table with Natural Numeric Sorting
+    $raw_classes = $wpdb->get_results( "SELECT DISTINCT class_name FROM {$table_units} WHERE class_name != '' ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC" );
+    $available_classes = array();
+
+    if ( ! empty( $raw_classes ) ) {
+        usort( $raw_classes, function( $a, $b ) {
+            return strnatcasecmp( $a->class_name, $b->class_name );
+        });
+        foreach ( $raw_classes as $cls_obj ) {
+            $available_classes[] = $cls_obj->class_name;
+        }
+    }
     ?>
 
     <style>
-        /* Modern Bento & Glassmorphism Framework for DataTables */
+        /* Modern Bento Framework for DataTables */
         .educore-dt-container {
             background: #ffffff;
             padding: 24px;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            border-radius: 14px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.03), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
             border: 1px solid #e2e8f0;
             margin-top: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
         .educore-dt-toolbar {
             display: flex;
@@ -57,8 +69,8 @@ function educore_students_list_view() {
         .educore-select-element {
             padding: 8px 12px;
             border: 1px solid #cbd5e1;
-            border-radius: 6px;
-            font-size: 14px;
+            border-radius: 8px;
+            font-size: 13.5px;
             color: #334155;
             min-width: 180px;
             background-color: #fff;
@@ -70,7 +82,7 @@ function educore_students_list_view() {
             cursor: not-allowed;
         }
         
-        /* DataTables Core Overrides to Match Elite UI Theme */
+        /* DataTables Core Overrides */
         table.dataTable {
             border-collapse: collapse !important;
             margin-top: 15px !important;
@@ -80,7 +92,7 @@ function educore_students_list_view() {
         table.dataTable thead th {
             background: #f8fafc !important;
             color: #475569 !important;
-            font-weight: 600 !important;
+            font-weight: 700 !important;
             padding: 14px 16px !important;
             border-bottom: 2px solid #e2e8f0 !important;
             font-size: 12px !important;
@@ -91,63 +103,112 @@ function educore_students_list_view() {
             padding: 14px 16px !important;
             border-bottom: 1px solid #f1f5f9 !important;
             color: #334155 !important;
-            font-size: 14px !important;
+            font-size: 13.5px !important;
             vertical-align: middle !important;
         }
         table.dataTable tbody tr:hover td {
             background-color: #f8fafc !important;
         }
         
-        /* Custom UI Badges & Action Typography */
+        /* Gender Badges */
         .educore-badge-gender {
             padding: 4px 10px;
-            border-radius: 6px;
-            font-size: 12px;
-            font-weight: 600;
+            border-radius: 20px;
+            font-size: 11.5px;
+            font-weight: 700;
             display: inline-block;
         }
-        .gender-male { background: #e0f2fe; color: #0369a1; }
-        .gender-female { background: #fce7f3; color: #be185d; }
+        .gender-male { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+        .gender-female { background: #fce7f3; color: #be185d; border: 1px solid #fbcfe8; }
         
+        /* Modern SVG Action Buttons */
         .educore-row-actions {
-            display: flex;
-            gap: 8px;
-            justify-content: flex-end;
-        }
-        .educore-link-action {
-            text-decoration: none;
-            font-weight: 600;
-            font-size: 13px;
             display: inline-flex;
             align-items: center;
-            transition: color 0.15s ease;
+            gap: 6px;
+            justify-content: flex-end;
         }
-        .action-view { color: #3b82f6; }
-        .action-view:hover { color: #2563eb; }
-        .action-edit { color: #10b981; }
-        .action-edit:hover { color: #059669; }
-        .action-delete { color: #ef4444; }
-        .action-delete:hover { color: #dc2626; }
 
-        /* DataTables Control Elements Styling */
+        .educore-btn-action {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            padding: 6px 12px;
+            font-size: 12px;
+            font-weight: 700;
+            border-radius: 6px;
+            text-decoration: none;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid transparent;
+            line-height: 1;
+            cursor: pointer;
+        }
+
+        .educore-btn-action svg {
+            width: 14px;
+            height: 14px;
+            fill: currentColor;
+            flex-shrink: 0;
+        }
+
+        /* View Profile Button */
+        .educore-btn-view {
+            background-color: #eff6ff;
+            color: #2563eb;
+            border-color: #bfdbfe;
+        }
+        .educore-btn-view:hover {
+            background-color: #2563eb;
+            color: #ffffff;
+            border-color: #2563eb;
+            box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+        }
+
+        /* Edit Button */
+        .educore-btn-edit {
+            background-color: #f0fdf4;
+            color: #006a4e;
+            border-color: #bbf7d0;
+        }
+        .educore-btn-edit:hover {
+            background-color: #006a4e;
+            color: #ffffff;
+            border-color: #006a4e;
+            box-shadow: 0 2px 6px rgba(0, 106, 78, 0.25);
+        }
+
+        /* Delete Button */
+        .educore-btn-delete {
+            background-color: #fef2f2;
+            color: #dc2626;
+            border-color: #fecaca;
+        }
+        .educore-btn-delete:hover {
+            background-color: #dc2626;
+            color: #ffffff;
+            border-color: #dc2626;
+            box-shadow: 0 2px 6px rgba(220, 38, 38, 0.25);
+        }
+
+        /* DataTables Controls Styling */
         .dataTables_wrapper .dataTables_filter input {
             border: 1px solid #cbd5e1 !important;
-            border-radius: 6px !important;
+            border-radius: 8px !important;
             padding: 6px 12px !important;
             background-color: #fff !important;
             margin-left: 8px !important;
-            width: 260px !important;
+            width: 240px !important;
             height: 38px !important;
         }
         .dataTables_wrapper .dataTables_length select {
             border: 1px solid #cbd5e1 !important;
-            border-radius: 6px !important;
+            border-radius: 8px !important;
             padding: 4px 8px !important;
             height: 38px !important;
             background-color: #fff !important;
         }
 
-        /* Fixed Footer Layout for Pagination & Info Controls */
         .educore-dt-footer-layout {
             display: flex;
             justify-content: space-between;
@@ -161,7 +222,7 @@ function educore_students_list_view() {
         .dataTables_wrapper .dataTables_info {
             padding-top: 0 !important;
             color: #475569 !important;
-            font-weight: 500;
+            font-weight: 600;
             font-size: 13px;
         }
         .dataTables_wrapper .dataTables_paginate {
@@ -175,7 +236,7 @@ function educore_students_list_view() {
             border-radius: 6px !important;
             background: #ffffff !important;
             color: #475569 !important;
-            font-weight: 500 !important;
+            font-weight: 600 !important;
             font-size: 13px !important;
             transition: all 0.2s ease;
         }
@@ -195,12 +256,12 @@ function educore_students_list_view() {
 
     <div class="educore-dt-container">
         
-        <!-- External Advanced Bento Toolbar Grid -->
+        <!-- Filter Toolbar -->
         <div class="educore-dt-toolbar">
             <div class="educore-dt-filter-box">
-                <!-- Class Custom Select Unit -->
+                <!-- Class Filter (Loaded from Academic Units) -->
                 <div class="educore-filter-group">
-                    <label for="educoreClassCustomFilter" style="font-weight: 600; color: #475569; font-size: 14px; white-space: nowrap;">
+                    <label for="educoreClassCustomFilter" style="font-weight: 700; color: #475569; font-size: 13px; white-space: nowrap;">
                         <span class="dashicons dashicons-filter" style="font-size: 18px; vertical-align: middle; margin-right: 4px;"></span>
                         <?php esc_html_e( 'Filter Class:', 'educore' ); ?>
                     </label>
@@ -214,9 +275,9 @@ function educore_students_list_view() {
                     </select>
                 </div>
 
-                <!-- Dependent Dynamic Section Select Unit -->
+                <!-- Section Filter -->
                 <div class="educore-filter-group">
-                    <label for="educoreSectionCustomFilter" style="font-weight: 600; color: #475569; font-size: 14px; white-space: nowrap;">
+                    <label for="educoreSectionCustomFilter" style="font-weight: 700; color: #475569; font-size: 13px; white-space: nowrap;">
                         <?php esc_html_e( 'Section:', 'educore' ); ?>
                     </label>
                     <select id="educoreSectionCustomFilter" class="educore-select-element" disabled>
@@ -227,7 +288,7 @@ function educore_students_list_view() {
             <div id="educoreDtSearchTarget"></div>
         </div>
 
-        <!-- DOM Data Table Target -->
+        <!-- Main Students DataTable -->
         <table id="educoreStudentsMainTable" class="display stripe hover cell-border" style="width:100%">
             <thead>
                 <tr>
@@ -237,7 +298,7 @@ function educore_students_list_view() {
                     <th><?php esc_html_e( 'Roll No', 'educore' ); ?></th>
                     <th><?php esc_html_e( 'Gender', 'educore' ); ?></th>
                     <th><?php esc_html_e( 'Guardian Contacts', 'educore' ); ?></th>
-                    <th style="text-align: right; white-space: nowrap;"><?php esc_html_e( 'System Actions', 'educore' ); ?></th>
+                    <th style="text-align: right; white-space: nowrap;"><?php esc_html_e( 'Actions', 'educore' ); ?></th>
                 </tr>
             </thead>
             <tbody>
@@ -248,20 +309,20 @@ function educore_students_list_view() {
                         $delete_url   = wp_nonce_url( admin_url( 'admin.php?page=school_management_system&tab=students&sub=delete&id=' . absint( $student->id ) ), 'delete_student_' . $student->id );
                         $gender_style = ( strtolower( trim( $student->gender ) ) === 'male' ) ? 'gender-male' : 'gender-female';
                         $phone_display= ! empty( $student->student_phone ) ? $student->student_phone : $student->guardian_phone;
-                        ?>
+                    ?>
                         <tr data-class="<?php echo esc_attr( trim( $student->class_name ) ); ?>" data-section="<?php echo esc_attr( trim( $student->section_name ) ); ?>">
-                            <td class="fw-bold"><code><?php echo esc_html( $student->student_id ); ?></code></td>
+                            <td class="fw-bold"><code style="background:#f1f5f9; padding:2px 6px; border-radius:4px; border:1px solid #cbd5e1; font-weight:700; color:#0f172a;"><?php echo esc_html( $student->student_id ); ?></code></td>
                             <td>
-                                <div style="font-weight: 600; color: #0f172a;"><?php echo esc_html( $student->full_name ); ?></div>
+                                <div style="font-weight: 700; color: #0f172a;"><?php echo esc_html( $student->full_name ); ?></div>
                                 <?php if ( ! empty( $student->name_bn ) ) : ?>
-                                    <small style="color: #94a3b8; font-size: 11px;"><?php echo esc_html( $student->name_bn ); ?></small>
+                                    <small style="color: #64748b; font-size: 11.5px;"><?php echo esc_html( $student->name_bn ); ?></small>
                                 <?php endif; ?>
                             </td>
                             <td>
-                                <div style="font-weight: 500;"><?php echo esc_html( $student->class_name ); ?></div>
-                                <small style="color: #64748b; font-size: 11px;">Section: <?php echo esc_html( $student->section_name ? $student->section_name : 'N/A' ); ?></small>
+                                <div style="font-weight: 600; color:#006a4e;"><?php echo esc_html( $student->class_name ); ?></div>
+                                <small style="color: #64748b; font-size: 11.5px;">Section: <?php echo esc_html( $student->section_name ? $student->section_name : 'N/A' ); ?></small>
                             </td>
-                            <td style="font-weight: 700; color: #334155;" data-order="<?php echo esc_attr( intval( $student->roll_no ) ); ?>">
+                            <td style="font-weight: 800; color: #334155;" data-order="<?php echo esc_attr( intval( $student->roll_no ) ); ?>">
                                 #<?php echo esc_html( $student->roll_no ); ?>
                             </td>
                             <td>
@@ -270,21 +331,27 @@ function educore_students_list_view() {
                                 </span>
                             </td>
                             <td>
-                                <div style="font-weight: 500;"><?php echo esc_html( $student->guardian_name ); ?></div>
+                                <div style="font-weight: 600; color:#1e293b;"><?php echo esc_html( $student->guardian_name ); ?></div>
                                 <div style="font-size: 12px; color: #64748b;"><span class="dashicons dashicons-phone" style="font-size: 12px; width:12px; height:12px; vertical-align:middle;"></span> <?php echo esc_html( $phone_display ); ?></div>
                             </td>
                             <td style="text-align: right;">
                                 <div class="educore-row-actions">
-                                    <a href="<?php echo esc_url( $view_url ); ?>" class="educore-link-action action-view">
-                                        <span class="dashicons dashicons-visibility me-1" style="font-size: 16px;"></span> Profile
+                                    <!-- View Profile SVG Button -->
+                                    <a href="<?php echo esc_url( $view_url ); ?>" class="educore-btn-action educore-btn-view" title="<?php esc_attr_e( 'View Profile', 'educore' ); ?>">
+                                        <svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+                                        Profile
                                     </a>
-                                    <span style="color: #cbd5e1;">|</span>
-                                    <a href="<?php echo esc_url( $edit_url ); ?>" class="educore-link-action action-edit">
-                                        <span class="dashicons dashicons-edit me-1" style="font-size: 16px;"></span> Edit
+
+                                    <!-- Edit SVG Button -->
+                                    <a href="<?php echo esc_url( $edit_url ); ?>" class="educore-btn-action educore-btn-edit" title="<?php esc_attr_e( 'Edit Record', 'educore' ); ?>">
+                                        <svg viewBox="0 0 24 24"><path d="M3 17.25V21h4.75L17.81 9.94l-4.75-4.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 4.75 4.75 1.83-1.83z"/></svg>
+                                        Edit
                                     </a>
-                                    <span style="color: #cbd5e1;">|</span>
-                                    <a href="<?php echo esc_url( $delete_url ); ?>" class="educore-link-action action-delete" onclick="return confirm('<?php echo esc_js( __( 'Are you sure you want to completely drop this student file?', 'educore' ) ); ?>');">
-                                        <span class="dashicons dashicons-trash me-1" style="font-size: 16px;"></span> Delete
+
+                                    <!-- Delete SVG Button -->
+                                    <a href="<?php echo esc_url( $delete_url ); ?>" class="educore-btn-action educore-btn-delete" title="<?php esc_attr_e( 'Delete Record', 'educore' ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Are you sure you want to completely drop this student file?', 'educore' ) ); ?>');">
+                                        <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                                        Delete
                                     </a>
                                 </div>
                             </td>
@@ -294,16 +361,16 @@ function educore_students_list_view() {
             </tbody>
         </table>
 
-        <!-- Target Render Element for Re-positioned Footer Pagination Controls -->
+        <!-- Target Element for Footer Controls -->
         <div id="educoreDtFooterTarget" class="educore-dt-footer-layout"></div>
     </div>
 
-    <!-- DataTables Engine Instantiation Handler Script -->
+    <!-- Script Layer -->
     <script type="text/javascript">
     jQuery(document).ready(function($) {
         if ($.fn.DataTable) {
 
-            // ১. কাস্টম ফিল্টার রেজিস্টার আগে করা হচ্ছে (ইনিশিয়ালাইজেশনের পূর্বে)
+            // 1. Custom DataTables Search Filter Push
             $.fn.dataTable.ext.search.push(
                 function(settings, data, dataIndex) {
                     if (settings.nTable.id !== 'educoreStudentsMainTable') {
@@ -327,7 +394,7 @@ function educore_students_list_view() {
                 }
             );
 
-            // ২. ডাটাটেবিল ইন্সট্যান্স তৈরি
+            // 2. Instantiate DataTable
             var tableInstance = $('#educoreStudentsMainTable').DataTable({
                 "pageLength": 20,
                 "lengthMenu": [10, 20, 50, 100],
@@ -337,11 +404,11 @@ function educore_students_list_view() {
                 "dom": 'f t <"educore-dt-footer-internal"lip>',
                 "language": {
                     "search": "",
-                    "searchPlaceholder": "Search anything..."
+                    "searchPlaceholder": "Search student name, ID, roll..."
                 }
             });
 
-            // ৩. ক্লাস ফিল্টার চেইঞ্জ হ্যান্ডলার ও ডায়নামিক সেকশন পপুলেশন
+            // 3. Class Filter Change Handler & Dynamic Section Population
             $('#educoreClassCustomFilter').on('change', function() {
                 var selectedClass = $.trim($(this).val());
                 var sectionFilter = $('#educoreSectionCustomFilter');
@@ -351,7 +418,6 @@ function educore_students_list_view() {
                 if (selectedClass !== '') {
                     var uniqueSections = [];
 
-                    // API দিয়ে সব রো স্ক্যান করা
                     tableInstance.rows().every(function() {
                         var node = this.node();
                         var rowClass = $.trim($(node).attr('data-class') || '');
@@ -375,16 +441,15 @@ function educore_students_list_view() {
                     sectionFilter.empty().append('<option value="">Select Class First</option>').prop('disabled', true);
                 }
                 
-                // রি-ড্র ডাটাটেবিল
                 tableInstance.draw();
             });
 
-            // ৪. সেকশন ফিল্টার ট্র্যাকার
+            // 4. Section Filter Change Handler
             $('#educoreSectionCustomFilter').on('change', function() {
                 tableInstance.draw();
             });
 
-            // ৫. UI Element Placement Adjustments
+            // 5. DOM Placement Adjustments
             $('.dataTables_filter').appendTo('#educoreDtSearchTarget');
             $('.educore-dt-footer-internal').appendTo('#educoreDtFooterTarget');
         }

@@ -29,13 +29,24 @@ function educore_notice_events_add_edit_view( $type = 'notice' ) {
 
     // Handle Form Processing
     if ( isset( $_POST['educore_save_item'] ) && wp_verify_nonce( $_POST['educore_item_nonce'], 'save_item_action' ) ) {
-        $attachment_url = $item ? $item->attachment_url : '';
+        $attachment_url = $item && isset( $item->attachment_url ) ? $item->attachment_url : '';
+        $featured_image = $item && isset( $item->featured_image ) ? $item->featured_image : '';
 
+        require_once ABSPATH . 'wp-admin/includes/file.php';
+
+        // 1. Handle Attachment File Upload (PDF, DOC, ZIP etc)
         if ( ! empty( $_FILES['item_file']['name'] ) ) {
-            require_once ABSPATH . 'wp-admin/includes/file.php';
             $upload = wp_handle_upload( $_FILES['item_file'], array( 'test_form' => false ) );
             if ( ! isset( $upload['error'] ) ) {
                 $attachment_url = $upload['url'];
+            }
+        }
+
+        // 2. Handle Featured Image Upload (JPG, PNG, WEBP)
+        if ( ! empty( $_FILES['featured_image_file']['name'] ) ) {
+            $image_upload = wp_handle_upload( $_FILES['featured_image_file'], array( 'test_form' => false ) );
+            if ( ! isset( $image_upload['error'] ) ) {
+                $featured_image = $image_upload['url'];
             }
         }
 
@@ -47,6 +58,7 @@ function educore_notice_events_add_edit_view( $type = 'notice' ) {
             'description'     => wp_kses_post( $_POST['description'] ),
             'event_date'      => ! empty( $_POST['event_date'] ) ? sanitize_text_field( $_POST['event_date'] ) : NULL,
             'attachment_url'  => sanitize_url( $attachment_url ),
+            'featured_image'  => sanitize_url( $featured_image ),
             'created_by'      => get_current_user_id(),
             'status'          => sanitize_text_field( $_POST['status'] )
         );
@@ -200,6 +212,26 @@ function educore_notice_events_add_edit_view( $type = 'notice' ) {
             outline: none;
         }
 
+        /* Image Preview Box Style */
+        .dpt-img-preview-box {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 6px;
+            padding: 8px;
+            border: 1px dashed #cbd5e1;
+            border-radius: 10px;
+            background: #f8fafc;
+        }
+
+        .dpt-img-preview-box img {
+            width: 60px;
+            height: 60px;
+            object-fit: cover;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+
         /* WYSIWYG Editor Wrap Styling */
         .dpt-editor-wrapper {
             border: 1px solid #cbd5e1;
@@ -324,7 +356,7 @@ function educore_notice_events_add_edit_view( $type = 'notice' ) {
                     </div>
 
                     <div class="dpt-field-node">
-                        <label class="dpt-field-label"><?php esc_html_e( 'Priority Level', 'ifsedu-sms' ); ?></label>
+                        <label class="dpt-label dpt-field-label"><?php esc_html_e( 'Priority Level', 'ifsedu-sms' ); ?></label>
                         <select name="priority" class="dpt-select-control">
                             <option value="Normal" <?php selected( $item ? $item->priority : '', 'Normal' ); ?>>Normal</option>
                             <option value="High" <?php selected( $item ? $item->priority : '', 'High' ); ?>>High</option>
@@ -360,11 +392,26 @@ function educore_notice_events_add_edit_view( $type = 'notice' ) {
                     </div>
                 </div>
 
-                <!-- Row 4: File Upload & Status -->
-                <div class="dpt-grid-row dpt-cols-2">
+                <!-- Row 4: Featured Image, File Upload & Status -->
+                <div class="dpt-grid-row dpt-cols-3">
+                    <!-- Featured Image Field -->
                     <div class="dpt-field-node">
                         <label class="dpt-field-label">
-                            <?php esc_html_e( 'Attachment File (PDF / JPG / PNG)', 'ifsedu-sms' ); ?>
+                            <?php esc_html_e( 'Featured Image (JPG / PNG)', 'ifsedu-sms' ); ?>
+                        </label>
+                        <input type="file" name="featured_image_file" class="dpt-input-file" accept="image/*">
+                        <?php if ( $item && ! empty( $item->featured_image ) ) : ?>
+                            <div class="dpt-img-preview-box">
+                                <img src="<?php echo esc_url( $item->featured_image ); ?>" alt="Featured Image Preview">
+                                <span style="font-size: 12px; color: #475569; font-weight:600;">Current Banner</span>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+
+                    <!-- Attachment File Field -->
+                    <div class="dpt-field-node">
+                        <label class="dpt-field-label">
+                            <?php esc_html_e( 'Attachment File (PDF / DOC)', 'ifsedu-sms' ); ?>
                             <?php if ( $item && ! empty( $item->attachment_url ) ) : ?>
                                 &mdash; <a href="<?php echo esc_url( $item->attachment_url ); ?>" target="_blank" style="color:#006a4e; text-decoration:underline;">View Current</a>
                             <?php endif; ?>
@@ -372,6 +419,7 @@ function educore_notice_events_add_edit_view( $type = 'notice' ) {
                         <input type="file" name="item_file" class="dpt-input-file">
                     </div>
 
+                    <!-- Publication Status Field -->
                     <div class="dpt-field-node">
                         <label class="dpt-field-label"><?php esc_html_e( 'Publication Status', 'ifsedu-sms' ); ?></label>
                         <select name="status" class="dpt-select-control">

@@ -5,30 +5,77 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * High-End Academic Admit Card Engine & Layout Compiler
+ * File: student-admit-card-view.php
  * Custom Prefixes Applied: dpt-, afdp-
- * Integration Matrix: Dynamic Exam Name Lookup via sms_exams table
+ * Integration Matrix: Dynamic Exam Name & Separated Class/Section Filtering
  */
+
+// 0. AJAX Handler: Dynamically load Sections based on Class selection
+add_action( 'wp_ajax_educore_get_sections_by_class_admit', 'educore_get_sections_by_class_admit_handler' );
+function educore_get_sections_by_class_admit_handler() {
+    check_ajax_referer( 'educore_admit_nonce', 'security' );
+
+    if ( ! current_user_can( 'manage_options' ) ) {
+        wp_send_json_error( array( 'message' => __( 'Permission denied.', 'ifsedu-sms' ) ) );
+    }
+
+    global $wpdb;
+    $table_units = $wpdb->prefix . 'sms_academic_units';
+    $class_name  = isset( $_POST['class_name'] ) ? sanitize_text_field( wp_unslash( $_POST['class_name'] ) ) : '';
+
+    if ( empty( $class_name ) ) {
+        wp_send_json_success( array() );
+    }
+
+    $sections = $wpdb->get_col( $wpdb->prepare(
+        "SELECT DISTINCT section_name FROM {$table_units} WHERE class_name = %s AND section_name != '' ORDER BY section_name ASC",
+        $class_name
+    ) );
+
+    wp_send_json_success( $sections );
+}
+
 function educore_student_admit_card_view() {
     global $wpdb;
     $table_students = $wpdb->prefix . 'sms_students';
     $table_units    = $wpdb->prefix . 'sms_academic_units';
-    $table_exams    = $wpdb->prefix . 'sms_exams'; // Exam table boundary
+    $table_exams    = $wpdb->prefix . 'sms_exams';
 
-    // Fetch live academic structural data safely
-    $academic_units = $wpdb->get_results( "SELECT * FROM {$table_units} ORDER BY unit_type DESC, class_name ASC, dept_name ASC" );
-    $exams          = $wpdb->get_results( "SELECT id, exam_name FROM {$table_exams} ORDER BY id DESC" );
+    // Fetch Exams list safely
+    $exams = $wpdb->get_results( "SELECT id, exam_name FROM {$table_exams} ORDER BY id DESC" );
+
+    // Fetch Unique Classes with Natural Numeric Sorting
+    $raw_classes = $wpdb->get_results( "SELECT DISTINCT class_name FROM {$table_units} WHERE class_name != '' ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC" );
+    $classes     = array();
+    if ( ! empty( $raw_classes ) ) {
+        usort( $raw_classes, function( $a, $b ) {
+            return strnatcasecmp( $a->class_name, $b->class_name );
+        });
+        foreach ( $raw_classes as $cls_obj ) {
+            $classes[] = $cls_obj->class_name;
+        }
+    }
 
     // Dynamic Filter Request Capture & Sanitization
-    $selected_unit_id = isset( $_GET['academic_unit_id'] ) ? intval( $_GET['academic_unit_id'] ) : 0;
-    $selected_exam_id = isset( $_GET['exam_id'] ) ? intval( $_GET['exam_id'] ) : 0;
-    $exam_year        = isset( $_GET['exam_year'] ) ? sanitize_text_field( $_GET['exam_year'] ) : date('Y');
+    $selected_exam_id  = isset( $_GET['exam_id'] ) ? intval( $_GET['exam_id'] ) : 0;
+    $selected_class    = isset( $_GET['class_name'] ) ? sanitize_text_field( wp_unslash( $_GET['class_name'] ) ) : '';
+    $selected_section  = isset( $_GET['section_name'] ) ? sanitize_text_field( wp_unslash( $_GET['section_name'] ) ) : '';
+    $exam_year         = isset( $_GET['exam_year'] ) ? sanitize_text_field( wp_unslash( $_GET['exam_year'] ) ) : current_time('Y');
+
+    // Pre-populate available sections if class filter is present
+    $available_sections = array();
+    if ( ! empty( $selected_class ) ) {
+        $available_sections = $wpdb->get_col( $wpdb->prepare(
+            "SELECT DISTINCT section_name FROM {$table_units} WHERE class_name = %s AND section_name != '' ORDER BY section_name ASC",
+            $selected_class
+        ) );
+    }
 
     // Execution Core Matrix Data Pool
-    $students      = array();
-    $selected_unit = null;
-    $exam_title    = '';
+    $students   = array();
+    $exam_title = '';
 
-    // Step 1: Resolve Dynamic Exam Name from DB if exam_id exists
+    // Step 1: Resolve Dynamic Exam Name from DB
     if ( $selected_exam_id > 0 ) {
         $exam_row = $wpdb->get_row( $wpdb->prepare( "SELECT exam_name FROM {$table_exams} WHERE id = %d", $selected_exam_id ) );
         if ( $exam_row ) {
@@ -36,31 +83,24 @@ function educore_student_admit_card_view() {
         }
     }
 
-    // Step 2: Extract Target Student Dataset
-    if ( $selected_unit_id > 0 && $selected_exam_id > 0 ) {
-        $selected_unit = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table_units} WHERE id = %d", $selected_unit_id ) );
+    // Step 2: Extract Target Student Dataset by Class & Section
+    if ( ! empty( $selected_class ) && $selected_exam_id > 0 ) {
+        $query = "SELECT * FROM {$table_students} WHERE status = 'Active' AND class_name = %s";
+        $params = array( $selected_class );
 
-        if ( $selected_unit ) {
-            if ( $selected_unit->unit_type === 'College' ) {
-                $query = $wpdb->prepare(
-                    "SELECT * FROM {$table_students} WHERE status = 'Active' AND class_name = %s ORDER BY roll_no ASC",
-                    $selected_unit->class_name
-                );
-            } else {
-                $query = $wpdb->prepare(
-                    "SELECT * FROM {$table_students} WHERE status = 'Active' AND class_name = %s AND section_name = %s ORDER BY roll_no ASC",
-                    $selected_unit->class_name,
-                    $selected_unit->section_name
-                );
-            }
-            $students = $wpdb->get_results( $query );
+        if ( ! empty( $selected_section ) ) {
+            $query .= " AND section_name = %s";
+            $params[] = $selected_section;
         }
+
+        $query .= " ORDER BY CAST(roll_no AS UNSIGNED) ASC, roll_no ASC";
+        $students = $wpdb->get_results( $wpdb->prepare( $query, ...$params ) );
     }
     ?>
 
     <style>
         /* ==========================================================================
-           1. MODERN ADVENT ENGINE CONTAINER & BENTO LAYOUT (SCREEN VIEW)
+           1. MODERN ADMIT ENGINE CONTAINER & BENTO LAYOUT (SCREEN VIEW)
            ========================================================================== */
         .dpt-admit-engine-root {
             margin: 24px 20px 0 0;
@@ -97,8 +137,8 @@ function educore_student_admit_card_view() {
         /* CSS Grid Flex Matrix Engine */
         .dpt-form-grid-wrapper {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
             align-items: flex-end;
         }
         .dpt-input-block {
@@ -187,7 +227,6 @@ function educore_student_admit_card_view() {
             overflow: hidden;
         }
         
-        /* Premium Background Security Guilloche Effect */
         .admit-card-wrapper::before {
             content: "";
             position: absolute;
@@ -240,7 +279,6 @@ function educore_student_admit_card_view() {
             text-transform: uppercase;
         }
 
-        /* Core Structure Profile Grid Mapping */
         .admit-body-layout {
             display: flex;
             gap: 24px;
@@ -269,14 +307,13 @@ function educore_student_admit_card_view() {
         .admit-table td.label-col {
             font-weight: 700;
             color: #64748b;
-            width: 30%;
+            width: 32%;
         }
         .admit-table td.value-col {
             font-weight: 600;
             color: #0f172a;
         }
 
-        /* Photo Component */
         .student-photo-frame {
             width: 110px;
             height: 130px;
@@ -301,7 +338,6 @@ function educore_student_admit_card_view() {
             letter-spacing: 0.5px;
         }
 
-        /* Signature Blocks */
         .signature-container {
             display: flex;
             justify-content: space-between;
@@ -320,7 +356,6 @@ function educore_student_admit_card_view() {
             letter-spacing: 0.25px;
         }
 
-        /* Empty States */
         .afdp-empty-state {
             text-align: center;
             padding: 64px 24px;
@@ -343,7 +378,7 @@ function educore_student_admit_card_view() {
         }
 
         /* ==========================================================================
-           3. HARDWARE PRINT METRICS SYSTEM DIRECTIVES (A4 TWO CARDS PER ROW)
+           3. HARDWARE PRINT METRICS SYSTEM DIRECTIVES
            ========================================================================== */
         @media print {
             body * {
@@ -409,8 +444,9 @@ function educore_student_admit_card_view() {
                 <input type="hidden" name="tab" value="students">
                 <input type="hidden" name="sub" value="admit_card">
 
+                <!-- Select Examination -->
                 <div class="dpt-input-block">
-                    <label>Select Examination Target <span style="color:#ef4444;">*</span></label>
+                    <label>Select Examination <span style="color:#ef4444;">*</span></label>
                     <select name="exam_id" required>
                         <option value="">-- Choose Exam Scheme --</option>
                         <?php foreach ( $exams as $ex ) : ?>
@@ -421,19 +457,33 @@ function educore_student_admit_card_view() {
                     </select>
                 </div>
 
+                <!-- Select Class -->
                 <div class="dpt-input-block">
-                    <label>Select Academic Unit Target <span style="color:#ef4444;">*</span></label>
-                    <select name="academic_unit_id" required>
-                        <option value="">-- Choose Academic Unit --</option>
-                        <?php if ( ! empty( $academic_units ) ) : foreach ( $academic_units as $unit ) : ?>
-                            <option value="<?php echo intval( $unit->id ); ?>" <?php selected( $selected_unit_id, $unit->id ); ?>>
-                                [<?php echo esc_html( $unit->unit_type ); ?>] 
-                                <?php echo $unit->unit_type === 'College' ? 'Dept: ' . esc_html( $unit->dept_name ) . ' (' . esc_html( $unit->class_name ) . ')' : 'Class: ' . esc_html( $unit->class_name ) . ' - Sec: ' . esc_html( $unit->section_name ); ?>
+                    <label>Select Class <span style="color:#ef4444;">*</span></label>
+                    <select name="class_name" id="educore_admit_class_select" required>
+                        <option value="">-- Select Class --</option>
+                        <?php foreach ( $classes as $cls_name ) : ?>
+                            <option value="<?php echo esc_attr( $cls_name ); ?>" <?php selected( $selected_class, $cls_name ); ?>>
+                                <?php echo esc_html( $cls_name ); ?>
                             </option>
-                        <?php endforeach; endif; ?>
+                        <?php endforeach; ?>
                     </select>
                 </div>
 
+                <!-- Select Section -->
+                <div class="dpt-input-block">
+                    <label>Select Section</label>
+                    <select name="section_name" id="educore_admit_section_select">
+                        <option value="">-- All Sections --</option>
+                        <?php foreach ( $available_sections as $sec_name ) : ?>
+                            <option value="<?php echo esc_attr( $sec_name ); ?>" <?php selected( $selected_section, $sec_name ); ?>>
+                                <?php echo esc_html( $sec_name ); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <!-- Academic Session -->
                 <div class="dpt-input-block">
                     <label>Academic Session</label>
                     <input type="text" name="exam_year" value="<?php echo esc_attr( $exam_year ); ?>" required>
@@ -452,8 +502,51 @@ function educore_student_admit_card_view() {
             </form>
         </div>
 
+        <!-- Dynamic AJAX Class-to-Section Loader Script -->
+        <script type="text/javascript">
+        jQuery(document).ready(function($) {
+            var nonce = '<?php echo esc_js( wp_create_nonce( "educore_admit_nonce" ) ); ?>';
+
+            $('#educore_admit_class_select').on('change', function() {
+                var selectedClass   = $(this).val();
+                var $sectionSelect = $('#educore_admit_section_select');
+
+                $sectionSelect.html('<option value=""><?php echo esc_js( __( '-- Loading Sections... --', 'ifsedu-sms' ) ); ?></option>');
+
+                if (!selectedClass) {
+                    $sectionSelect.html('<option value=""><?php echo esc_js( __( '-- All Sections --', 'ifsedu-sms' ) ); ?></option>');
+                    return;
+                }
+
+                $.ajax({
+                    url: ajaxurl,
+                    type: 'POST',
+                    data: {
+                        action: 'educore_get_sections_by_class_admit',
+                        security: nonce,
+                        class_name: selectedClass
+                    },
+                    success: function(response) {
+                        if (response.success && response.data.length > 0) {
+                            var options = '<option value=""><?php echo esc_js( __( '-- All Sections --', 'ifsedu-sms' ) ); ?></option>';
+                            $.each(response.data, function(i, sec) {
+                                options += '<option value="' + sec + '">' + sec + '</option>';
+                            });
+                            $sectionSelect.html(options);
+                        } else {
+                            $sectionSelect.html('<option value=""><?php echo esc_js( __( '-- All Sections --', 'ifsedu-sms' ) ); ?></option>');
+                        }
+                    },
+                    error: function() {
+                        $sectionSelect.html('<option value=""><?php echo esc_js( __( '-- All Sections --', 'ifsedu-sms' ) ); ?></option>');
+                    }
+                });
+            });
+        });
+        </script>
+
         <!-- Compiled Grid Render Target Output Area -->
-        <?php if ( $selected_unit_id > 0 && $selected_exam_id > 0 ) : ?>
+        <?php if ( ! empty( $selected_class ) && $selected_exam_id > 0 ) : ?>
             <div id="educore-printable-admit-area">
                 <?php if ( ! empty( $students ) ) : ?>
                     <div class="dpt-admit-cards-container">
@@ -478,7 +571,7 @@ function educore_student_admit_card_view() {
                                             <table class="admit-table">
                                                 <tr>
                                                     <td class="label-col">Student ID:</td>
-                                                    <td class="value-col"><?php echo esc_html( $student->student_id ); ?></td>
+                                                    <td class="value-col"><code><?php echo esc_html( $student->student_id ); ?></code></td>
                                                 </tr>
                                                 <tr>
                                                     <td class="label-col">Name:</td>
@@ -491,7 +584,7 @@ function educore_student_admit_card_view() {
                                                 </tr>
                                                 <?php endif; ?>
                                                 <tr>
-                                                    <td class="label-col"><?php echo ($selected_unit && $selected_unit->unit_type === 'College') ? 'Dept / Year:' : 'Class & Sec:'; ?></td>
+                                                    <td class="label-col">Class & Sec:</td>
                                                     <td class="value-col">
                                                         <?php echo esc_html( $student->class_name ); ?>
                                                         <?php echo ! empty( $student->section_name ) ? ' &mdash; Sec: ' . esc_html( $student->section_name ) : ''; ?>
@@ -501,7 +594,7 @@ function educore_student_admit_card_view() {
                                                     <td class="label-col">Roll No:</td>
                                                     <td class="value-col">
                                                         <span style="background: #0f172a; color:#ffffff; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 800; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
-                                                            <?php echo esc_html( $student->roll_no ); ?>
+                                                            #<?php echo esc_html( $student->roll_no ); ?>
                                                         </span>
                                                     </td>
                                                 </tr>
@@ -540,14 +633,14 @@ function educore_student_admit_card_view() {
                 <?php else : ?>
                     <div class="afdp-empty-state no-print">
                         <span class="dashicons dashicons-warning"></span>
-                        <h5>No active student records matched this target academic group configuration.</h5>
+                        <h5>No active student records matched this target class/section configuration.</h5>
                     </div>
                 <?php endif; ?>
             </div>
         <?php else : ?>
             <div class="afdp-empty-state no-print" style="border-style: dashed; background: transparent;">
                 <span class="dashicons dashicons-info"></span>
-                <h5>Select both Examination and Academic Target parameters above to compile admit cards.</h5>
+                <h5>Select both Examination and Class parameters above to compile admit cards.</h5>
             </div>
         <?php endif; ?>
     </div>

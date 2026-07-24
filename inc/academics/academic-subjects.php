@@ -17,14 +17,12 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' && isset( $_POST['save_subjects_repea
         $class_id     = absint( $_POST['class_id'] );
         $subject_name = isset( $_POST['subject_name'] ) && is_array( $_POST['subject_name'] ) ? $_POST['subject_name'] : array();
         $subject_code = isset( $_POST['subject_code'] ) && is_array( $_POST['subject_code'] ) ? $_POST['subject_code'] : array();
-        $subject_type = isset( $_POST['subject_type'] ) && is_array( $_POST['subject_type'] ) ? $_POST['subject_type'] : array();
 
         if ( $class_id > 0 && ! empty( $subject_name ) ) {
             $inserted_count = 0;
             foreach ( $subject_name as $index => $name ) {
                 $s_name = sanitize_text_field( $name );
                 $s_code = isset( $subject_code[$index] ) ? sanitize_text_field( $subject_code[$index] ) : '';
-                $s_type = isset( $subject_type[$index] ) ? sanitize_text_field( $subject_type[$index] ) : 'Mandatory';
 
                 if ( ! empty( $s_name ) ) {
                     $wpdb->insert( 
@@ -32,10 +30,9 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' && isset( $_POST['save_subjects_repea
                         array( 
                             'class_id'     => $class_id, 
                             'subject_name' => $s_name, 
-                            'subject_code' => $s_code, 
-                            'subject_type' => $s_type 
+                            'subject_code' => $s_code
                         ), 
-                        array( '%d', '%s', '%s', '%s' ) 
+                        array( '%d', '%s', '%s' ) 
                     );
                     $inserted_count++;
                 }
@@ -85,25 +82,22 @@ if ( isset( $_GET['action'] ) && $_GET['action'] === 'delete_subject' && isset( 
     }
 }
 
-// Natural Numeric Sorting Query Strategy for Classes Dropdown & Datatable mapping
+// Natural Numeric Sorting Query Strategy for Classes Dropdown (Unique Class Names)
 $classes = $wpdb->get_results( 
-    "SELECT * FROM {$table_units} 
-     ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC, section_name ASC" 
+    "SELECT MIN(id) as id, class_name FROM {$table_units} 
+     GROUP BY class_name 
+     ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC" 
 );
 
 if ( ! empty( $classes ) ) {
     usort( $classes, function( $a, $b ) {
-        $res = strnatcasecmp( $a->class_name, $b->class_name );
-        if ( $res === 0 ) {
-            return strnatcasecmp( $a->section_name, $b->section_name );
-        }
-        return $res;
+        return strnatcasecmp( $a->class_name, $b->class_name );
     });
 }
 
-// Subjects Directory List with Class Join and Natural Numeric Sorting
+// Subjects Directory List with Class Join and Natural Numeric Sorting (1, 2, 3, 5, 8, 11)
 $subjects_list = $wpdb->get_results("
-    SELECT s.*, u.class_name, u.section_name 
+    SELECT s.*, u.class_name 
     FROM {$table_subjects} s 
     LEFT JOIN {$table_units} u ON s.class_id = u.id 
     ORDER BY CAST(u.class_name AS UNSIGNED) ASC, u.class_name ASC, s.subject_name ASC
@@ -215,7 +209,7 @@ if ( ! empty( $subjects_list ) ) {
 
     .dpt-repeater-row {
         display: grid;
-        grid-template-columns: 2fr 1fr 1fr 42px;
+        grid-template-columns: 2fr 1fr 42px;
         gap: 12px;
         align-items: end;
         background: #f8fafc;
@@ -357,20 +351,6 @@ if ( ! empty( $subjects_list ) ) {
         font-weight: 700;
     }
 
-    .dpt-type-badge {
-        display: inline-flex;
-        align-items: center;
-        padding: 3px 10px;
-        border-radius: 12px;
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.2px;
-        text-transform: uppercase;
-    }
-
-    .dpt-badge-mandatory { background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd; }
-    .dpt-badge-optional  { background: #fefce8; color: #a16207; border: 1px solid #fef08a; }
-
     .dpt-square-btn {
         width: 30px;
         height: 30px;
@@ -444,10 +424,8 @@ if ( ! empty( $subjects_list ) ) {
                 <label class="dpt-form-label"><?php esc_html_e( 'Select Target Class', 'ifsedu-sms' ); ?> <span style="color:#dc2626;">*</span></label>
                 <select name="class_id" class="dpt-field-select" required>
                     <option value=""><?php esc_html_e( '-- Choose Target Class --', 'ifsedu-sms' ); ?></option>
-                    <?php foreach ( $classes as $cls ) : 
-                        $cls_display = ! empty( $cls->section_name ) ? $cls->class_name . ' (' . $cls->section_name . ')' : $cls->class_name;
-                    ?>
-                        <option value="<?php echo esc_attr( $cls->id ); ?>"><?php echo esc_html( $cls_display ); ?></option>
+                    <?php foreach ( $classes as $cls ) : ?>
+                        <option value="<?php echo esc_attr( $cls->id ); ?>"><?php echo esc_html( $cls->class_name ); ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
@@ -461,13 +439,6 @@ if ( ! empty( $subjects_list ) ) {
                     <div class="dpt-form-group">
                         <label class="dpt-form-label"><?php esc_html_e( 'Subject Code', 'ifsedu-sms' ); ?></label>
                         <input type="text" name="subject_code[]" class="dpt-field-input" placeholder="e.g. MAT-101">
-                    </div>
-                    <div class="dpt-form-group">
-                        <label class="dpt-form-label"><?php esc_html_e( 'Subject Type', 'ifsedu-sms' ); ?></label>
-                        <select name="subject_type[]" class="dpt-field-select">
-                            <option value="Mandatory"><?php esc_html_e( 'Mandatory', 'ifsedu-sms' ); ?></option>
-                            <option value="Optional"><?php esc_html_e( 'Optional', 'ifsedu-sms' ); ?></option>
-                        </select>
                     </div>
                     <div>
                         <button type="button" class="dpt-btn-remove-row btn-remove-row" disabled>
@@ -505,10 +476,9 @@ if ( ! empty( $subjects_list ) ) {
             <table class="dpt-architecture-table">
                 <thead>
                     <tr>
-                        <th style="width: 25%;"><?php esc_html_e( 'Class Name', 'ifsedu-sms' ); ?></th>
-                        <th style="width: 35%;"><?php esc_html_e( 'Subject Title', 'ifsedu-sms' ); ?></th>
+                        <th style="width: 35%;"><?php esc_html_e( 'Class Name', 'ifsedu-sms' ); ?></th>
+                        <th style="width: 40%;"><?php esc_html_e( 'Subject Title', 'ifsedu-sms' ); ?></th>
                         <th style="width: 15%;"><?php esc_html_e( 'Code', 'ifsedu-sms' ); ?></th>
-                        <th style="width: 15%;"><?php esc_html_e( 'Subject Type', 'ifsedu-sms' ); ?></th>
                         <th style="width: 10%; text-align:right;"><?php esc_html_e( 'Action', 'ifsedu-sms' ); ?></th>
                     </tr>
                 </thead>
@@ -518,22 +488,13 @@ if ( ! empty( $subjects_list ) ) {
                             add_query_arg( array( 'action' => 'delete_subject', 'id' => $sub->id ), $base_url ), 
                             'delete_subject_action_' . $sub->id 
                         );
-                        $type_badge_class = ( $sub->subject_type === 'Optional' ) ? 'dpt-badge-optional' : 'dpt-badge-mandatory';
-                        $class_label      = $sub->class_name ? $sub->class_name : 'N/A';
-                        if ( ! empty( $sub->section_name ) ) {
-                            $class_label .= ' (' . $sub->section_name . ')';
-                        }
+                        $class_label = $sub->class_name ? $sub->class_name : 'N/A';
                     ?>
                         <tr>
                             <td style="font-weight: 700; color: #006a4e;"><?php echo esc_html( $class_label ); ?></td>
                             <td style="font-weight: 700; color: #0f172a;"><?php echo esc_html( $sub->subject_name ); ?></td>
                             <td>
                                 <span class="dpt-code-tag"><?php echo esc_html( $sub->subject_code ? $sub->subject_code : '-' ); ?></span>
-                            </td>
-                            <td>
-                                <span class="dpt-type-badge <?php echo esc_attr( $type_badge_class ); ?>">
-                                    <?php echo esc_html( $sub->subject_type ); ?>
-                                </span>
                             </td>
                             <td style="text-align: right;">
                                 <a href="<?php echo esc_url( $delete_url ); ?>" class="dpt-square-btn" title="<?php esc_attr_e( 'Delete Subject', 'ifsedu-sms' ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Are you sure you want to delete this subject?', 'ifsedu-sms' ) ); ?>');">
@@ -543,7 +504,7 @@ if ( ! empty( $subjects_list ) ) {
                         </tr>
                     <?php endforeach; else : ?>
                         <tr>
-                            <td colspan="5" style="text-align:center; padding: 40px; color: #94a3b8;">
+                            <td colspan="4" style="text-align:center; padding: 40px; color: #94a3b8;">
                                 <?php esc_html_e( 'No subjects assigned to any class yet.', 'ifsedu-sms' ); ?>
                             </td>
                         </tr>
@@ -579,9 +540,8 @@ document.addEventListener('DOMContentLoaded', function() {
             const rows = canvas.querySelectorAll('.dpt-repeater-row');
             const newRow = rows[0].cloneNode(true);
 
-            // Reset inputs & selects
+            // Reset inputs
             newRow.querySelectorAll('input').forEach(inp => inp.value = '');
-            newRow.querySelectorAll('select').forEach(sel => sel.selectedIndex = 0);
 
             canvas.appendChild(newRow);
             updateRemoveButtons();

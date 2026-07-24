@@ -20,7 +20,7 @@ function educore_exams_list_view() {
         wp_die( esc_html__( 'You do not have sufficient permissions to manage examination schemes.', 'ifsedu-sms' ) );
     }
 
-    // Dynamic Base URL Preservation (Removes status and action flags to avoid loops)
+    // Dynamic Base URL Preservation
     $current_uri = remove_query_arg( array( 'action', 'id', '_wpnonce', 'status' ), $_SERVER['REQUEST_URI'] );
     $base_url    = esc_url_raw( $current_uri );
 
@@ -136,15 +136,11 @@ function educore_exams_list_view() {
         }
     }
 
-    // Fetch classes dynamically with Natural Numeric Sorting
-    $raw_classes = $wpdb->get_results( "SELECT id, class_name, section_name FROM {$table_units} ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC" );
+    // Fetch Unique Classes with Natural Numeric Sorting (1, 2, 3... 11)
+    $raw_classes = $wpdb->get_results( "SELECT DISTINCT class_name FROM {$table_units} WHERE class_name != '' ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC" );
     if ( ! empty( $raw_classes ) ) {
         usort( $raw_classes, function( $a, $b ) {
-            $res = strnatcasecmp( $a->class_name, $b->class_name );
-            if ( $res === 0 && isset( $a->section_name ) && isset( $b->section_name ) ) {
-                return strnatcasecmp( $a->section_name, $b->section_name );
-            }
-            return $res;
+            return strnatcasecmp( $a->class_name, $b->class_name );
         });
     }
 
@@ -361,7 +357,7 @@ function educore_exams_list_view() {
             background: #f8fafc;
         }
 
-        /* Badges & Action Icons */
+        /* Badges & SVG Action Buttons */
         .afdp-badge {
             font-size: 11.5px;
             font-weight: 700;
@@ -374,7 +370,7 @@ function educore_exams_list_view() {
         .afdp-badge-ongoing { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
         .afdp-badge-completed { background: #e6f4ea; color: #137333; border: 1px solid #ceead6; }
 
-        .afdp-action-btn {
+        .afdp-action-btn-svg {
             width: 32px;
             height: 32px;
             border-radius: 6px;
@@ -384,23 +380,26 @@ function educore_exams_list_view() {
             border: 1px solid #cbd5e1;
             background: #ffffff;
             color: #475569;
-            transition: all 0.2s;
+            transition: all 0.2s ease;
             text-decoration: none;
         }
-        .afdp-action-btn:hover {
+        .afdp-action-btn-svg svg {
+            width: 15px;
+            height: 15px;
+            fill: currentColor;
+            flex-shrink: 0;
+        }
+        .afdp-action-btn-svg.edit:hover {
             border-color: #006a4e;
-            color: #006a4e;
-            background: #f0fdf4;
+            color: #ffffff;
+            background: #006a4e;
+            box-shadow: 0 2px 6px rgba(0, 106, 78, 0.25);
         }
-        .afdp-action-btn.danger:hover {
-            border-color: #ef4444;
-            color: #ef4444;
-            background: #fef2f2;
-        }
-        .afdp-action-btn .dashicons {
-            font-size: 16px;
-            width: 16px;
-            height: 16px;
+        .afdp-action-btn-svg.delete:hover {
+            border-color: #dc2626;
+            color: #ffffff;
+            background: #dc2626;
+            box-shadow: 0 2px 6px rgba(220, 38, 38, 0.25);
         }
 
         /* DataTables Custom Polish */
@@ -487,11 +486,9 @@ function educore_exams_list_view() {
                         <label class="dpt-form-label"><?php esc_html_e( 'Class / Tier', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
                         <select name="class_name" class="dpt-select-field" required>
                             <option value="All Classes" <?php selected( $is_edit ? $edit_exam->class_name : '', 'All Classes' ); ?>><?php esc_html_e( 'All Classes', 'ifsedu-sms' ); ?></option>
-                            <?php if ( ! empty( $raw_classes ) ) : foreach ( $raw_classes as $cls_obj ) : 
-                                $c_val = ! empty( $cls_obj->section_name ) ? $cls_obj->class_name . ' (' . $cls_obj->section_name . ')' : $cls_obj->class_name;
-                            ?>
-                                <option value="<?php echo esc_attr( $c_val ); ?>" <?php selected( $is_edit ? $edit_exam->class_name : '', $c_val ); ?>>
-                                    <?php echo esc_html( $c_val ); ?>
+                            <?php if ( ! empty( $raw_classes ) ) : foreach ( $raw_classes as $cls_obj ) : ?>
+                                <option value="<?php echo esc_attr( $cls_obj->class_name ); ?>" <?php selected( $is_edit ? $edit_exam->class_name : '', $cls_obj->class_name ); ?>>
+                                    <?php echo esc_html( $cls_obj->class_name ); ?>
                                 </option>
                             <?php endforeach; endif; ?>
                         </select>
@@ -573,12 +570,14 @@ function educore_exams_list_view() {
                                     </span>
                                 </td>
                                 <td style="text-align: right;">
-                                    <div style="display: inline-flex; gap: 6px;">
-                                        <a href="<?php echo esc_url( $edit_url ); ?>" class="afdp-action-btn" title="<?php esc_attr_e( 'Edit Exam', 'ifsedu-sms' ); ?>">
-                                            <span class="dashicons dashicons-edit"></span>
+                                    <div style="display: inline-flex; gap: 6px; justify-content: flex-end;">
+                                        <!-- SVG Edit Button -->
+                                        <a href="<?php echo esc_url( $edit_url ); ?>" class="afdp-action-btn-svg edit" title="<?php esc_attr_e( 'Edit Exam', 'ifsedu-sms' ); ?>">
+                                            <svg viewBox="0 0 24 24"><path d="M3 17.25V21h4.75L17.81 9.94l-4.75-4.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 4.75 4.75 1.83-1.83z"/></svg>
                                         </a>
-                                        <a href="<?php echo esc_url( $del_url ); ?>" class="afdp-action-btn danger" title="<?php esc_attr_e( 'Delete Exam', 'ifsedu-sms' ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Delete this exam scheme permanently?', 'ifsedu-sms' ) ); ?>');">
-                                            <span class="dashicons dashicons-trash"></span>
+                                        <!-- SVG Delete Button -->
+                                        <a href="<?php echo esc_url( $del_url ); ?>" class="afdp-action-btn-svg delete" title="<?php esc_attr_e( 'Delete Exam', 'ifsedu-sms' ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Delete this exam scheme permanently?', 'ifsedu-sms' ) ); ?>');">
+                                            <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
                                         </a>
                                     </div>
                                 </td>

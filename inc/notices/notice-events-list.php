@@ -96,6 +96,37 @@ function educore_notice_events_list_view( $type = 'notice' ) {
             background-color: #f8fafc;
         }
 
+        /* Featured Image Styling */
+        .dpt-thumb-container {
+            width: 48px;
+            height: 48px;
+            border-radius: 10px;
+            overflow: hidden;
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .dpt-thumb-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.2s ease;
+        }
+
+        .dpt-thumb-img:hover {
+            transform: scale(1.1);
+        }
+
+        .dpt-thumb-placeholder {
+            color: #94a3b8;
+            font-size: 20px;
+            width: 20px;
+            height: 20px;
+        }
+
         /* Status & Priority Badge Engine */
         .dpt-badge-node {
             display: inline-flex;
@@ -203,6 +234,7 @@ function educore_notice_events_list_view( $type = 'notice' ) {
                     <thead>
                         <tr>
                             <th style="width: 50px;">ID</th>
+                            <th style="width: 60px;"><?php esc_html_e( 'Banner', 'ifsedu-sms' ); ?></th>
                             <th><?php esc_html_e( 'Title & Details', 'ifsedu-sms' ); ?></th>
                             <th><?php esc_html_e( 'Target Audience', 'ifsedu-sms' ); ?></th>
                             <th><?php echo $is_event_mode ? esc_html__( 'Event Date', 'ifsedu-sms' ) : esc_html__( 'Publish Date', 'ifsedu-sms' ); ?></th>
@@ -236,9 +268,24 @@ function educore_notice_events_list_view( $type = 'notice' ) {
 
                                 // Status Dynamic Class
                                 $status_class = ( $row->status === 'Published' ) ? 'dpt-status-published' : 'dpt-status-draft';
+                                $featured_image = isset( $row->featured_image ) ? $row->featured_image : '';
                             ?>
                             <tr>
                                 <td style="font-weight: 700; color: #64748b;">#<?php echo $id; ?></td>
+                                
+                                <!-- Featured Image Cell -->
+                                <td>
+                                    <div class="dpt-thumb-container">
+                                        <?php if ( ! empty( $featured_image ) ) : ?>
+                                            <a href="<?php echo esc_url( $featured_image ); ?>" target="_blank" title="<?php esc_attr_e( 'View Full Image', 'ifsedu-sms' ); ?>">
+                                                <img src="<?php echo esc_url( $featured_image ); ?>" class="dpt-thumb-img" alt="Banner">
+                                            </a>
+                                        <?php else : ?>
+                                            <span class="dashicons dashicons-format-image dpt-thumb-placeholder"></span>
+                                        <?php endif; ?>
+                                    </div>
+                                </td>
+
                                 <td>
                                     <strong style="color: #0f172a; display: block; font-size: 14px;"><?php echo esc_html( $row->title ); ?></strong>
                                     <?php if ( ! empty( $row->attachment_url ) ) : ?>
@@ -281,7 +328,7 @@ function educore_notice_events_list_view( $type = 'notice' ) {
                             <?php endforeach; ?>
                         <?php else : ?>
                             <tr>
-                                <td colspan="7" style="text-align: center; padding: 30px; color: #94a3b8;">
+                                <td colspan="8" style="text-align: center; padding: 30px; color: #94a3b8;">
                                     <?php esc_html_e( 'No records found.', 'ifsedu-sms' ); ?>
                                 </td>
                             </tr>

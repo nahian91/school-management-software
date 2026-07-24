@@ -10,7 +10,32 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Architecture: Neo-Bento Interface with Print-Ready Layouts & Security Controls
  */
 
-// AJAX Handler for Dynamic Student Fetching based on Class
+// 1. AJAX Handler for Dynamic Section Loading based on Class
+add_action( 'wp_ajax_educore_get_sections_by_class', 'educore_get_sections_by_class_report_handler' );
+function educore_get_sections_by_class_report_handler() {
+    check_ajax_referer( 'educore_report_nonce', 'security' );
+
+    if ( ! current_user_can( 'manage_options' ) ) {
+        wp_send_json_error( array( 'message' => __( 'Permission denied.', 'ifsedu-sms' ) ) );
+    }
+
+    global $wpdb;
+    $table_units = $wpdb->prefix . 'sms_academic_units';
+    $class_name  = isset( $_POST['class_name'] ) ? sanitize_text_field( wp_unslash( $_POST['class_name'] ) ) : '';
+
+    if ( empty( $class_name ) ) {
+        wp_send_json_success( array() );
+    }
+
+    $sections = $wpdb->get_col( $wpdb->prepare(
+        "SELECT DISTINCT section_name FROM {$table_units} WHERE class_name = %s AND section_name != '' ORDER BY section_name ASC",
+        $class_name
+    ) );
+
+    wp_send_json_success( $sections );
+}
+
+// 2. AJAX Handler for Dynamic Student Fetching based on Class & Section
 add_action( 'wp_ajax_educore_get_students_by_class', 'educore_get_students_by_class_handler' );
 function educore_get_students_by_class_handler() {
     check_ajax_referer( 'educore_report_nonce', 'security' );
@@ -21,37 +46,24 @@ function educore_get_students_by_class_handler() {
 
     global $wpdb;
     $table_students = $wpdb->prefix . 'sms_students';
-    $raw_class      = isset( $_POST['class_name'] ) ? sanitize_text_field( wp_unslash( $_POST['class_name'] ) ) : '';
+    $class_name     = isset( $_POST['class_name'] ) ? sanitize_text_field( wp_unslash( $_POST['class_name'] ) ) : '';
+    $section_name   = isset( $_POST['section_name'] ) ? sanitize_text_field( wp_unslash( $_POST['section_name'] ) ) : '';
 
-    if ( empty( $raw_class ) ) {
+    if ( empty( $class_name ) ) {
         wp_send_json_success( array() );
     }
 
-    // Parse Class Name and Section if formatted as "Class (Section)"
-    $parsed_class = $raw_class;
-    $section_name = '';
-    if ( preg_match( '/^(.*?)\s*\((.*?)\)$/', $raw_class, $matches ) ) {
-        $parsed_class = trim( $matches[1] );
-        $section_name = trim( $matches[2] );
-    }
+    $sql = "SELECT id, full_name, student_id, roll_no FROM {$table_students} WHERE status = 'Active' AND class_name = %s";
+    $params = array( $class_name );
 
     if ( ! empty( $section_name ) ) {
-        $students = $wpdb->get_results( $wpdb->prepare(
-            "SELECT id, full_name, student_id, roll_no FROM {$table_students} 
-             WHERE status = 'Active' AND class_name = %s AND section_name = %s 
-             ORDER BY CAST(roll_no AS UNSIGNED) ASC, roll_no ASC",
-            $parsed_class,
-            $section_name
-        ) );
-    } else {
-        $students = $wpdb->get_results( $wpdb->prepare(
-            "SELECT id, full_name, student_id, roll_no FROM {$table_students} 
-             WHERE status = 'Active' AND (class_name = %s OR class_name = %s) 
-             ORDER BY CAST(roll_no AS UNSIGNED) ASC, roll_no ASC",
-            $raw_class,
-            $parsed_class
-        ) );
+        $sql .= " AND section_name = %s";
+        $params[] = $section_name;
     }
+
+    $sql .= " ORDER BY CAST(roll_no AS UNSIGNED) ASC, roll_no ASC";
+
+    $students = $wpdb->get_results( $wpdb->prepare( $sql, ...$params ) );
 
     $data = array();
     if ( ! empty( $students ) ) {
@@ -87,15 +99,11 @@ function educore_exams_report_view() {
     // Fetch Dynamic Dropdown Data
     $exams = $wpdb->get_results( "SELECT id, exam_name FROM {$table_exams} ORDER BY id DESC" );
 
-    // Classes with Natural Numeric Sorting
-    $raw_classes = $wpdb->get_results( "SELECT id, class_name, section_name FROM {$table_units} ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC" );
+    // Fetch Unique Classes with Natural Numeric Sorting
+    $raw_classes = $wpdb->get_results( "SELECT DISTINCT class_name FROM {$table_units} WHERE class_name != '' ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC" );
     if ( ! empty( $raw_classes ) ) {
         usort( $raw_classes, function( $a, $b ) {
-            $res = strnatcasecmp( $a->class_name, $b->class_name );
-            if ( $res === 0 && isset( $a->section_name ) && isset( $b->section_name ) ) {
-                return strnatcasecmp( $a->section_name, $b->section_name );
-            }
-            return $res;
+            return strnatcasecmp( $a->class_name, $b->class_name );
         });
     }
 
@@ -103,8 +111,18 @@ function educore_exams_report_view() {
     $filter_exam    = isset( $_GET['exam_id'] ) ? intval( $_GET['exam_id'] ) : 0;
     $report_type    = isset( $_GET['report_type'] ) ? sanitize_text_field( wp_unslash( $_GET['report_type'] ) ) : 'individual';
     $filter_class   = isset( $_GET['class_name'] ) ? sanitize_text_field( wp_unslash( $_GET['class_name'] ) ) : '';
+    $filter_section = isset( $_GET['section_name'] ) ? sanitize_text_field( wp_unslash( $_GET['section_name'] ) ) : '';
     $filter_student = isset( $_GET['student_id'] ) ? intval( $_GET['student_id'] ) : 0;
     
+    // Fetch available sections for selected class if present
+    $available_sections = array();
+    if ( ! empty( $filter_class ) ) {
+        $available_sections = $wpdb->get_col( $wpdb->prepare(
+            "SELECT DISTINCT section_name FROM {$table_units} WHERE class_name = %s AND section_name != '' ORDER BY section_name ASC",
+            $filter_class
+        ) );
+    }
+
     $back_url = add_query_arg( array( 'sub' => 'list' ), $base_url );
     ?>
 
@@ -155,7 +173,7 @@ function educore_exams_report_view() {
         .dpt-filter-grid {
             display: grid;
             grid-template-columns: repeat(12, 1fr);
-            gap: 16px;
+            gap: 14px;
             align-items: end;
         }
         .dpt-col-3 { grid-column: span 3; }
@@ -364,7 +382,7 @@ function educore_exams_report_view() {
                 if ( isset( $parsed_url['query'] ) ) {
                     parse_str( $parsed_url['query'], $query_params );
                     foreach ( $query_params as $param_key => $param_val ) {
-                        if ( ! in_array( $param_key, array( 'exam_id', 'report_type', 'class_name', 'student_id' ) ) ) {
+                        if ( ! in_array( $param_key, array( 'exam_id', 'report_type', 'class_name', 'section_name', 'student_id' ) ) ) {
                             echo '<input type="hidden" name="' . esc_attr( $param_key ) . '" value="' . esc_attr( $param_val ) . '">';
                         }
                     }
@@ -372,6 +390,7 @@ function educore_exams_report_view() {
                 ?>
                 
                 <div class="dpt-filter-grid">
+                    <!-- Exam Selection -->
                     <div class="dpt-form-group dpt-col-3">
                         <label class="dpt-form-label"><?php esc_html_e( 'Select Examination', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
                         <select name="exam_id" class="dpt-select-field" required>
@@ -384,6 +403,7 @@ function educore_exams_report_view() {
                         </select>
                     </div>
 
+                    <!-- Report Type -->
                     <div class="dpt-form-group dpt-col-2">
                         <label class="dpt-form-label"><?php esc_html_e( 'Report Type', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
                         <select name="report_type" id="educore_report_type" class="dpt-select-field" required>
@@ -392,48 +412,49 @@ function educore_exams_report_view() {
                         </select>
                     </div>
 
+                    <!-- Class Selection -->
                     <div class="dpt-form-group dpt-col-2">
-                        <label class="dpt-form-label"><?php esc_html_e( 'Class / Tier', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
+                        <label class="dpt-form-label"><?php esc_html_e( 'Select Class', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
                         <select name="class_name" id="educore_class_filter" class="dpt-select-field" required>
-                            <option value=""><?php esc_html_e( '-- Choose Class --', 'ifsedu-sms' ); ?></option>
-                            <?php foreach ( $raw_classes as $cls_obj ) : 
-                                $c_val = ! empty( $cls_obj->section_name ) ? $cls_obj->class_name . ' (' . $cls_obj->section_name . ')' : $cls_obj->class_name;
-                            ?>
-                                <option value="<?php echo esc_attr( $c_val ); ?>" <?php selected( $filter_class, $c_val ); ?>>
-                                    <?php echo esc_html( $c_val ); ?>
+                            <option value=""><?php esc_html_e( '-- Class --', 'ifsedu-sms' ); ?></option>
+                            <?php foreach ( $raw_classes as $cls_obj ) : ?>
+                                <option value="<?php echo esc_attr( $cls_obj->class_name ); ?>" <?php selected( $filter_class, $cls_obj->class_name ); ?>>
+                                    <?php echo esc_html( $cls_obj->class_name ); ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
                     </div>
 
+                    <!-- Section Selection -->
+                    <div class="dpt-form-group dpt-col-2">
+                        <label class="dpt-form-label"><?php esc_html_e( 'Select Section', 'ifsedu-sms' ); ?></label>
+                        <select name="section_name" id="educore_section_filter" class="dpt-select-field">
+                            <option value=""><?php esc_html_e( '-- All Sections --', 'ifsedu-sms' ); ?></option>
+                            <?php foreach ( $available_sections as $sec_val ) : ?>
+                                <option value="<?php echo esc_attr( $sec_val ); ?>" <?php selected( $filter_section, $sec_val ); ?>>
+                                    <?php echo esc_html( $sec_val ); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <!-- Student Selection -->
                     <div class="dpt-form-group dpt-col-3" id="student_select_box" style="<?php echo ( 'tabulation' === $report_type ) ? 'display:none;' : ''; ?>">
                         <label class="dpt-form-label"><?php esc_html_e( 'Select Student', 'ifsedu-sms' ); ?></label>
                         <select name="student_id" id="educore_student_filter" class="dpt-select-field">
                             <option value=""><?php esc_html_e( '-- Choose Student --', 'ifsedu-sms' ); ?></option>
                             <?php 
                             if ( ! empty( $filter_class ) ) {
-                                $parsed_c = $filter_class;
-                                $parsed_s = '';
-                                if ( preg_match( '/^(.*?)\s*\((.*?)\)$/', $filter_class, $m ) ) {
-                                    $parsed_c = trim( $m[1] );
-                                    $parsed_s = trim( $m[2] );
+                                $sql = "SELECT id, full_name, student_id, roll_no FROM {$table_students} WHERE status = 'Active' AND class_name = %s";
+                                $params = array( $filter_class );
+
+                                if ( ! empty( $filter_section ) ) {
+                                    $sql .= " AND section_name = %s";
+                                    $params[] = $filter_section;
                                 }
 
-                                if ( ! empty( $parsed_s ) ) {
-                                    $student_list = $wpdb->get_results( $wpdb->prepare(
-                                        "SELECT id, full_name, student_id, roll_no FROM {$table_students} 
-                                         WHERE status = 'Active' AND class_name = %s AND section_name = %s 
-                                         ORDER BY CAST(roll_no AS UNSIGNED) ASC, roll_no ASC",
-                                        $parsed_c, $parsed_s
-                                    ) );
-                                } else {
-                                    $student_list = $wpdb->get_results( $wpdb->prepare(
-                                        "SELECT id, full_name, student_id, roll_no FROM {$table_students} 
-                                         WHERE status = 'Active' AND (class_name = %s OR class_name = %s) 
-                                         ORDER BY CAST(roll_no AS UNSIGNED) ASC, roll_no ASC",
-                                        $filter_class, $parsed_c
-                                    ) );
-                                }
+                                $sql .= " ORDER BY CAST(roll_no AS UNSIGNED) ASC, roll_no ASC";
+                                $student_list = $wpdb->get_results( $wpdb->prepare( $sql, ...$params ) );
 
                                 foreach ( $student_list as $s ) : ?>
                                     <option value="<?php echo intval( $s->id ); ?>" <?php selected( $filter_student, $s->id ); ?>>
@@ -448,6 +469,7 @@ function educore_exams_report_view() {
                         </select>
                     </div>
 
+                    <!-- Submit Button -->
                     <div class="dpt-col-2">
                         <button type="submit" class="dpt-btn-submit-trigger">
                             <?php esc_html_e( 'Generate', 'ifsedu-sms' ); ?>
@@ -457,9 +479,11 @@ function educore_exams_report_view() {
             </form>
         </div>
 
-        <!-- Dynamic Dropdown & AJAX Student State Controller JS -->
+        <!-- Dynamic Dropdown AJAX Controller Script -->
         <script type="text/javascript">
         jQuery(document).ready(function($) {
+            var nonce = '<?php echo esc_js( wp_create_nonce( "educore_report_nonce" ) ); ?>';
+
             function toggleStudentBox() {
                 if ($('#educore_report_type').val() === 'tabulation') {
                     $('#student_select_box').hide();
@@ -472,10 +496,48 @@ function educore_exams_report_view() {
                 toggleStudentBox();
             });
 
-            // Dynamic AJAX fetch student list when class is changed
+            // Fetch Sections & Reload Students when Class changes
             $('#educore_class_filter').on('change', function() {
-                var selectedClass = $(this).val();
-                var $studentSelect = $('#educore_student_filter');
+                var selectedClass   = $(this).val();
+                var $sectionSelect = $('#educore_section_filter');
+
+                $sectionSelect.html('<option value=""><?php echo esc_js( __( '-- All Sections --', 'ifsedu-sms' ) ); ?></option>');
+
+                if (!selectedClass) {
+                    reloadStudents();
+                    return;
+                }
+
+                $.ajax({
+                    url: ajaxurl,
+                    type: 'POST',
+                    data: {
+                        action: 'educore_get_sections_by_class',
+                        security: nonce,
+                        class_name: selectedClass
+                    },
+                    success: function(response) {
+                        if (response.success && response.data.length > 0) {
+                            var secOptions = '<option value=""><?php echo esc_js( __( '-- All Sections --', 'ifsedu-sms' ) ); ?></option>';
+                            $.each(response.data, function(i, sec) {
+                                secOptions += '<option value="' + sec + '">' + sec + '</option>';
+                            });
+                            $sectionSelect.html(secOptions);
+                        }
+                        reloadStudents();
+                    }
+                });
+            });
+
+            // Reload Students when Section changes
+            $('#educore_section_filter').on('change', function() {
+                reloadStudents();
+            });
+
+            function reloadStudents() {
+                var selectedClass   = $('#educore_class_filter').val();
+                var selectedSection = $('#educore_section_filter').val();
+                var $studentSelect  = $('#educore_student_filter');
 
                 $studentSelect.html('<option value=""><?php echo esc_js( __( '-- Loading Students... --', 'ifsedu-sms' ) ); ?></option>');
 
@@ -489,8 +551,9 @@ function educore_exams_report_view() {
                     type: 'POST',
                     data: {
                         action: 'educore_get_students_by_class',
-                        security: '<?php echo esc_js( wp_create_nonce( "educore_report_nonce" ) ); ?>',
-                        class_name: selectedClass
+                        security: nonce,
+                        class_name: selectedClass,
+                        section_name: selectedSection
                     },
                     success: function(response) {
                         if (response.success && response.data.length > 0) {
@@ -507,7 +570,7 @@ function educore_exams_report_view() {
                         $studentSelect.html('<option value=""><?php echo esc_js( __( '-- Choose Student --', 'ifsedu-sms' ) ); ?></option>');
                     }
                 });
-            });
+            }
         });
         </script>
 
@@ -571,8 +634,8 @@ function educore_exams_report_view() {
                         <p style="margin: 4px 0;"><strong><?php esc_html_e( 'Guardian:', 'ifsedu-sms' ); ?></strong> <?php echo esc_html( $student->guardian_name ? $student->guardian_name : $student->father_name ); ?></p>
                     </div>
                     <div style="text-align: right;">
-                        <p style="margin: 4px 0;"><strong><?php esc_html_e( 'Class / Tier:', 'ifsedu-sms' ); ?></strong> <?php echo esc_html( $student->class_name ); ?></p>
-                        <p style="margin: 4px 0;"><strong><?php esc_html_e( 'Section / Group:', 'ifsedu-sms' ); ?></strong> <?php echo esc_html( $student->section_name ? $student->section_name : __( 'N/A', 'ifsedu-sms' ) ); ?></p>
+                        <p style="margin: 4px 0;"><strong><?php esc_html_e( 'Class:', 'ifsedu-sms' ); ?></strong> <?php echo esc_html( $student->class_name ); ?></p>
+                        <p style="margin: 4px 0;"><strong><?php esc_html_e( 'Section:', 'ifsedu-sms' ); ?></strong> <?php echo esc_html( $student->section_name ? $student->section_name : __( 'N/A', 'ifsedu-sms' ) ); ?></p>
                         <p style="margin: 4px 0;"><strong><?php esc_html_e( 'Class Roll No:', 'ifsedu-sms' ); ?></strong> <span style="background: #f1f5f9; border: 1px solid #cbd5e1; padding: 2px 8px; border-radius: 4px; font-weight: 700;"><?php echo esc_html( $student->roll_no ); ?></span></p>
                     </div>
                 </div>
@@ -633,33 +696,25 @@ function educore_exams_report_view() {
         elseif ( $filter_exam > 0 && 'tabulation' === $report_type && ! empty( $filter_class ) ) {
             $exam = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table_exams} WHERE id = %d", $filter_exam ) );
             
-            $parsed_c = $filter_class;
-            $parsed_s = '';
-            if ( preg_match( '/^(.*?)\s*\((.*?)\)$/', $filter_class, $m ) ) {
-                $parsed_c = trim( $m[1] );
-                $parsed_s = trim( $m[2] );
+            $sql = "SELECT * FROM {$table_students} WHERE status = 'Active' AND class_name = %s";
+            $params = array( $filter_class );
+
+            if ( ! empty( $filter_section ) ) {
+                $sql .= " AND section_name = %s";
+                $params[] = $filter_section;
             }
 
-            if ( ! empty( $parsed_s ) ) {
-                $students = $wpdb->get_results( $wpdb->prepare(
-                    "SELECT * FROM {$table_students} WHERE status = 'Active' AND class_name = %s AND section_name = %s ORDER BY CAST(roll_no AS UNSIGNED) ASC, roll_no ASC",
-                    $parsed_c, $parsed_s
-                ) );
-            } else {
-                $students = $wpdb->get_results( $wpdb->prepare(
-                    "SELECT * FROM {$table_students} WHERE status = 'Active' AND (class_name = %s OR class_name = %s) ORDER BY CAST(roll_no AS UNSIGNED) ASC, roll_no ASC",
-                    $filter_class, $parsed_c
-                ) );
-            }
+            $sql .= " ORDER BY CAST(roll_no AS UNSIGNED) ASC, roll_no ASC";
+            $students = $wpdb->get_results( $wpdb->prepare( $sql, ...$params ) );
 
             $subjects = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT subject_name FROM {$table_results} WHERE exam_id = %d ORDER BY subject_name ASC", $filter_exam ) );
 
             if ( ! $students || ! $subjects ) {
-                /* sprintf()-safe empty state notice */
+                $sec_label = ! empty( $filter_section ) ? ' (' . esc_html( $filter_section ) . ')' : '';
                 $empty_tab_notice = sprintf(
-                    /* translators: %s: Class Name */
-                    esc_html__( 'No evaluated results or subjects found for Class %s in this exam.', 'ifsedu-sms' ),
-                    '<strong>' . esc_html( $filter_class ) . '</strong>'
+                    esc_html__( 'No evaluated results or subjects found for Class %s%s in this exam.', 'ifsedu-sms' ),
+                    '<strong>' . esc_html( $filter_class ) . '</strong>',
+                    '<strong>' . esc_html( $sec_label ) . '</strong>'
                 );
                 echo '<div class="afdp-status-banner no-print">' . wp_kses_post( $empty_tab_notice ) . '</div>';
                 echo '</div>'; // Close root
@@ -680,6 +735,9 @@ function educore_exams_report_view() {
                     <h5 style="margin: 6px 0 0 0; font-weight: 700; color: #1e293b;"><?php echo esc_html( $exam->exam_name ); ?> - <?php esc_html_e( 'Tabulation Sheet', 'ifsedu-sms' ); ?></h5>
                     <span style="display: inline-block; background: #f1f5f9; color: #475569; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; margin-top: 6px;">
                         <?php esc_html_e( 'Class:', 'ifsedu-sms' ); ?> <?php echo esc_html( $filter_class ); ?>
+                        <?php if ( ! empty( $filter_section ) ) : ?>
+                            (<?php esc_html_e( 'Section:', 'ifsedu-sms' ); ?> <?php echo esc_html( $filter_section ); ?>)
+                        <?php endif; ?>
                     </span>
                 </div>
 

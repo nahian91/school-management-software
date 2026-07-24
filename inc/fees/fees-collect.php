@@ -10,7 +10,32 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Custom Prefixes Applied: dpt-, afdp-
  */
 
-// AJAX Handler to dynamic filter student list by Class in Fee Collection
+// 1. AJAX Handler to dynamically load Sections based on Class
+add_action( 'wp_ajax_educore_get_sections_by_class_fee', 'educore_get_sections_by_class_fee_handler' );
+function educore_get_sections_by_class_fee_handler() {
+    check_ajax_referer( 'educore_fee_nonce', 'security' );
+
+    if ( ! current_user_can( 'manage_options' ) ) {
+        wp_send_json_error( array( 'message' => __( 'Permission denied.', 'ifsedu-sms' ) ) );
+    }
+
+    global $wpdb;
+    $table_units = $wpdb->prefix . 'sms_academic_units';
+    $class_name  = isset( $_POST['class_name'] ) ? sanitize_text_field( wp_unslash( $_POST['class_name'] ) ) : '';
+
+    if ( empty( $class_name ) ) {
+        wp_send_json_success( array() );
+    }
+
+    $sections = $wpdb->get_col( $wpdb->prepare(
+        "SELECT DISTINCT section_name FROM {$table_units} WHERE class_name = %s AND section_name != '' ORDER BY section_name ASC",
+        $class_name
+    ) );
+
+    wp_send_json_success( $sections );
+}
+
+// 2. AJAX Handler to dynamic filter student list by Class & Section in Fee Collection
 add_action( 'wp_ajax_educore_get_students_for_fee_collect', 'educore_get_students_for_fee_collect_handler' );
 function educore_get_students_for_fee_collect_handler() {
     check_ajax_referer( 'educore_fee_nonce', 'security' );
@@ -21,39 +46,27 @@ function educore_get_students_for_fee_collect_handler() {
 
     global $wpdb;
     $table_students = $wpdb->prefix . 'sms_students';
-    $raw_class      = isset( $_POST['class_name'] ) ? sanitize_text_field( wp_unslash( $_POST['class_name'] ) ) : '';
+    $class_name     = isset( $_POST['class_name'] ) ? sanitize_text_field( wp_unslash( $_POST['class_name'] ) ) : '';
+    $section_name   = isset( $_POST['section_name'] ) ? sanitize_text_field( wp_unslash( $_POST['section_name'] ) ) : '';
 
-    if ( empty( $raw_class ) ) {
+    if ( empty( $class_name ) ) {
         $students = $wpdb->get_results(
             "SELECT id, full_name, student_id, roll_no, class_name, section_name 
              FROM {$table_students} WHERE status = 'Active' 
              ORDER BY class_name ASC, CAST(roll_no AS UNSIGNED) ASC, roll_no ASC"
         );
     } else {
-        $parsed_class = $raw_class;
-        $section_name = '';
-        if ( preg_match( '/^(.*?)\s*\((.*?)\)$/', $raw_class, $matches ) ) {
-            $parsed_class = trim( $matches[1] );
-            $section_name = trim( $matches[2] );
-        }
+        $sql = "SELECT id, full_name, student_id, roll_no, class_name, section_name 
+                FROM {$table_students} WHERE status = 'Active' AND class_name = %s";
+        $params = array( $class_name );
 
         if ( ! empty( $section_name ) ) {
-            $students = $wpdb->get_results( $wpdb->prepare(
-                "SELECT id, full_name, student_id, roll_no, class_name, section_name 
-                 FROM {$table_students} 
-                 WHERE status = 'Active' AND class_name = %s AND section_name = %s 
-                 ORDER BY CAST(roll_no AS UNSIGNED) ASC, roll_no ASC",
-                $parsed_class, $section_name
-            ) );
-        } else {
-            $students = $wpdb->get_results( $wpdb->prepare(
-                "SELECT id, full_name, student_id, roll_no, class_name, section_name 
-                 FROM {$table_students} 
-                 WHERE status = 'Active' AND (class_name = %s OR class_name = %s) 
-                 ORDER BY CAST(roll_no AS UNSIGNED) ASC, roll_no ASC",
-                $raw_class, $parsed_class
-            ) );
+            $sql .= " AND section_name = %s";
+            $params[] = $section_name;
         }
+
+        $sql .= " ORDER BY CAST(roll_no AS UNSIGNED) ASC, roll_no ASC";
+        $students = $wpdb->get_results( $wpdb->prepare( $sql, ...$params ) );
     }
 
     $data = array();
@@ -167,7 +180,6 @@ function educore_fees_collect_view() {
                     admin_url( 'admin.php' )
                 );
 
-                // JS Fallback with Absolute WP Admin URL
                 echo '<script type="text/javascript">window.location.href="' . esc_url_raw( $print_url ) . '";</script>';
                 exit;
             } else {
@@ -178,15 +190,11 @@ function educore_fees_collect_view() {
         }
     }
 
-    // Fetch Class/Section Units for Filter Console
-    $raw_classes = $wpdb->get_results( "SELECT id, class_name, section_name FROM {$table_units} ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC" );
+    // Fetch Unique Classes for Filter Console
+    $raw_classes = $wpdb->get_results( "SELECT DISTINCT class_name FROM {$table_units} WHERE class_name != '' ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC" );
     if ( ! empty( $raw_classes ) ) {
         usort( $raw_classes, function( $a, $b ) {
-            $res = strnatcasecmp( $a->class_name, $b->class_name );
-            if ( $res === 0 && isset( $a->section_name ) && isset( $b->section_name ) ) {
-                return strnatcasecmp( $a->section_name, $b->section_name );
-            }
-            return $res;
+            return strnatcasecmp( $a->class_name, $b->class_name );
         });
     }
 
@@ -318,7 +326,7 @@ function educore_fees_collect_view() {
 
         .dpt-grid-filter {
             display: grid;
-            grid-template-columns: 1fr 2fr;
+            grid-template-columns: 1fr 1fr 2fr;
             gap: 16px;
             background: #f8fafc;
             padding: 16px;
@@ -474,18 +482,26 @@ function educore_fees_collect_view() {
                 
                 <!-- Easy Category Filter & Target Student Selector -->
                 <div class="dpt-grid-filter">
+                    <!-- Class Filter -->
                     <div class="dpt-form-group">
-                        <label class="dpt-form-label"><?php esc_html_e( 'Filter By Class / Tier', 'ifsedu-sms' ); ?></label>
+                        <label class="dpt-form-label"><?php esc_html_e( 'Filter By Class', 'ifsedu-sms' ); ?></label>
                         <select id="educore_fee_class_filter" class="dpt-field-select" style="font-weight:600;">
                             <option value=""><?php esc_html_e( '-- All Classes --', 'ifsedu-sms' ); ?></option>
-                            <?php foreach ( $raw_classes as $cls_obj ) : 
-                                $c_val = ! empty( $cls_obj->section_name ) ? $cls_obj->class_name . ' (' . $cls_obj->section_name . ')' : $cls_obj->class_name;
-                            ?>
-                                <option value="<?php echo esc_attr( $c_val ); ?>"><?php echo esc_html( $c_val ); ?></option>
+                            <?php foreach ( $raw_classes as $cls_obj ) : ?>
+                                <option value="<?php echo esc_attr( $cls_obj->class_name ); ?>"><?php echo esc_html( $cls_obj->class_name ); ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
 
+                    <!-- Section Filter (Dynamic) -->
+                    <div class="dpt-form-group">
+                        <label class="dpt-form-label"><?php esc_html_e( 'Filter By Section', 'ifsedu-sms' ); ?></label>
+                        <select id="educore_fee_section_filter" class="dpt-field-select" style="font-weight:600;">
+                            <option value=""><?php esc_html_e( '-- All Sections --', 'ifsedu-sms' ); ?></option>
+                        </select>
+                    </div>
+
+                    <!-- Student Dropdown -->
                     <div class="dpt-form-group">
                         <label class="dpt-form-label"><?php esc_html_e( 'Select Target Student', 'ifsedu-sms' ); ?> <span style="color:#dc2626;">*</span></label>
                         <select name="student_id" id="educore_fee_student_select" class="dpt-field-select" style="font-size: 14px; font-weight: 600;" required>
@@ -607,10 +623,50 @@ function educore_fees_collect_view() {
     <!-- Live Calculations & Dynamic Filtering Engine Script -->
     <script type="text/javascript">
     jQuery(document).ready(function($) {
-        // Dynamic AJAX fetch student list when class filter is changed
+        var nonce = '<?php echo esc_js( wp_create_nonce( "educore_fee_nonce" ) ); ?>';
+
+        // 1. Fetch Sections when Class Filter Changes
         $('#educore_fee_class_filter').on('change', function() {
-            var selectedClass = $(this).val();
-            var $studentSelect = $('#educore_fee_student_select');
+            var selectedClass   = $(this).val();
+            var $sectionSelect = $('#educore_fee_section_filter');
+
+            $sectionSelect.html('<option value=""><?php echo esc_js( __( '-- All Sections --', 'ifsedu-sms' ) ); ?></option>');
+
+            if (!selectedClass) {
+                reloadFeeStudents();
+                return;
+            }
+
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'educore_get_sections_by_class_fee',
+                    security: nonce,
+                    class_name: selectedClass
+                },
+                success: function(response) {
+                    if (response.success && response.data.length > 0) {
+                        var secOptions = '<option value=""><?php echo esc_js( __( '-- All Sections --', 'ifsedu-sms' ) ); ?></option>';
+                        $.each(response.data, function(i, sec) {
+                            secOptions += '<option value="' + sec + '">' + sec + '</option>';
+                        });
+                        $sectionSelect.html(secOptions);
+                    }
+                    reloadFeeStudents();
+                }
+            });
+        });
+
+        // 2. Reload Students when Section Filter Changes
+        $('#educore_fee_section_filter').on('change', function() {
+            reloadFeeStudents();
+        });
+
+        function reloadFeeStudents() {
+            var selectedClass   = $('#educore_fee_class_filter').val();
+            var selectedSection = $('#educore_fee_section_filter').val();
+            var $studentSelect  = $('#educore_fee_student_select');
 
             $studentSelect.html('<option value=""><?php echo esc_js( __( '-- Loading Active Students... --', 'ifsedu-sms' ) ); ?></option>');
 
@@ -619,8 +675,9 @@ function educore_fees_collect_view() {
                 type: 'POST',
                 data: {
                     action: 'educore_get_students_for_fee_collect',
-                    security: '<?php echo esc_js( wp_create_nonce( "educore_fee_nonce" ) ); ?>',
-                    class_name: selectedClass
+                    security: nonce,
+                    class_name: selectedClass,
+                    section_name: selectedSection
                 },
                 success: function(response) {
                     if (response.success && response.data.length > 0) {
@@ -637,7 +694,7 @@ function educore_fees_collect_view() {
                     $studentSelect.html('<option value=""><?php echo esc_js( __( '-- Search & Select Active Student --', 'ifsedu-sms' ) ); ?></option>');
                 }
             });
-        });
+        }
 
         // Live Ledger Math Calculations Engine
         const amtInput   = document.getElementById('fee_amount');

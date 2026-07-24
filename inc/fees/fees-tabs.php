@@ -10,7 +10,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Architecture: Bento Layout Viewports with Integrated Hardware Print Lockdown
  */
 function educore_fees_tab() {
-    $sub_tab = isset( $_GET['sub'] ) ? sanitize_text_field( $_GET['sub'] ) : 'list';
+    $sub_tab = isset( $_GET['sub'] ) ? sanitize_text_field( wp_unslash( $_GET['sub'] ) ) : 'list';
 
     // Construct URLs for top submenu links
     $all_fees_url = admin_url( 'admin.php?page=school_management_system&tab=fees&sub=list' );

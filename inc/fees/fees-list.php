@@ -26,8 +26,8 @@ function educore_fees_list_view() {
         SUM(due_amount) as total_due 
         FROM {$table_fees}" );
 
-    // 3. Fetch Ledger Records
-    $query = "SELECT f.*, s.full_name, s.student_id as s_id, s.class_name 
+    // 3. Fetch Ledger Records with Section Name Included
+    $query = "SELECT f.*, s.full_name, s.student_id as s_id, s.class_name, s.section_name 
               FROM {$table_fees} f 
               LEFT JOIN {$table_students} s ON f.student_id = s.id 
               ORDER BY f.id DESC";
@@ -320,6 +320,10 @@ function educore_fees_list_view() {
                         } elseif ( $fee->payment_status === 'Partial' ) { 
                             $status_class = 'partial'; 
                         }
+
+                        $student_id_str = $fee->s_id ? $fee->s_id : 'Deleted';
+                        $class_str      = $fee->class_name ? $fee->class_name : 'Unassigned';
+                        $section_str    = ! empty( $fee->section_name ) ? $fee->section_name : 'N/A';
                     ?>
                     <tr>
                         <td>
@@ -328,7 +332,7 @@ function educore_fees_list_view() {
                         <td>
                             <strong style="color: #0f172a;"><?php echo esc_html( $fee->full_name ? $fee->full_name : 'N/A Record' ); ?></strong><br>
                             <span style="font-size: 11.5px; color: #64748b;">
-                                <?php echo esc_html( sprintf( 'ID: %s | Class: %s', $fee->s_id ? $fee->s_id : 'Deleted', $fee->class_name ? $fee->class_name : 'Unassigned' ) ); ?>
+                                <?php echo esc_html( sprintf( 'ID: %s | Class: %s | Section: %s', $student_id_str, $class_str, $section_str ) ); ?>
                             </span>
                         </td>
                         <td>

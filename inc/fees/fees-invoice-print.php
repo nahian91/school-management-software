@@ -99,7 +99,8 @@ function educore_fees_invoice_print_view() {
     }
 
     $back_url    = admin_url( 'admin.php?page=school_management_system&tab=fees' );
-    $school_name = get_bloginfo( 'name' );
+    $school_name = get_option( 'educore_school_name', get_bloginfo( 'name' ) );
+    $school_logo = get_option( 'educore_school_logo', '' );
     $copies      = array( 'Student Copy', 'Office Copy', 'Bank / Audit Copy' );
     ?>
 
@@ -188,9 +189,18 @@ function educore_fees_invoice_print_view() {
             text-align: center;
         }
 
+        .receipt-logo {
+            max-height: 38px;
+            width: auto;
+            margin-bottom: 4px;
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
         .receipt-school-title {
             font-weight: 800;
-            font-size: 14px;
+            font-size: 13.5px;
             text-transform: uppercase;
             letter-spacing: 0.3px;
             margin: 0 0 4px 0;
@@ -280,7 +290,7 @@ function educore_fees_invoice_print_view() {
             text-align: center;
         }
 
-        /* Printable Cut Rules & Page Mechanics */
+        /* Printable Rules */
         @media print {
             @page {
                 size: A4 landscape;
@@ -309,7 +319,7 @@ function educore_fees_invoice_print_view() {
             }
             .dpt-triplicate-grid {
                 grid-template-columns: repeat(3, 1fr) !important;
-                gap: 10mm !important;
+                gap: 8mm !important;
             }
             .receipt-card { 
                 border: 1px solid #000000 !important; 
@@ -348,7 +358,7 @@ function educore_fees_invoice_print_view() {
         </a>
     </div>
 
-    <!-- Printable Receipt Container (Renders 3 Copies for Triplicate Invoice) -->
+    <!-- Printable Receipt Container -->
     <div class="invoice-print-wrapper" id="educore-printable-receipt-area">
         <div class="dpt-triplicate-grid">
             <?php foreach ( $copies as $copy_label ) : ?>
@@ -356,6 +366,9 @@ function educore_fees_invoice_print_view() {
                     <div>
                         <!-- Header -->
                         <div class="receipt-card-header">
+                            <?php if ( ! empty( $school_logo ) ) : ?>
+                                <img src="<?php echo esc_url( $school_logo ); ?>" alt="Logo" class="receipt-logo">
+                            <?php endif; ?>
                             <h5 class="receipt-school-title">
                                 <?php echo esc_html( $school_name ); ?>
                             </h5>
@@ -381,7 +394,10 @@ function educore_fees_invoice_print_view() {
                                 <td colspan="2"><strong>Name:</strong> <span style="text-transform: uppercase; font-weight: 700;"><?php echo esc_html( $receipt->full_name ? $receipt->full_name : 'N/A' ); ?></span></td>
                             </tr>
                             <tr>
-                                <td colspan="2"><strong>Class:</strong> <?php echo esc_html( $receipt->class_name ); ?> <?php echo ! empty( $receipt->section_name ) ? '(Sec: ' . esc_html( $receipt->section_name ) . ')' : ''; ?></td>
+                                <td colspan="2">
+                                    <strong>Class:</strong> <?php echo esc_html( $receipt->class_name ); ?> 
+                                    <?php echo ! empty( $receipt->section_name ) ? ' | <strong>Section:</strong> ' . esc_html( $receipt->section_name ) : ''; ?>
+                                </td>
                             </tr>
                         </table>
 

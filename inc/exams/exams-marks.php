@@ -58,7 +58,7 @@ function educore_exams_marks_view() {
         $saved   = 0;
 
         if ( ! empty( $marks_data ) && $total_marks > 0 ) {
-            // Bulk pre-fetching existing results for this batch transaction to avoid loop query amplification
+            // Bulk pre-fetching existing results for this batch transaction
             $target_student_ids = array_map( 'intval', array_keys( $marks_data ) );
             $ids_placeholder    = implode( ',', array_fill( 0, count( $target_student_ids ), '%d' ) );
             
@@ -73,7 +73,7 @@ function educore_exams_marks_view() {
                 
                 $obtained = floatval( $obtained );
                 
-                // Server-Side Data Integrity Constraint: Prevent marks from exceeding full capacity
+                // Server-Side Constraint: Cap at full marks
                 if ( $obtained > $total_marks ) {
                     $obtained = $total_marks;
                 }
@@ -112,36 +112,34 @@ function educore_exams_marks_view() {
             IFSEdu_School_Management_System::log_activity( "Updated marks for subject {$subject_name} across {$saved} students." );
         }
 
-        /* sprintf()-safe notice wrapping */
         $notice_message = sprintf(
-            /* translators: %d: number of students */
             esc_html__( 'Marks configuration parsed and saved successfully for %d students.', 'ifsedu-sms' ),
             $saved
         );
     }
 
     // 2. Filter Variables Evaluation
-    $filter_exam  = isset( $_GET['exam_id'] ) ? intval( $_GET['exam_id'] ) : 0;
-    $filter_class = isset( $_GET['class_name'] ) ? sanitize_text_field( wp_unslash( $_GET['class_name'] ) ) : '';
-    $subject_name = isset( $_GET['subject_name'] ) ? sanitize_text_field( wp_unslash( $_GET['subject_name'] ) ) : '';
+    $filter_exam    = isset( $_GET['exam_id'] ) ? intval( $_GET['exam_id'] ) : 0;
+    $filter_class   = isset( $_GET['class_name'] ) ? sanitize_text_field( wp_unslash( $_GET['class_name'] ) ) : '';
+    $filter_section = isset( $_GET['section_name'] ) ? sanitize_text_field( wp_unslash( $_GET['section_name'] ) ) : '';
+    $subject_name   = isset( $_GET['subject_name'] ) ? sanitize_text_field( wp_unslash( $_GET['subject_name'] ) ) : '';
 
     // Fetch Dynamic Dropdowns Structure
     $exams = $wpdb->get_results( "SELECT id, exam_name FROM {$table_exams} ORDER BY id DESC" );
     
-    // Classes with Natural Numeric Sorting
-    $raw_classes = $wpdb->get_results( "SELECT id, class_name, section_name FROM {$table_units} ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC" );
+    // Fetch Unique Classes with Natural Numeric Sorting (1, 2, 3... 11)
+    $raw_classes = $wpdb->get_results( "SELECT DISTINCT class_name FROM {$table_units} WHERE class_name != '' ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC" );
     if ( ! empty( $raw_classes ) ) {
         usort( $raw_classes, function( $a, $b ) {
-            $res = strnatcasecmp( $a->class_name, $b->class_name );
-            if ( $res === 0 && isset( $a->section_name ) && isset( $b->section_name ) ) {
-                return strnatcasecmp( $a->section_name, $b->section_name );
-            }
-            return $res;
+            return strnatcasecmp( $a->class_name, $b->class_name );
         });
     }
 
+    // Fetch Unique Sections
+    $raw_sections = $wpdb->get_results( "SELECT DISTINCT section_name FROM {$table_units} WHERE section_name != '' ORDER BY section_name ASC" );
+
     // Subjects Dropdown List
-    $subjects = $wpdb->get_results( "SELECT id, subject_name FROM {$table_subjects} ORDER BY subject_name ASC" );
+    $subjects = $wpdb->get_results( "SELECT DISTINCT subject_name FROM {$table_subjects} WHERE subject_name != '' ORDER BY subject_name ASC" );
     
     $back_url = add_query_arg( array( 'sub' => 'list' ), $base_url );
     ?>
@@ -215,19 +213,18 @@ function educore_exams_marks_view() {
             justify-content: space-between;
         }
 
-        /* Filter Console Grid Layout */
+        /* Filter Console Grid Layout for 5 Columns */
         .dpt-filter-grid {
             display: grid;
             grid-template-columns: repeat(12, 1fr);
-            gap: 16px;
+            gap: 14px;
             align-items: end;
         }
         .dpt-col-3 { grid-column: span 3; }
-        .dpt-col-4 { grid-column: span 4; }
         .dpt-col-2 { grid-column: span 2; }
 
         @media (max-width: 992px) {
-            .dpt-col-3, .dpt-col-4, .dpt-col-2 { grid-column: span 12; }
+            .dpt-col-3, .dpt-col-2 { grid-column: span 12; }
         }
 
         /* Form Controls Framework */
@@ -401,7 +398,7 @@ function educore_exams_marks_view() {
                 if ( isset( $parsed_url['query'] ) ) {
                     parse_str( $parsed_url['query'], $query_params );
                     foreach ( $query_params as $param_key => $param_val ) {
-                        if ( ! in_array( $param_key, array( 'exam_id', 'class_name', 'subject_name' ) ) ) {
+                        if ( ! in_array( $param_key, array( 'exam_id', 'class_name', 'section_name', 'subject_name' ) ) ) {
                             echo '<input type="hidden" name="' . esc_attr( $param_key ) . '" value="' . esc_attr( $param_val ) . '">';
                         }
                     }
@@ -409,10 +406,11 @@ function educore_exams_marks_view() {
                 ?>
                 
                 <div class="dpt-filter-grid">
+                    <!-- Exam Selection -->
                     <div class="dpt-form-group dpt-col-3">
                         <label class="dpt-form-label"><?php esc_html_e( 'Select Examination', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
                         <select name="exam_id" class="dpt-select-field" required>
-                            <option value=""><?php esc_html_e( '-- Choose Exam Scheme --', 'ifsedu-sms' ); ?></option>
+                            <option value=""><?php esc_html_e( '-- Choose Exam --', 'ifsedu-sms' ); ?></option>
                             <?php foreach ( $exams as $ex ) : ?>
                                 <option value="<?php echo intval( $ex->id ); ?>" <?php selected( $filter_exam, $ex->id ); ?>>
                                     <?php echo esc_html( $ex->exam_name ); ?>
@@ -421,21 +419,34 @@ function educore_exams_marks_view() {
                         </select>
                     </div>
 
-                    <div class="dpt-form-group dpt-col-3">
-                        <label class="dpt-form-label"><?php esc_html_e( 'Select Class / Tier', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
+                    <!-- Class Selection -->
+                    <div class="dpt-form-group dpt-col-2">
+                        <label class="dpt-form-label"><?php esc_html_e( 'Select Class', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
                         <select name="class_name" class="dpt-select-field" required>
-                            <option value=""><?php esc_html_e( '-- Choose Class --', 'ifsedu-sms' ); ?></option>
-                            <?php foreach ( $raw_classes as $cls_obj ) : 
-                                $c_val = ! empty( $cls_obj->section_name ) ? $cls_obj->class_name . ' (' . $cls_obj->section_name . ')' : $cls_obj->class_name;
-                            ?>
-                                <option value="<?php echo esc_attr( $c_val ); ?>" <?php selected( $filter_class, $c_val ); ?>>
-                                    <?php echo esc_html( $c_val ); ?>
+                            <option value=""><?php esc_html_e( '-- Class --', 'ifsedu-sms' ); ?></option>
+                            <?php foreach ( $raw_classes as $cls_obj ) : ?>
+                                <option value="<?php echo esc_attr( $cls_obj->class_name ); ?>" <?php selected( $filter_class, $cls_obj->class_name ); ?>>
+                                    <?php echo esc_html( $cls_obj->class_name ); ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
                     </div>
 
-                    <div class="dpt-form-group dpt-col-4">
+                    <!-- Section Selection -->
+                    <div class="dpt-form-group dpt-col-2">
+                        <label class="dpt-form-label"><?php esc_html_e( 'Select Section', 'ifsedu-sms' ); ?></label>
+                        <select name="section_name" class="dpt-select-field">
+                            <option value=""><?php esc_html_e( '-- All Sections --', 'ifsedu-sms' ); ?></option>
+                            <?php foreach ( $raw_sections as $sec_obj ) : ?>
+                                <option value="<?php echo esc_attr( $sec_obj->section_name ); ?>" <?php selected( $filter_section, $sec_obj->section_name ); ?>>
+                                    <?php echo esc_html( $sec_obj->section_name ); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <!-- Subject Selection -->
+                    <div class="dpt-form-group dpt-col-3">
                         <label class="dpt-form-label"><?php esc_html_e( 'Subject Name', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
                         <select name="subject_name" class="dpt-select-field" required>
                             <option value=""><?php esc_html_e( '-- Select Subject --', 'ifsedu-sms' ); ?></option>
@@ -447,6 +458,7 @@ function educore_exams_marks_view() {
                         </select>
                     </div>
 
+                    <!-- Trigger Button -->
                     <div class="dpt-col-2">
                         <button type="submit" class="dpt-btn-submit-trigger">
                             <?php esc_html_e( 'Load Roster', 'ifsedu-sms' ); ?>
@@ -460,22 +472,21 @@ function educore_exams_marks_view() {
         <?php
         if ( $filter_exam > 0 && ! empty( $filter_class ) && ! empty( $subject_name ) ) {
             
-            // Clean Class Name extraction if stored as "Class (Section)"
-            $parsed_class = $filter_class;
-            if ( preg_match( '/^(.*?)\s*\((.*?)\)$/', $filter_class, $matches ) ) {
-                $parsed_class = trim( $matches[1] );
+            // Build dynamic query depending on whether a specific section is selected
+            $sql = "SELECT id, student_id, full_name, roll_no, section_name FROM {$table_students} WHERE status = 'Active' AND class_name = %s";
+            $params = array( $filter_class );
+
+            if ( ! empty( $filter_section ) ) {
+                $sql .= " AND section_name = %s";
+                $params[] = $filter_section;
             }
 
-            $students = $wpdb->get_results( $wpdb->prepare( 
-                "SELECT id, student_id, full_name, roll_no, section_name FROM {$table_students} 
-                 WHERE status = 'Active' AND (class_name = %s OR class_name = %s) 
-                 ORDER BY CAST(roll_no AS UNSIGNED) ASC, roll_no ASC", 
-                $filter_class,
-                $parsed_class
-            ) );
+            $sql .= " ORDER BY CAST(roll_no AS UNSIGNED) ASC, roll_no ASC";
+
+            $students = $wpdb->get_results( $wpdb->prepare( $sql, ...$params ) );
             
             if ( $students ) {
-                // Memory caching optimization layer for target sheet grid render
+                // Pre-fetch stored results for this roster
                 $student_ids  = wp_list_pluck( $students, 'id' );
                 $placeholders = implode( ',', array_fill( 0, count( $student_ids ), '%d' ) );
                 
@@ -493,8 +504,11 @@ function educore_exams_marks_view() {
                         
                         <div class="afdp-card-title">
                             <div>
-                                <?php esc_html_e( 'Target Class:', 'ifsedu-sms' ); ?> <span style="color:#006a4e;"><?php echo esc_html( $filter_class ); ?></span> | 
-                                <?php esc_html_e( 'Subject:', 'ifsedu-sms' ); ?> <span style="color:#2563eb;"><?php echo esc_html( $subject_name ); ?></span>
+                                <?php esc_html_e( 'Target Class:', 'ifsedu-sms' ); ?> <span style="color:#006a4e;"><?php echo esc_html( $filter_class ); ?></span> 
+                                <?php if ( ! empty( $filter_section ) ) : ?>
+                                    (<?php esc_html_e( 'Section:', 'ifsedu-sms' ); ?> <span style="color:#006a4e;"><?php echo esc_html( $filter_section ); ?></span>)
+                                <?php endif; ?>
+                                | <?php esc_html_e( 'Subject:', 'ifsedu-sms' ); ?> <span style="color:#2563eb;"><?php echo esc_html( $subject_name ); ?></span>
                             </div>
                             <div style="display: flex; align-items: center; gap: 8px;">
                                 <label class="dpt-form-label"><?php esc_html_e( 'Full Subject Marks:', 'ifsedu-sms' ); ?></label>
@@ -524,7 +538,6 @@ function educore_exams_marks_view() {
 
                                         list( $initial_grade, $initial_gpa ) = ( $existing_marks !== '' && $existing_marks !== null ) ? educore_calculate_grade( floatval( $existing_marks ), $full_subject_marks ) : array( '-', '-' );
                                         
-                                        // CSS badge class management matrix based on evaluation state
                                         $badge_class = 'afdp-badge-neutral';
                                         if ( $initial_grade === 'A+' ) {
                                             $badge_class = 'afdp-badge-success';
@@ -562,7 +575,7 @@ function educore_exams_marks_view() {
                     </form>
                 </div>
 
-                <!-- Dynamic Auto-Grading Calculation Engine Script -->
+                <!-- Auto-Grading Script -->
                 <script type="text/javascript">
                 jQuery(document).ready(function($) {
                     function calcGrade(obtained, total) {
@@ -585,7 +598,6 @@ function educore_exams_marks_view() {
                         var obtained  = parseFloat($(this).val());
                         var total     = parseFloat($('#educore_total_marks').val()) || 100;
                         
-                        // Visual warning feedback check
                         if (obtained > total) {
                             $(this).addClass('error');
                         } else {
@@ -610,7 +622,6 @@ function educore_exams_marks_view() {
                         $('#gpa_' + studentId).text(res.gpa);
                     });
 
-                    // Trigger adjustments if full marks change live
                     $('#educore_total_marks').on('input', function() {
                         $('.mark-input').trigger('input');
                     });
@@ -618,11 +629,11 @@ function educore_exams_marks_view() {
                 </script>
                 <?php
             } else {
-                /* sprintf()-safe notice wrapping for empty student state */
-                $empty_notice = sprintf(
-                    /* translators: %s: Class name */
-                    esc_html__( 'No active students found in Class %s.', 'ifsedu-sms' ),
-                    '<strong>' . esc_html( $filter_class ) . '</strong>'
+                $section_label = ! empty( $filter_section ) ? ' (' . esc_html( $filter_section ) . ')' : '';
+                $empty_notice  = sprintf(
+                    esc_html__( 'No active students found in Class %s%s.', 'ifsedu-sms' ),
+                    '<strong>' . esc_html( $filter_class ) . '</strong>',
+                    '<strong>' . esc_html( $section_label ) . '</strong>'
                 );
                 ?>
                 <div class="afdp-status-banner" style="background: #fffbe0; border-color: #fef3c7; color: #b45309; justify-content: center;">

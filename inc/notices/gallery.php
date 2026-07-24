@@ -907,24 +907,29 @@ function educore_gallery_add_edit_view() {
 
                 <div class="dpt-upload-bento-node">
                     <label><?php esc_html_e( 'Upload Photos to Album', 'ifsedu-sms' ); ?></label>
-                    <input type="file" name="gallery_photos[]" class="dpt-field-input" multiple accept="image/*">
-                    <small style="color: #047857; font-size: 12px; margin-top: 4px; display: block; font-weight: 600;">
-                        <?php esc_html_e( 'You can select multiple images simultaneously.', 'ifsedu-sms' ); ?>
-                    </small>
+                    <input type="file" name="gallery_photos[]" class="dpt-field-input" accept="image/*" multiple>
+                    <p style="margin: 6px 0 0 0; font-size: 12px; color: #047857; font-weight: 600;">
+                        <?php esc_html_e( 'Select multiple files to batch upload images into this gallery.', 'ifsedu-sms' ); ?>
+                    </p>
                 </div>
 
-                <?php if ( ! empty( $photos ) ) : ?>
+                <?php if ( $is_edit && ! empty( $photos ) ) : ?>
                     <div class="dpt-photos-manager">
                         <h4 class="dpt-photos-manager-title">
-                            <?php esc_html_e( 'Current Photos in Album', 'ifsedu-sms' ); ?> (<?php echo count( $photos ); ?>)
+                            <?php esc_html_e( 'Manage Existing Album Photos', 'ifsedu-sms' ); ?> (<?php echo count( $photos ); ?>)
                         </h4>
                         <div class="dpt-manage-grid">
                             <?php foreach ( $photos as $photo ) : 
-                                $photo_del_url = wp_nonce_url( admin_url( 'admin.php?page=school_management_system&tab=notice&type=gallery&sub=delete_photo&id=' . $photo->id . '&album_id=' . $album_id ), 'delete_photo_' . $photo->id );
+                                $photo_del_url = wp_nonce_url( 
+                                    admin_url( 'admin.php?page=school_management_system&tab=notice&type=gallery&sub=delete_photo&photo_id=' . $photo->id . '&album_id=' . $album_id ), 
+                                    'delete_photo_' . $photo->id 
+                                );
                             ?>
                                 <div class="dpt-manage-photo-card">
-                                    <img src="<?php echo esc_url( $photo->image_url ); ?>">
-                                    <a href="<?php echo esc_url( $photo_del_url ); ?>" class="dpt-btn-photo-del" onclick="return confirm('Remove photo?');" title="Delete Photo">&times;</a>
+                                    <img src="<?php echo esc_url( $photo->image_url ); ?>" alt="Gallery Image">
+                                    <a href="<?php echo esc_url( $photo_del_url ); ?>" class="dpt-btn-photo-del" title="<?php esc_attr_e( 'Delete Photo', 'ifsedu-sms' ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Remove this photo?', 'ifsedu-sms' ) ); ?>');">
+                                        &times;
+                                    </a>
                                 </div>
                             <?php endforeach; ?>
                         </div>
@@ -932,7 +937,7 @@ function educore_gallery_add_edit_view() {
                 <?php endif; ?>
 
                 <button type="submit" name="educore_save_gallery" class="dpt-btn-submit">
-                    <?php echo $is_edit ? esc_html__( 'Update Album', 'ifsedu-sms' ) : esc_html__( 'Save Album', 'ifsedu-sms' ); ?>
+                    <?php echo $is_edit ? esc_html__( 'Update Album', 'ifsedu-sms' ) : esc_html__( 'Publish Album', 'ifsedu-sms' ); ?>
                 </button>
             </form>
         </div>
@@ -942,40 +947,50 @@ function educore_gallery_add_edit_view() {
 }
 
 /**
- * Handle Single Photo Deletion
+ * Action Handler: Delete Individual Gallery Photo
  */
 function educore_gallery_photo_delete_action() {
     global $wpdb;
     $table_photos = $wpdb->prefix . 'sms_gallery_photos';
 
-    $photo_id = isset( $_GET['id'] ) ? absint( $_GET['id'] ) : 0;
-    $album_id = isset( $_GET['album_id'] ) ? absint( $_GET['album_id'] ) : 0;
-    $_nonce   = isset( $_GET['_wpnonce'] ) ? $_GET['_wpnonce'] : '';
-
-    if ( $photo_id > 0 && wp_verify_nonce( $_nonce, 'delete_photo_' . $photo_id ) ) {
-        $wpdb->delete( $table_photos, array( 'id' => $photo_id ), array( '%d' ) );
+    if ( ! current_user_can( 'manage_options' ) ) {
+        wp_die( esc_html__( 'Permission denied.', 'ifsedu-sms' ) );
     }
 
-    $target_url = admin_url( 'admin.php?page=school_management_system&tab=notice&type=gallery&sub=edit&id=' . $album_id );
-    educore_safe_redirect( $target_url );
+    $photo_id = isset( $_GET['photo_id'] ) ? absint( $_GET['photo_id'] ) : 0;
+    $album_id = isset( $_GET['album_id'] ) ? absint( $_GET['album_id'] ) : 0;
+
+    if ( $photo_id > 0 && isset( $_GET['_wpnonce'] ) && wp_verify_nonce( $_GET['_wpnonce'], 'delete_photo_' . $photo_id ) ) {
+        $wpdb->delete( $table_photos, array( 'id' => $photo_id ) );
+    }
+
+    $redirect_url = admin_url( 'admin.php?page=school_management_system&tab=notice&type=gallery&sub=edit&id=' . $album_id );
+    wp_safe_redirect( $redirect_url );
+    exit;
 }
 
 /**
- * Handle Full Album Deletion
+ * Action Handler: Delete Complete Photo Album & Associated Photos
  */
 function educore_gallery_delete_action() {
     global $wpdb;
     $table_albums = $wpdb->prefix . 'sms_gallery_albums';
     $table_photos = $wpdb->prefix . 'sms_gallery_photos';
 
-    $id     = isset( $_GET['id'] ) ? absint( $_GET['id'] ) : 0;
-    $_nonce = isset( $_GET['_wpnonce'] ) ? $_GET['_wpnonce'] : '';
-
-    if ( $id > 0 && wp_verify_nonce( $_nonce, 'delete_gallery_' . $id ) ) {
-        $wpdb->delete( $table_photos, array( 'album_id' => $id ), array( '%d' ) );
-        $wpdb->delete( $table_albums, array( 'id' => $id ), array( '%d' ) );
+    if ( ! current_user_can( 'manage_options' ) ) {
+        wp_die( esc_html__( 'Permission denied.', 'ifsedu-sms' ) );
     }
 
-    $target_url = admin_url( 'admin.php?page=school_management_system&tab=notice&type=gallery&sub=list' );
-    educore_safe_redirect( $target_url );
+    $album_id = isset( $_GET['id'] ) ? absint( $_GET['id'] ) : 0;
+
+    if ( $album_id > 0 && isset( $_GET['_wpnonce'] ) && wp_verify_nonce( $_GET['_wpnonce'], 'delete_gallery_' . $album_id ) ) {
+        // Remove all images linked to this album
+        $wpdb->delete( $table_photos, array( 'album_id' => $album_id ) );
+        // Remove the album record
+        $wpdb->delete( $table_albums, array( 'id' => $album_id ) );
+    }
+
+    $redirect_url = admin_url( 'admin.php?page=school_management_system&tab=notice&type=gallery&sub=list' );
+    wp_safe_redirect( $redirect_url );
+    exit;
 }
