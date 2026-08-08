@@ -14,7 +14,6 @@ $attendance_files = array(
     'attendance-ajax.php',    // AJAX handlers
     'attendance-daily.php',   // Daily student attendance
     'attendance-monthly.php', // Monthly class summary
-    'attendance-staff.php',   // Faculty/Staff attendance
     'attendance-reports.php', // Individual student logs & reports
     'attendance-tab.php',     // Sub-navigation router engine
 );

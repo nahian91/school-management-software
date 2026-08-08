@@ -24,19 +24,19 @@ function educore_dashboard_tab() {
 
     // 1. TOTAL ACTIVE STUDENTS
     $total_students = (int) $wpdb->get_var( $wpdb->prepare(
-        "SELECT COUNT(*) FROM $table_students WHERE status = %s",
+        "SELECT COUNT(*) FROM {$table_students} WHERE status = %s",
         'Active'
     ) );
 
     // 2. TODAY'S ATTENDANCE METRICS
     $today_present = (int) $wpdb->get_var( $wpdb->prepare(
-        "SELECT COUNT(*) FROM $table_attendance WHERE attendance_date = %s AND status = %s",
+        "SELECT COUNT(*) FROM {$table_attendance} WHERE attendance_date = %s AND status = %s",
         $today_date,
         'Present'
     ) );
 
     $today_absent = (int) $wpdb->get_var( $wpdb->prepare(
-        "SELECT COUNT(*) FROM $table_attendance WHERE attendance_date = %s AND status = %s",
+        "SELECT COUNT(*) FROM {$table_attendance} WHERE attendance_date = %s AND status = %s",
         $today_date,
         'Absent'
     ) );
@@ -46,23 +46,23 @@ function educore_dashboard_tab() {
 
     // 3. FINANCIAL METRICS
     $today_collection = (float) $wpdb->get_var( $wpdb->prepare(
-        "SELECT IFNULL(SUM(paid_amount), 0.00) FROM $table_fees WHERE payment_date BETWEEN %s AND %s",
+        "SELECT IFNULL(SUM(paid_amount), 0.00) FROM {$table_fees} WHERE payment_date BETWEEN %s AND %s",
         $today_start,
         $today_end
     ) );
 
     $total_pending_fees = (float) $wpdb->get_var( $wpdb->prepare(
-        "SELECT IFNULL(SUM(due_amount), 0.00) FROM $table_fees WHERE payment_status IN (%s, %s)",
+        "SELECT IFNULL(SUM(due_amount), 0.00) FROM {$table_fees} WHERE payment_status IN (%s, %s)",
         'Unpaid', 'Partial'
     ) );
 
     // 4. TOTAL ACTIVE STAFF & TEACHERS
     $total_staff = (int) $wpdb->get_var( $wpdb->prepare(
-        "SELECT COUNT(*) FROM $table_staff WHERE status = %s",
+        "SELECT COUNT(*) FROM {$table_staff} WHERE status = %s",
         'Active'
     ) );
 
-    // 5. RECENT FINANCIAL ACTIVITY LOGS (FEE RECEIPTS + LEDGER EXPENSES)
+    // 5. RECENT FINANCIAL ACTIVITY LOGS
     $recent_receipts = $wpdb->get_results( "
         SELECT 'Fee Receipt' as type, student_id as ref, paid_amount as amount, payment_date as log_date, payment_method 
         FROM {$table_fees} 
@@ -78,7 +78,7 @@ function educore_dashboard_tab() {
 
     // Dynamic Greeting Engine
     $current_hour = (int) current_time( 'H' );
-    if ( $current_hour >= 6 && $current_hour < 12 ) {
+    if ( $current_hour >= 5 && $current_hour < 12 ) {
         $greeting_prefix = __( 'Good Morning', 'educore' );
     } elseif ( $current_hour >= 12 && $current_hour < 18 ) {
         $greeting_prefix = __( 'Good Afternoon', 'educore' );
@@ -96,93 +96,140 @@ function educore_dashboard_tab() {
            MODERN NEO-BENTO ENTERPRISE DASHBOARD STYLING
            ========================================================================== */
         .educore-dashboard-wrapper {
-            margin: 15px 20px 30px 0;
-            font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 20px 20px 40px 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
             color: #0f172a;
+            -webkit-font-smoothing: antialiased;
         }
 
         /* Hero Welcome Banner */
         .educore-hero-banner {
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-            border-radius: 20px;
-            padding: 32px 36px;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #0f172a 100%);
+            border-radius: 24px;
+            padding: 36px 40px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            box-shadow: 0 10px 30px -5px rgba(15, 23, 42, 0.15);
-            margin-bottom: 28px;
+            box-shadow: 0 20px 35px -10px rgba(15, 23, 42, 0.25);
+            margin-bottom: 32px;
             flex-wrap: wrap;
             gap: 24px;
             position: relative;
             overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.08);
             color: #ffffff;
+        }
+
+        .educore-hero-banner::before {
+            content: '';
+            position: absolute;
+            top: -40%;
+            right: -10%;
+            width: 420px;
+            height: 420px;
+            background: radial-gradient(circle, rgba(16, 185, 129, 0.18) 0%, rgba(255, 255, 255, 0) 70%);
+            pointer-events: none;
         }
 
         .educore-hero-banner::after {
             content: '';
             position: absolute;
-            top: -50%;
-            right: -10%;
-            width: 350px;
-            height: 350px;
-            background: radial-gradient(circle, rgba(16, 185, 129, 0.15) 0%, rgba(255, 255, 255, 0) 70%);
+            bottom: -50%;
+            left: 10%;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, rgba(37, 99, 235, 0.12) 0%, rgba(255, 255, 255, 0) 70%);
             pointer-events: none;
         }
 
         .educore-hero-left {
             display: flex;
             align-items: center;
-            gap: 22px;
+            gap: 24px;
             z-index: 2;
         }
 
         .educore-hero-icon-box {
-            width: 68px;
-            height: 68px;
-            background: rgba(16, 185, 129, 0.15);
+            width: 72px;
+            height: 72px;
+            background: rgba(16, 185, 129, 0.12);
             border: 1px solid rgba(16, 185, 129, 0.3);
-            border-radius: 18px;
+            border-radius: 20px;
             display: flex;
             align-items: center;
             justify-content: center;
             color: #10b981;
             flex-shrink: 0;
-            backdrop-filter: blur(8px);
+            backdrop-filter: blur(12px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
         }
 
         .educore-hero-icon-box .dashicons {
-            font-size: 36px;
-            width: 36px;
-            height: 36px;
+            font-size: 38px;
+            width: 38px;
+            height: 38px;
         }
 
         .educore-hero-title-group h1 {
             margin: 0;
-            font-size: 26px;
+            font-size: 28px;
             font-weight: 800;
             color: #ffffff;
-            letter-spacing: -0.5px;
+            letter-spacing: -0.6px;
+            line-height: 1.2;
         }
 
         .educore-hero-title-group p {
-            margin: 6px 0 0 0;
+            margin: 8px 0 0 0;
             color: #94a3b8;
             font-size: 14px;
             font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
-        /* Timer Badge Area */
+        .educore-status-pill-online {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
+            border: 1px solid rgba(16, 185, 129, 0.25);
+        }
+
+        .educore-pulse-dot {
+            width: 7px;
+            height: 7px;
+            background-color: #34d399;
+            border-radius: 50%;
+            box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.7);
+            animation: educorePulse 1.8s infinite;
+        }
+
+        @keyframes educorePulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(52, 211, 153, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
+        }
+
+        /* Live Clock & Badge Component */
         .educore-live-clock-badge {
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            padding: 14px 22px;
-            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            padding: 16px 24px;
+            border-radius: 18px;
             display: flex;
             flex-direction: column;
             align-items: flex-end;
-            gap: 4px;
-            backdrop-filter: blur(10px);
+            gap: 6px;
+            backdrop-filter: blur(12px);
             z-index: 2;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
         }
 
         .educore-date-pill {
@@ -191,50 +238,50 @@ function educore_dashboard_tab() {
             font-size: 13px;
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 8px;
         }
 
         .educore-clock-digits {
-            font-size: 22px;
+            font-size: 24px;
             font-weight: 800;
-            color: #10b981;
+            color: #34d399;
             letter-spacing: -0.5px;
-            font-family: monospace;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 8px;
         }
 
-        /* Metric Bento Grid Matrix */
+        /* Bento Grid Layout Matrix */
         .educore-bento-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 22px;
-            margin-bottom: 28px;
+            gap: 24px;
+            margin-bottom: 32px;
         }
 
-        @media (max-width: 1100px) { .educore-bento-grid { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 1200px) { .educore-bento-grid { grid-template-columns: repeat(2, 1fr); } }
         @media (max-width: 768px)  { .educore-bento-grid { grid-template-columns: 1fr; } }
 
-        /* Metric Bento Card System */
+        /* Modern Bento Cards */
         .educore-bento-card {
             background: #ffffff;
             border: 1px solid #e2e8f0;
-            border-radius: 18px;
-            padding: 26px;
-            box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.03);
+            border-radius: 20px;
+            padding: 28px;
+            box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.03), 0 2px 6px -1px rgba(15, 23, 42, 0.02);
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            min-height: 175px;
+            min-height: 185px;
             position: relative;
             overflow: hidden;
-            transition: all 0.25s ease;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .educore-bento-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 12px 28px -4px rgba(0, 0, 0, 0.08);
+            transform: translateY(-5px);
+            box-shadow: 0 20px 30px -10px rgba(15, 23, 42, 0.08);
             border-color: #cbd5e1;
         }
 
@@ -244,70 +291,86 @@ function educore_dashboard_tab() {
             top: 0;
             left: 0;
             bottom: 0;
-            width: 4px;
+            width: 5px;
         }
 
-        .card-students::before  { background: #2563eb; }
-        .card-present::before   { background: #059669; }
-        .card-absent::before    { background: #d97706; }
-        .card-fees::before      { background: #7c3aed; }
-        .card-dues::before      { background: #dc2626; }
-        .card-staff::before     { background: #006a4e; }
+        .card-students::before { background: linear-gradient(180deg, #2563eb, #3b82f6); }
+        .card-present::before  { background: linear-gradient(180deg, #059669, #10b981); }
+        .card-absent::before   { background: linear-gradient(180deg, #d97706, #f59e0b); }
+        .card-fees::before     { background: linear-gradient(180deg, #7c3aed, #8b5cf6); }
+        .card-dues::before     { background: linear-gradient(180deg, #dc2626, #ef4444); }
+        .card-staff::before    { background: linear-gradient(180deg, #006a4e, #059669); }
 
         .educore-card-header-flex {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            margin-bottom: 12px;
+            margin-bottom: 16px;
         }
 
         .educore-card-label {
-            font-size: 11.5px;
+            font-size: 12px;
             font-weight: 800;
             text-transform: uppercase;
-            letter-spacing: 0.6px;
+            letter-spacing: 0.8px;
             color: #64748b;
         }
 
         .educore-card-icon-badge {
-            width: 38px;
-            height: 38px;
-            border-radius: 10px;
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
+            transition: transform 0.3s ease;
+        }
+
+        .educore-bento-card:hover .educore-card-icon-badge {
+            transform: scale(1.1);
+        }
+
+        .educore-card-icon-badge .dashicons {
+            font-size: 22px;
+            width: 22px;
+            height: 22px;
         }
 
         .educore-card-value {
-            font-size: 36px;
+            font-size: 38px;
             font-weight: 800;
             line-height: 1;
-            letter-spacing: -1px;
-            margin-bottom: 20px;
+            letter-spacing: -1.2px;
+            margin-bottom: 22px;
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
         }
 
-        .val-slate  { color: #0f172a; }
-        .val-green  { color: #059669; }
-        .val-amber  { color: #d97706; }
-        .val-purple { color: #7c3aed; }
-        .val-red    { color: #dc2626; }
-        .val-emerald{ color: #006a4e; }
+        .val-slate   { color: #0f172a; }
+        .val-green   { color: #059669; }
+        .val-amber   { color: #d97706; }
+        .val-purple  { color: #7c3aed; }
+        .val-red     { color: #dc2626; }
+        .val-emerald { color: #006a4e; }
 
         .educore-card-footer {
             display: flex;
             align-items: center;
             justify-content: space-between;
             border-top: 1px solid #f1f5f9;
-            padding-top: 14px;
+            padding-top: 16px;
             margin-top: auto;
         }
 
         .educore-badge-tag {
-            padding: 4px 10px;
-            border-radius: 6px;
+            padding: 5px 12px;
+            border-radius: 8px;
             font-size: 11.5px;
             font-weight: 700;
-            display: inline-block;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
         }
 
         .tag-blue    { background: #eff6ff; color: #2563eb; }
@@ -318,28 +381,32 @@ function educore_dashboard_tab() {
         .tag-emerald { background: #e6f4f1; color: #006a4e; }
 
         .educore-action-link-btn {
-            font-size: 12.5px;
+            font-size: 13px;
             font-weight: 700;
             text-decoration: none;
             transition: all 0.2s ease;
             display: inline-flex;
             align-items: center;
-            gap: 4px;
+            gap: 6px;
         }
 
-        .link-blue   { color: #2563eb; }
-        .link-green  { color: #059669; }
-        .link-amber  { color: #d97706; }
-        .link-red    { color: #dc2626; }
-        .link-emerald{ color: #006a4e; }
+        .link-blue    { color: #2563eb; }
+        .link-green   { color: #059669; }
+        .link-amber   { color: #d97706; }
+        .link-purple  { color: #7c3aed; }
+        .link-red     { color: #dc2626; }
+        .link-emerald { color: #006a4e; }
 
-        .educore-action-link-btn:hover { text-decoration: underline; }
+        .educore-action-link-btn:hover {
+            transform: translateX(3px);
+            text-decoration: none;
+        }
 
-        /* Secondary Lower Bento Layout */
+        /* Secondary Lower Layout */
         .educore-lower-bento-grid {
             display: grid;
-            grid-template-columns: 2fr 1fr;
-            gap: 22px;
+            grid-template-columns: 2.1fr 1fr;
+            gap: 24px;
         }
 
         @media (max-width: 1024px) { .educore-lower-bento-grid { grid-template-columns: 1fr; } }
@@ -347,36 +414,37 @@ function educore_dashboard_tab() {
         .dpt-panel-card {
             background: #ffffff;
             border: 1px solid #e2e8f0;
-            border-radius: 18px;
-            padding: 26px;
-            box-shadow: 0 4px 20px -2px rgba(0,0,0,0.03);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.03);
         }
 
         .dpt-panel-title {
-            font-size: 16px;
+            font-size: 17px;
             font-weight: 800;
             color: #0f172a;
-            margin: 0 0 18px 0;
-            padding-bottom: 12px;
+            margin: 0 0 20px 0;
+            padding-bottom: 14px;
             border-bottom: 1px solid #f1f5f9;
             display: flex;
             align-items: center;
             justify-content: space-between;
+            letter-spacing: -0.3px;
         }
 
-        /* Quick Shortcut Buttons */
+        /* Quick Shortcuts */
         .educore-quick-actions-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-            gap: 12px;
-            margin-bottom: 20px;
+            gap: 14px;
+            margin-bottom: 24px;
         }
 
         .educore-quick-btn {
             background: #f8fafc;
             border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            padding: 14px 10px;
+            border-radius: 14px;
+            padding: 16px 12px;
             text-align: center;
             text-decoration: none;
             color: #334155;
@@ -385,28 +453,63 @@ function educore_dashboard_tab() {
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 8px;
-            transition: all 0.2s ease;
+            gap: 10px;
+            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .educore-quick-btn:hover {
             background: #006a4e;
             color: #ffffff;
             border-color: #006a4e;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 106, 78, 0.2);
+            transform: translateY(-3px);
+            box-shadow: 0 8px 18px rgba(0, 106, 78, 0.22);
         }
 
         .educore-quick-btn .dashicons {
-            font-size: 22px;
-            width: 22px;
-            height: 22px;
+            font-size: 24px;
+            width: 24px;
+            height: 24px;
+            transition: transform 0.2s ease;
         }
 
-        /* Activity Table */
-        .dpt-matrix-table { width: 100%; border-collapse: separate; border-spacing: 0; text-align: left; }
-        .dpt-matrix-table th { background: #f8fafc; color: #475569; font-weight: 700; font-size: 11.5px; text-transform: uppercase; padding: 10px 14px; border-bottom: 1px solid #e2e8f0; }
-        .dpt-matrix-table td { padding: 12px 14px; border-bottom: 1px solid #f1f5f9; font-size: 13px; color: #334155; }
+        .educore-quick-btn:hover .dashicons {
+            transform: scale(1.15);
+        }
+
+        /* Activity Table Matrix */
+        .dpt-matrix-table { 
+            width: 100%; 
+            border-collapse: separate; 
+            border-spacing: 0; 
+            text-align: left; 
+        }
+
+        .dpt-matrix-table th { 
+            background: #f8fafc; 
+            color: #475569; 
+            font-weight: 700; 
+            font-size: 11.5px; 
+            text-transform: uppercase; 
+            letter-spacing: 0.6px;
+            padding: 12px 16px; 
+            border-bottom: 1px solid #e2e8f0; 
+        }
+
+        .dpt-matrix-table td { 
+            padding: 14px 16px; 
+            border-bottom: 1px solid #f1f5f9; 
+            font-size: 13.5px; 
+            color: #334155; 
+            vertical-align: middle;
+        }
+
+        .dpt-matrix-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .dpt-matrix-table tr:hover td {
+            background: #f8fafc;
+        }
     </style>
 
     <div class="educore-dashboard-wrapper">
@@ -419,7 +522,13 @@ function educore_dashboard_tab() {
                 </div>
                 <div class="educore-hero-title-group">
                     <h1><?php echo esc_html( $rendered_greeting ); ?></h1>
-                    <p><?php esc_html_e( 'Academic & Institutional Operations Control Panel', 'educore' ); ?></p>
+                    <p>
+                        <?php esc_html_e( 'Academic & Institutional Operations Control Panel', 'educore' ); ?>
+                        <span class="educore-status-pill-online">
+                            <span class="educore-pulse-dot"></span>
+                            <?php esc_html_e( 'System Live', 'educore' ); ?>
+                        </span>
+                    </p>
                 </div>
             </div>
 
@@ -429,8 +538,8 @@ function educore_dashboard_tab() {
                     <?php echo esc_html( date_i18n( 'l, jS F Y' ) ); ?>
                 </div>
                 <div class="educore-clock-digits">
-                    <span class="dashicons dashicons-clock" style="color: #10b981; font-size: 18px; width:18px; height:18px;"></span>
-                    <span id="educoreLiveTickerClock">00:00:00</span>
+                    <span class="dashicons dashicons-clock" style="color: #34d399; font-size: 20px; width:20px; height:20px;"></span>
+                    <span id="educoreLiveTickerClock">--:--:--</span>
                 </div>
             </div>
         </div>
@@ -443,12 +552,19 @@ function educore_dashboard_tab() {
                 <div>
                     <div class="educore-card-header-flex">
                         <div class="educore-card-label"><?php esc_html_e( 'Total Active Students', 'educore' ); ?></div>
-                        <div class="educore-card-icon-badge" style="background:#eff6ff; color:#2563eb;"><span class="dashicons dashicons-groups"></span></div>
+                        <div class="educore-card-icon-badge" style="background:#eff6ff; color:#2563eb;">
+                            <span class="dashicons dashicons-groups"></span>
+                        </div>
                     </div>
-                    <div class="educore-card-value val-slate"><?php echo esc_html( number_format_i18n( $total_students ) ); ?></div>
+                    <div class="educore-card-value val-slate">
+                        <?php echo esc_html( number_format_i18n( $total_students ) ); ?>
+                    </div>
                 </div>
                 <div class="educore-card-footer">
-                    <span class="educore-badge-tag tag-blue"><?php esc_html_e( 'Enrolled', 'educore' ); ?></span>
+                    <span class="educore-badge-tag tag-blue">
+                        <span class="dashicons dashicons-yes-alt" style="font-size:12px; width:12px; height:12px;"></span>
+                        <?php esc_html_e( 'Enrolled', 'educore' ); ?>
+                    </span>
                     <a href="<?php echo esc_url( $students_tab_url ); ?>" class="educore-action-link-btn link-blue">
                         <?php esc_html_e( 'Directory', 'educore' ); ?> &rarr;
                     </a>
@@ -460,11 +576,13 @@ function educore_dashboard_tab() {
                 <div>
                     <div class="educore-card-header-flex">
                         <div class="educore-card-label"><?php esc_html_e( 'Present Today', 'educore' ); ?></div>
-                        <div class="educore-card-icon-badge" style="background:#ecfdf5; color:#059669;"><span class="dashicons dashicons-yes-alt"></span></div>
+                        <div class="educore-card-icon-badge" style="background:#ecfdf5; color:#059669;">
+                            <span class="dashicons dashicons-yes-alt"></span>
+                        </div>
                     </div>
                     <div class="educore-card-value val-green">
                         <?php echo esc_html( number_format_i18n( $today_present ) ); ?>
-                        <small style="font-size:14px; font-weight:600; color:#64748b;">(<?php echo $attendance_percentage; ?>%)</small>
+                        <small style="font-size:14px; font-weight:700; color:#64748b; margin-left:4px;">(<?php echo $attendance_percentage; ?>%)</small>
                     </div>
                 </div>
                 <div class="educore-card-footer">
@@ -480,9 +598,13 @@ function educore_dashboard_tab() {
                 <div>
                     <div class="educore-card-header-flex">
                         <div class="educore-card-label"><?php esc_html_e( 'Absent Today', 'educore' ); ?></div>
-                        <div class="educore-card-icon-badge" style="background:#fffbeb; color:#d97706;"><span class="dashicons dashicons-dismiss"></span></div>
+                        <div class="educore-card-icon-badge" style="background:#fffbeb; color:#d97706;">
+                            <span class="dashicons dashicons-dismiss"></span>
+                        </div>
                     </div>
-                    <div class="educore-card-value val-amber"><?php echo esc_html( number_format_i18n( $today_absent ) ); ?></div>
+                    <div class="educore-card-value val-amber">
+                        <?php echo esc_html( number_format_i18n( $today_absent ) ); ?>
+                    </div>
                 </div>
                 <div class="educore-card-footer">
                     <span class="educore-badge-tag tag-amber"><?php esc_html_e( 'Missing', 'educore' ); ?></span>
@@ -497,9 +619,13 @@ function educore_dashboard_tab() {
                 <div>
                     <div class="educore-card-header-flex">
                         <div class="educore-card-label"><?php esc_html_e( "Today's Fee Collection", 'educore' ); ?></div>
-                        <div class="educore-card-icon-badge" style="background:#f3e8ff; color:#7c3aed;"><span class="dashicons dashicons-money-alt"></span></div>
+                        <div class="educore-card-icon-badge" style="background:#f3e8ff; color:#7c3aed;">
+                            <span class="dashicons dashicons-money-alt"></span>
+                        </div>
                     </div>
-                    <div class="educore-card-value val-purple">৳<?php echo esc_html( number_format( $today_collection, 2 ) ); ?></div>
+                    <div class="educore-card-value val-purple">
+                        ৳<?php echo esc_html( number_format( $today_collection, 2 ) ); ?>
+                    </div>
                 </div>
                 <div class="educore-card-footer">
                     <span class="educore-badge-tag tag-purple"><?php esc_html_e( 'Gross Inflow', 'educore' ); ?></span>
@@ -514,9 +640,13 @@ function educore_dashboard_tab() {
                 <div>
                     <div class="educore-card-header-flex">
                         <div class="educore-card-label"><?php esc_html_e( 'Total Pending Dues', 'educore' ); ?></div>
-                        <div class="educore-card-icon-badge" style="background:#fef2f2; color:#dc2626;"><span class="dashicons dashicons-warning"></span></div>
+                        <div class="educore-card-icon-badge" style="background:#fef2f2; color:#dc2626;">
+                            <span class="dashicons dashicons-warning"></span>
+                        </div>
                     </div>
-                    <div class="educore-card-value val-red">৳<?php echo esc_html( number_format( $total_pending_fees, 2 ) ); ?></div>
+                    <div class="educore-card-value val-red">
+                        ৳<?php echo esc_html( number_format( $total_pending_fees, 2 ) ); ?>
+                    </div>
                 </div>
                 <div class="educore-card-footer">
                     <span class="educore-badge-tag tag-red"><?php esc_html_e( 'Receivables', 'educore' ); ?></span>
@@ -531,9 +661,13 @@ function educore_dashboard_tab() {
                 <div>
                     <div class="educore-card-header-flex">
                         <div class="educore-card-label"><?php esc_html_e( 'Faculty & Staff', 'educore' ); ?></div>
-                        <div class="educore-card-icon-badge" style="background:#e6f4f1; color:#006a4e;"><span class="dashicons dashicons-businessman"></span></div>
+                        <div class="educore-card-icon-badge" style="background:#e6f4f1; color:#006a4e;">
+                            <span class="dashicons dashicons-businessman"></span>
+                        </div>
                     </div>
-                    <div class="educore-card-value val-emerald"><?php echo esc_html( number_format_i18n( $total_staff ) ); ?></div>
+                    <div class="educore-card-value val-emerald">
+                        <?php echo esc_html( number_format_i18n( $total_staff ) ); ?>
+                    </div>
                 </div>
                 <div class="educore-card-footer">
                     <span class="educore-badge-tag tag-emerald"><?php esc_html_e( 'Active Teachers', 'educore' ); ?></span>
@@ -551,7 +685,10 @@ function educore_dashboard_tab() {
             <!-- Panel 1: Quick Actions Console & System Shortcuts -->
             <div class="dpt-panel-card">
                 <h3 class="dpt-panel-title">
-                    <span><span class="dashicons dashicons-admin-links" style="color:#006a4e;"></span> <?php esc_html_e( 'Quick Administrative Actions', 'educore' ); ?></span>
+                    <span style="display:flex; align-items:center; gap:8px;">
+                        <span class="dashicons dashicons-admin-links" style="color:#006a4e; font-size:20px; width:20px; height:20px;"></span> 
+                        <?php esc_html_e( 'Quick Administrative Actions', 'educore' ); ?>
+                    </span>
                 </h3>
 
                 <div class="educore-quick-actions-grid">
@@ -582,11 +719,11 @@ function educore_dashboard_tab() {
                 </div>
 
                 <!-- Recent Fee Collections Activity List -->
-                <div style="margin-top:20px;">
-                    <div style="font-size:13px; font-weight:800; color:#0f172a; margin-bottom:10px; text-transform:uppercase; letter-spacing:0.5px;">
+                <div style="margin-top:24px;">
+                    <div style="font-size:12px; font-weight:800; color:#0f172a; margin-bottom:12px; text-transform:uppercase; letter-spacing:0.8px;">
                         <?php esc_html_e( 'Recent Fee Payment Receipts', 'educore' ); ?>
                     </div>
-                    <div style="overflow-x:auto; border:1px solid #e2e8f0; border-radius:12px;">
+                    <div style="overflow-x:auto; border:1px solid #e2e8f0; border-radius:14px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
                         <table class="dpt-matrix-table">
                             <thead>
                                 <tr>
@@ -599,13 +736,13 @@ function educore_dashboard_tab() {
                             <tbody>
                                 <?php if ( ! empty( $recent_receipts ) ) : foreach ( $recent_receipts as $rc ) : ?>
                                     <tr>
-                                        <td><strong style="color:#2563eb;"><?php echo esc_html( $rc->type ); ?></strong></td>
-                                        <td><small style="color:#64748b;"><?php echo esc_html( date_i18n( 'd M, g:i a', strtotime( $rc->log_date ) ) ); ?></small></td>
-                                        <td><span style="background:#f1f5f9; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:700;"><?php echo esc_html( $rc->payment_method ); ?></span></td>
-                                        <td style="text-align:right; font-weight:800; color:#059669;">+৳<?php echo esc_html( number_format( $rc->amount, 2 ) ); ?></td>
+                                        <td><strong style="color:#2563eb; font-weight:700;"><?php echo esc_html( $rc->type ); ?></strong></td>
+                                        <td><small style="color:#64748b; font-weight:500;"><?php echo esc_html( date_i18n( 'd M, g:i a', strtotime( $rc->log_date ) ) ); ?></small></td>
+                                        <td><span style="background:#f1f5f9; color:#475569; padding:3px 10px; border-radius:6px; font-size:11px; font-weight:700; border:1px solid #e2e8f0;"><?php echo esc_html( $rc->payment_method ); ?></span></td>
+                                        <td style="text-align:right; font-weight:800; color:#059669; font-size:14px;">+৳<?php echo esc_html( number_format( $rc->amount, 2 ) ); ?></td>
                                     </tr>
                                 <?php endforeach; else : ?>
-                                    <tr><td colspan="4" style="text-align:center; color:#94a3b8; padding:20px;"><?php esc_html_e( 'No recent fee receipts logged today.', 'educore' ); ?></td></tr>
+                                    <tr><td colspan="4" style="text-align:center; color:#94a3b8; padding:24px; font-weight:500;"><?php esc_html_e( 'No recent fee receipts logged today.', 'educore' ); ?></td></tr>
                                 <?php endif; ?>
                             </tbody>
                         </table>
@@ -616,31 +753,35 @@ function educore_dashboard_tab() {
             <!-- Panel 2: System Health & Institutional Readiness -->
             <div class="dpt-panel-card">
                 <h3 class="dpt-panel-title">
-                    <span><span class="dashicons dashicons-dashboard" style="color:#006a4e;"></span> <?php esc_html_e( 'System Status', 'educore' ); ?></span>
+                    <span style="display:flex; align-items:center; gap:8px;">
+                        <span class="dashicons dashicons-dashboard" style="color:#006a4e; font-size:20px; width:20px; height:20px;"></span> 
+                        <?php esc_html_e( 'System Status', 'educore' ); ?>
+                    </span>
                 </h3>
 
-                <div style="display:flex; flex-direction:column; gap:16px;">
-                    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px;">
-                        <div style="font-size:12px; font-weight:700; color:#64748b; margin-bottom:4px;"><?php esc_html_e( 'Attendance Ratio', 'educore' ); ?></div>
-                        <div style="font-size:20px; font-weight:800; color:#0f172a;"><?php echo $attendance_percentage; ?>% <?php esc_html_e( 'Present Today', 'educore' ); ?></div>
-                        <div style="height:6px; background:#e2e8f0; border-radius:10px; margin-top:8px; overflow:hidden;">
-                            <div style="width:<?php echo $attendance_percentage; ?>%; height:100%; background:#10b981; border-radius:10px;"></div>
+                <div style="display:flex; flex-direction:column; gap:18px;">
+                    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; padding:18px;">
+                        <div style="font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:0.6px; color:#64748b; margin-bottom:6px;"><?php esc_html_e( 'Attendance Ratio', 'educore' ); ?></div>
+                        <div style="font-size:22px; font-weight:800; color:#0f172a; letter-spacing:-0.5px;"><?php echo $attendance_percentage; ?>% <span style="font-size:13px; font-weight:600; color:#64748b;"><?php esc_html_e( 'Present Today', 'educore' ); ?></span></div>
+                        <div style="height:8px; background:#e2e8f0; border-radius:10px; margin-top:10px; overflow:hidden;">
+                            <div style="width:<?php echo $attendance_percentage; ?>%; height:100%; background:linear-gradient(90deg, #10b981, #059669); border-radius:10px; transition: width 1s ease-in-out;"></div>
                         </div>
                     </div>
 
-                    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px;">
-                        <div style="font-size:12px; font-weight:700; color:#64748b; margin-bottom:4px;"><?php esc_html_e( 'Database Engine', 'educore' ); ?></div>
-                        <div style="font-size:14px; font-weight:800; color:#059669; display:flex; align-items:center; gap:6px;">
-                            <span class="dashicons dashicons-database" style="font-size:16px; width:16px; height:16px;"></span>
+                    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; padding:18px;">
+                        <div style="font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:0.6px; color:#64748b; margin-bottom:6px;"><?php esc_html_e( 'Database Engine', 'educore' ); ?></div>
+                        <div style="font-size:14px; font-weight:800; color:#059669; display:flex; align-items:center; gap:8px;">
+                            <span class="dashicons dashicons-database" style="font-size:18px; width:18px; height:18px;"></span>
                             <?php esc_html_e( 'Connected & Synchronized', 'educore' ); ?>
                         </div>
                     </div>
 
-                    <div style="background:#ecfdf5; border:1px solid #a7f3d0; border-radius:12px; padding:16px; color:#065f46;">
-                        <div style="font-size:13px; font-weight:800; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
-                            <span class="dashicons dashicons-shield"></span> <?php esc_html_e( 'EduCore Active', 'educore' ); ?>
+                    <div style="background:#ecfdf5; border:1px solid #a7f3d0; border-radius:14px; padding:18px; color:#065f46;">
+                        <div style="font-size:13px; font-weight:800; margin-bottom:4px; display:flex; align-items:center; gap:8px;">
+                            <span class="dashicons dashicons-shield" style="font-size:18px; width:18px; height:18px;"></span> 
+                            <?php esc_html_e( 'EduCore Active', 'educore' ); ?>
                         </div>
-                        <small style="font-weight:600; font-size:12px;"><?php esc_html_e( 'All modules running smoothly with zero schema conflicts.', 'educore' ); ?></small>
+                        <div style="font-weight:600; font-size:12px; color:#047857; line-height:1.4;"><?php esc_html_e( 'All modules running smoothly with zero schema conflicts.', 'educore' ); ?></div>
                     </div>
                 </div>
             </div>
@@ -653,9 +794,16 @@ function educore_dashboard_tab() {
     document.addEventListener('DOMContentLoaded', function() {
         function educoreDashboardClockEngine() {
             var timeObject = new Date();
-            var processString = timeObject.getHours().toString().padStart(2, '0') + ':' + 
-                                timeObject.getMinutes().toString().padStart(2, '0') + ':' + 
-                                timeObject.getSeconds().toString().padStart(2, '0');
+            var hours = timeObject.getHours();
+            var minutes = timeObject.getMinutes().toString().padStart(2, '0');
+            var seconds = timeObject.getSeconds().toString().padStart(2, '0');
+            var ampm = hours >= 12 ? 'PM' : 'AM';
+            
+            hours = hours % 12;
+            hours = hours ? hours : 12; // Hour '0' should be '12'
+            var formattedHours = hours.toString().padStart(2, '0');
+            
+            var processString = formattedHours + ':' + minutes + ':' + seconds + ' ' + ampm;
             var tickerContainer = document.getElementById('educoreLiveTickerClock');
             if (tickerContainer) {
                 tickerContainer.textContent = processString;
