@@ -12,20 +12,105 @@ function educore_staff_list_view() {
         wp_die( esc_html__( 'You do not have permission to view the staff directory.', 'educore' ) );
     }
 
-    // 2. Fetch staff records safely directly from database
-    $staff_members = $wpdb->get_results( 
-        "SELECT id, wp_user_id, full_name, name_bn, designation, profile_image 
-         FROM {$table_staff} 
-         ORDER BY id DESC" 
+    // Active Tab Handler (URL Key)
+    $active_tab = isset( $_GET['type'] ) ? sanitize_key( $_GET['type'] ) : 'school_teacher';
+
+    // Map URL tab keys directly to exact DB `staff_type` values stored in form select
+    $tab_to_db_map = array(
+        'school_teacher'  => 'Teacher (School)',
+        'college_teacher' => 'Teacher (College)',
+        'staff'           => 'Staff',
+        'officer'         => 'Officer',
     );
 
-    $add_url = admin_url( 'admin.php?page=school_management_system&tab=staff&sub=add' );
+    // Fallback to School Teacher if tab is invalid
+    if ( ! array_key_exists( $active_tab, $tab_to_db_map ) ) {
+        $active_tab = 'school_teacher';
+    }
+
+    $db_staff_type = $tab_to_db_map[ $active_tab ];
+
+    // Detect Order Column dynamically in db
+    $db_columns  = $wpdb->get_col( "DESCRIBE {$table_staff}", 0 );
+    $order_col   = 'id';
+
+    if ( in_array( 'sort_order', $db_columns, true ) ) {
+        $order_col = 'sort_order';
+    } elseif ( in_array( 'serial_number', $db_columns, true ) ) {
+        $order_col = 'serial_number';
+    } elseif ( in_array( 'position', $db_columns, true ) ) {
+        $order_col = 'position';
+    } elseif ( in_array( 'order_no', $db_columns, true ) ) {
+        $order_col = 'order_no';
+    } elseif ( in_array( 'serial', $db_columns, true ) ) {
+        $order_col = 'serial';
+    }
+
+    // Fetch DB records ordered strictly by DB order column
+    $staff_members = $wpdb->get_results( 
+        $wpdb->prepare(
+            "SELECT *, {$order_col} AS db_order_number 
+             FROM {$table_staff} 
+             WHERE staff_type = %s 
+             ORDER BY {$order_col} ASC, id DESC",
+            $db_staff_type
+        )
+    );
+
+    // Tab Base URL Generator
+    $base_tab_url  = admin_url( 'admin.php?page=school_management_system&tab=staff' );
+    $school_url    = add_query_arg( 'type', 'school_teacher', $base_tab_url );
+    $college_url   = add_query_arg( 'type', 'college_teacher', $base_tab_url );
+    $staff_url     = add_query_arg( 'type', 'staff', $base_tab_url );
+    $officer_url   = add_query_arg( 'type', 'officer', $base_tab_url );
+    $add_url       = add_query_arg( 'sub', 'add', $base_tab_url );
     ?>
 
     <style>
         /* ==========================================================================
-           EDUCORE MODERN ACTION BUTTONS WITH SVG ICONS
+           EDUCORE CATEGORY TABS & ACTION BUTTONS
            ========================================================================== */
+        .educore-tabs-wrapper {
+            display: flex;
+            align-items: center;
+            border-bottom: 2px solid #e2e8f0;
+            margin-bottom: 24px;
+            gap: 6px;
+        }
+
+        .educore-tab-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #64748b;
+            text-decoration: none;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.2s ease-in-out;
+        }
+
+        .educore-tab-item:hover {
+            color: #006a4e;
+        }
+
+        .educore-tab-item.active {
+            color: #006a4e;
+            border-bottom-color: #006a4e;
+            background-color: #f0fdf4;
+            border-top-left-radius: 6px;
+            border-top-right-radius: 6px;
+        }
+
+        .educore-tab-item .dashicons {
+            font-size: 17px;
+            width: 17px;
+            height: 17px;
+            line-height: 1;
+        }
+
         .educore-action-group {
             display: inline-flex;
             align-items: center;
@@ -56,7 +141,7 @@ function educore_staff_list_view() {
             flex-shrink: 0;
         }
 
-        /* View Button (Teal / Cyan Soft) */
+        /* View Button (Teal Soft) */
         .educore-btn-view {
             background-color: #f0fdf4;
             color: #006a4e;
@@ -69,7 +154,7 @@ function educore_staff_list_view() {
             box-shadow: 0 2px 6px rgba(0, 106, 78, 0.25);
         }
 
-        /* Edit Button (Indigo / Blue Soft) */
+        /* Edit Button (Indigo Soft) */
         .educore-btn-edit {
             background-color: #eff6ff;
             color: #2563eb;
@@ -82,7 +167,7 @@ function educore_staff_list_view() {
             box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
         }
 
-        /* Delete Button (Rose / Red Soft) */
+        /* Delete Button (Rose Soft) */
         .educore-btn-delete {
             background-color: #fef2f2;
             color: #dc2626;
@@ -94,9 +179,36 @@ function educore_staff_list_view() {
             border-color: #dc2626;
             box-shadow: 0 2px 6px rgba(220, 38, 38, 0.25);
         }
+
+        /* Order Badge Styling */
+        .educore-order-badge {
+            display: inline-block;
+            background-color: #f1f5f9;
+            color: #334155;
+            font-weight: 700;
+            font-size: 13px;
+            padding: 3px 9px;
+            border-radius: 4px;
+            border: 1px solid #cbd5e1;
+            min-width: 34px;
+            text-align: center;
+        }
+
+        /* Employment Type Badge Styling */
+        .educore-emp-type-badge {
+            display: inline-block;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 4px;
+            background-color: #f0fdf4;
+            color: #006a4e;
+            border: 1px solid #bbf7d0;
+        }
     </style>
 
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <!-- Header Title & Action CTA -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
         <h2>
             <span class="dashicons dashicons-groups text-success me-1"></span> 
             <?php esc_html_e( 'Teachers & Staff Directory', 'educore' ); ?>
@@ -106,13 +218,37 @@ function educore_staff_list_view() {
         </a>
     </div>
 
+    <!-- Category Tabs Navigation (4 Tabs) -->
+    <div class="educore-tabs-wrapper">
+        <a href="<?php echo esc_url( $school_url ); ?>" class="educore-tab-item <?php echo ( $active_tab === 'school_teacher' ) ? 'active' : ''; ?>">
+            <span class="dashicons dashicons-welcome-learn-more"></span>
+            <?php esc_html_e( 'School Teacher', 'educore' ); ?>
+        </a>
+
+        <a href="<?php echo esc_url( $college_url ); ?>" class="educore-tab-item <?php echo ( $active_tab === 'college_teacher' ) ? 'active' : ''; ?>">
+            <span class="dashicons dashicons-bank"></span>
+            <?php esc_html_e( 'College Teacher', 'educore' ); ?>
+        </a>
+
+        <a href="<?php echo esc_url( $staff_url ); ?>" class="educore-tab-item <?php echo ( $active_tab === 'staff' ) ? 'active' : ''; ?>">
+            <span class="dashicons dashicons-id"></span>
+            <?php esc_html_e( 'Staff', 'educore' ); ?>
+        </a>
+
+        <a href="<?php echo esc_url( $officer_url ); ?>" class="educore-tab-item <?php echo ( $active_tab === 'officer' ) ? 'active' : ''; ?>">
+            <span class="dashicons dashicons-businessperson"></span>
+            <?php esc_html_e( 'Officers', 'educore' ); ?>
+        </a>
+    </div>
+
     <div class="bg-white p-4 rounded shadow-sm border">
         <table class="table table-striped table-hover align-middle educore-datatable w-100">
             <thead class="table-light">
                 <tr>
-                    <th style="width: 65px;"><?php esc_html_e( 'Photo', 'educore' ); ?></th>
+                    <th style="width: 70px; text-align: center;"><?php esc_html_e( 'Order', 'educore' ); ?></th>
                     <th><?php esc_html_e( 'Name', 'educore' ); ?></th>
                     <th><?php esc_html_e( 'Designation', 'educore' ); ?></th>
+                    <th style="width: 180px;"><?php esc_html_e( 'Employment Type', 'educore' ); ?></th>
                     <th style="text-align: right; width: 220px;"><?php esc_html_e( 'Actions', 'educore' ); ?></th>
                 </tr>
             </thead>
@@ -127,24 +263,19 @@ function educore_staff_list_view() {
                             'delete_staff_' . $staff_id 
                         );
 
-                        // Fallback handling for Bengali & Multibyte Name Initials
-                        $full_name    = ! empty( $staff->name_bn ) ? $staff->name_bn : ( $staff->full_name ?? 'S' );
-                        $first_letter = mb_substr( $full_name, 0, 1, 'UTF-8' );
+                        // Order value direct from DB
+                        $order_no = isset( $staff->db_order_number ) ? absint( $staff->db_order_number ) : 0;
+
+                        // Primary Name Resolution with Fallback
+                        $full_name = ! empty( $staff->name_bn ) ? $staff->name_bn : ( ! empty( $staff->full_name ) ? $staff->full_name : ( ! empty( $staff->name ) ? $staff->name : '' ) );
+
+                        // Employment Type display value stored directly in staff_type
+                        $emp_type_label = ! empty( $staff->staff_type ) ? $staff->staff_type : $db_staff_type;
                     ?>
                     <tr>
-                        <!-- Photo Avatar -->
-                        <td>
-                            <?php if ( ! empty( $staff->profile_image ) ) : ?>
-                                <img src="<?php echo esc_url( $staff->profile_image ); ?>" 
-                                     alt="<?php echo esc_attr( $full_name ); ?>" 
-                                     class="rounded-circle border" 
-                                     style="width: 42px; height: 42px; object-fit: cover;">
-                            <?php else : ?>
-                                <div class="rounded-circle bg-light text-success fw-bold d-flex align-items-center justify-content-center border" 
-                                     style="width: 42px; height: 42px; font-size: 1.1rem; border-color: #006a4e !important;">
-                                    <?php echo esc_html( mb_strtoupper( $first_letter, 'UTF-8' ) ); ?>
-                                </div>
-                            <?php endif; ?>
+                        <!-- Order Number Column (from DB) -->
+                        <td class="text-center">
+                            <span class="educore-order-badge"><?php echo esc_html( $order_no ); ?></span>
                         </td>
 
                         <!-- Name & WP User Link -->
@@ -161,7 +292,14 @@ function educore_staff_list_view() {
                         <!-- Designation -->
                         <td>
                             <span class="badge bg-secondary px-2 py-1" style="font-weight: 600; font-size: 12px;">
-                                <?php echo esc_html( $staff->designation ?? __( 'Staff Member', 'educore' ) ); ?>
+                                <?php echo esc_html( ! empty( $staff->designation ) ? $staff->designation : __( 'Staff Member', 'educore' ) ); ?>
+                            </span>
+                        </td>
+
+                        <!-- Employment Type Column -->
+                        <td>
+                            <span class="educore-emp-type-badge">
+                                <?php echo esc_html( $emp_type_label ); ?>
                             </span>
                         </td>
 
@@ -194,8 +332,8 @@ function educore_staff_list_view() {
                     <?php endforeach; ?>
                 <?php else : ?>
                     <tr>
-                        <td colspan="4" class="text-center py-4 text-muted">
-                            <?php esc_html_e( 'No staff records found in system database.', 'educore' ); ?>
+                        <td colspan="5" class="text-center py-4 text-muted">
+                            <?php esc_html_e( 'No records found for this category.', 'educore' ); ?>
                         </td>
                     </tr>
                 <?php endif; ?>
@@ -206,11 +344,18 @@ function educore_staff_list_view() {
     <!-- DataTables Safe Initialization -->
     <script type="text/javascript">
     jQuery(document).ready(function($) {
-        if ($.fn.DataTable && !$.fn.DataTable.isDataTable('.educore-datatable')) {
+        if ($.fn.DataTable) {
+            if ($.fn.DataTable.isDataTable('.educore-datatable')) {
+                $('.educore-datatable').DataTable().destroy();
+            }
             $('.educore-datatable').DataTable({
                 "pageLength": 15,
                 "ordering": true,
+                "order": [[0, "asc"]],
                 "responsive": true,
+                "columnDefs": [
+                    { "orderable": false, "targets": [4] }
+                ],
                 "language": {
                     "emptyTable": "<?php echo esc_js( __( 'No staff records found.', 'educore' ) ); ?>"
                 }
@@ -220,4 +365,3 @@ function educore_staff_list_view() {
     </script>
     <?php
 }
-?>

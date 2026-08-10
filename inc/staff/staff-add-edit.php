@@ -37,6 +37,7 @@ function educore_staff_add_edit_view() {
         }
 
         $data = array(
+            'order_number'       => isset( $_POST['order_number'] ) ? absint( $_POST['order_number'] ) : 0,
             'full_name'          => isset( $_POST['full_name'] ) ? sanitize_text_field( $_POST['full_name'] ) : '',
             'name_bn'            => isset( $_POST['name_bn'] ) ? sanitize_text_field( $_POST['name_bn'] ) : '',
             'father_name'        => isset( $_POST['father_name'] ) ? sanitize_text_field( $_POST['father_name'] ) : '',
@@ -144,15 +145,19 @@ function educore_staff_add_edit_view() {
 
                 <h5 class="mb-3 text-success border-bottom pb-2"><?php esc_html_e( 'Personal Identification', 'educore' ); ?></h5>
                 <div class="row">
-                    <div class="col-md-4 mb-3">
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label fw-bold"><?php esc_html_e( 'Order Number', 'educore' ); ?></label>
+                        <input type="number" name="order_number" class="form-control" placeholder="e.g., 1" value="<?php echo $staff ? esc_attr( $staff->order_number ) : '0'; ?>" min="0">
+                    </div>
+                    <div class="col-md-3 mb-3">
                         <label class="form-label fw-bold"><?php esc_html_e( 'Full Name (English)', 'educore' ); ?></label>
                         <input type="text" name="full_name" class="form-control" value="<?php echo $staff ? esc_attr( $staff->full_name ) : ''; ?>" required>
                     </div>
-                    <div class="col-md-4 mb-3">
+                    <div class="col-md-3 mb-3">
                         <label class="form-label fw-bold"><?php esc_html_e( 'নাম (বাংলায়)', 'educore' ); ?></label>
                         <input type="text" name="name_bn" class="form-control" value="<?php echo $staff ? esc_attr( $staff->name_bn ) : ''; ?>">
                     </div>
-                    <div class="col-md-4 mb-3">
+                    <div class="col-md-3 mb-3">
                         <label class="form-label fw-bold"><?php esc_html_e( 'National ID / NID No', 'educore' ); ?></label>
                         <input type="text" name="nid_no" class="form-control" maxlength="17" value="<?php echo $staff ? esc_attr( $staff->nid_no ) : ''; ?>" required>
                     </div>

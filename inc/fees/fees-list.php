@@ -19,21 +19,88 @@ function educore_fees_list_view() {
         wp_die( esc_html__( 'You do not have sufficient permissions to view financial ledger records.', 'ifsedu-sms' ) );
     }
 
-    // 2. Aggregate Ledger Totals
-    $totals = $wpdb->get_row( "SELECT 
-        SUM(net_payable) as total_invoiced, 
-        SUM(paid_amount) as total_collected, 
-        SUM(due_amount) as total_due 
-        FROM {$table_fees}" );
+    // 2. Sanitize and Extract Filter Request Inputs
+    $filter_class     = isset( $_GET['filter_class'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_class'] ) ) : '';
+    $filter_section   = isset( $_GET['filter_section'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_section'] ) ) : '';
+    $filter_student   = isset( $_GET['filter_student'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_student'] ) ) : '';
+    $filter_date_from = isset( $_GET['filter_date_from'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_date_from'] ) ) : '';
+    $filter_date_to   = isset( $_GET['filter_date_to'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_date_to'] ) ) : '';
+    $filter_status    = isset( $_GET['filter_status'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_status'] ) ) : '';
 
-    // 3. Fetch Ledger Records with Section Name Included
+    // 3. Fetch Dropdown Options Dynamically
+    $available_classes  = $wpdb->get_col( "SELECT DISTINCT class_name FROM {$table_students} WHERE class_name IS NOT NULL AND class_name != '' ORDER BY class_name ASC" );
+    $available_sections = $wpdb->get_col( "SELECT DISTINCT section_name FROM {$table_students} WHERE section_name IS NOT NULL AND section_name != '' ORDER BY section_name ASC" );
+
+    // 4. Construct SQL Query WHERE Conditions
+    $where_clauses = array();
+    $query_args    = array();
+
+    if ( ! empty( $filter_class ) ) {
+        $where_clauses[] = 's.class_name = %s';
+        $query_args[]    = $filter_class;
+    }
+
+    if ( ! empty( $filter_section ) ) {
+        $where_clauses[] = 's.section_name = %s';
+        $query_args[]    = $filter_section;
+    }
+
+    if ( ! empty( $filter_student ) ) {
+        $where_clauses[] = '(s.full_name LIKE %s OR s.student_id LIKE %s OR f.invoice_id LIKE %s)';
+        $student_like    = '%' . $wpdb->esc_like( $filter_student ) . '%';
+        $query_args[]    = $student_like;
+        $query_args[]    = $student_like;
+        $query_args[]    = $student_like;
+    }
+
+    if ( ! empty( $filter_date_from ) ) {
+        $where_clauses[] = 'DATE(f.created_at) >= %s';
+        $query_args[]    = $filter_date_from;
+    }
+
+    if ( ! empty( $filter_date_to ) ) {
+        $where_clauses[] = 'DATE(f.created_at) <= %s';
+        $query_args[]    = $filter_date_to;
+    }
+
+    if ( ! empty( $filter_status ) ) {
+        $where_clauses[] = 'f.payment_status = %s';
+        $query_args[]    = $filter_status;
+    }
+
+    $where_sql = '';
+    if ( ! empty( $where_clauses ) ) {
+        $where_sql = ' WHERE ' . implode( ' AND ', $where_clauses );
+    }
+
+    // 5. Aggregate Ledger Totals with Active Filters Applied
+    $totals_sql = "SELECT 
+        SUM(f.net_payable) as total_invoiced, 
+        SUM(f.paid_amount) as total_collected, 
+        SUM(f.due_amount) as total_due 
+        FROM {$table_fees} f 
+        LEFT JOIN {$table_students} s ON f.student_id = s.id" . $where_sql;
+
+    if ( ! empty( $query_args ) ) {
+        $totals = $wpdb->get_row( $wpdb->prepare( $totals_sql, $query_args ) );
+    } else {
+        $totals = $wpdb->get_row( $totals_sql );
+    }
+
+    // 6. Fetch Filtered Ledger Records
     $query = "SELECT f.*, s.full_name, s.student_id as s_id, s.class_name, s.section_name 
               FROM {$table_fees} f 
-              LEFT JOIN {$table_students} s ON f.student_id = s.id 
+              LEFT JOIN {$table_students} s ON f.student_id = s.id" . $where_sql . " 
               ORDER BY f.id DESC";
-    $fees_records = $wpdb->get_results( $query );
-    
+
+    if ( ! empty( $query_args ) ) {
+        $fees_records = $wpdb->get_results( $wpdb->prepare( $query, $query_args ) );
+    } else {
+        $fees_records = $wpdb->get_results( $query );
+    }
+
     $collect_url = admin_url( 'admin.php?page=school_management_system&tab=fees&sub=collect' );
+    $page_url    = admin_url( 'admin.php?page=school_management_system&tab=fees' );
     ?>
 
     <style>
@@ -107,6 +174,110 @@ function educore_fees_list_view() {
         .dpt-metric-value.blue { color: #1e40af; }
         .dpt-metric-value.green { color: #006a4e; }
         .dpt-metric-value.red { color: #b91c1c; }
+
+        /* Filter Panel Bento Card */
+        .afdp-filter-card {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.03);
+        }
+
+        .afdp-filter-form {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 14px;
+            align-items: flex-end;
+        }
+
+        .afdp-filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .afdp-filter-group label {
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #475569;
+        }
+
+        .afdp-filter-input,
+        .afdp-filter-select {
+            width: 100%;
+            height: 38px;
+            padding: 0 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #0f172a;
+            background-color: #f8fafc;
+            transition: all 0.2s ease;
+            box-shadow: none !important;
+        }
+
+        .afdp-filter-input:focus,
+        .afdp-filter-select:focus {
+            border-color: #006a4e;
+            background-color: #ffffff;
+            outline: none;
+        }
+
+        .afdp-filter-actions {
+            display: flex;
+            gap: 8px;
+            grid-column: 1 / -1;
+            justify-content: flex-end;
+            padding-top: 4px;
+            border-top: 1px solid #f1f5f9;
+            margin-top: 4px;
+        }
+
+        .dpt-btn-filter-submit {
+            height: 38px;
+            padding: 0 18px;
+            background: #0f172a;
+            color: #ffffff;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: background 0.2s ease;
+        }
+
+        .dpt-btn-filter-submit:hover {
+            background: #1e293b;
+        }
+
+        .dpt-btn-filter-reset {
+            height: 38px;
+            padding: 0 16px;
+            background: #f1f5f9;
+            color: #64748b;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 700;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .dpt-btn-filter-reset:hover {
+            background: #e2e8f0;
+            color: #0f172a;
+        }
 
         /* Actions Bar */
         .afdp-actions-bar {
@@ -279,6 +450,81 @@ function educore_fees_list_view() {
                 <span class="dpt-metric-label"><?php esc_html_e( 'Total Outstanding Dues', 'ifsedu-sms' ); ?></span>
                 <div class="dpt-metric-value red">৳<?php echo esc_html( number_format( $totals ? $totals->total_due : 0, 2 ) ); ?></div>
             </div>
+        </div>
+
+        <!-- Dynamic Filter Controls Card -->
+        <div class="afdp-filter-card">
+            <form method="get" action="<?php echo esc_url( admin_url( 'admin.php' ) ); ?>" class="afdp-filter-form">
+                <input type="hidden" name="page" value="school_management_system" />
+                <input type="hidden" name="tab" value="fees" />
+
+                <!-- Class Filter -->
+                <div class="afdp-filter-group">
+                    <label for="filter_class"><?php esc_html_e( 'Class', 'ifsedu-sms' ); ?></label>
+                    <select name="filter_class" id="filter_class" class="afdp-filter-select">
+                        <option value=""><?php esc_html_e( 'All Classes', 'ifsedu-sms' ); ?></option>
+                        <?php if ( ! empty( $available_classes ) ) : foreach ( $available_classes as $class ) : ?>
+                            <option value="<?php echo esc_attr( $class ); ?>" <?php selected( $filter_class, $class ); ?>>
+                                <?php echo esc_html( $class ); ?>
+                            </option>
+                        <?php endforeach; endif; ?>
+                    </select>
+                </div>
+
+                <!-- Section Filter -->
+                <div class="afdp-filter-group">
+                    <label for="filter_section"><?php esc_html_e( 'Section', 'ifsedu-sms' ); ?></label>
+                    <select name="filter_section" id="filter_section" class="afdp-filter-select">
+                        <option value=""><?php esc_html_e( 'All Sections', 'ifsedu-sms' ); ?></option>
+                        <?php if ( ! empty( $available_sections ) ) : foreach ( $available_sections as $section ) : ?>
+                            <option value="<?php echo esc_attr( $section ); ?>" <?php selected( $filter_section, $section ); ?>>
+                                <?php echo esc_html( $section ); ?>
+                            </option>
+                        <?php endforeach; endif; ?>
+                    </select>
+                </div>
+
+                <!-- Payment Status Filter -->
+                <div class="afdp-filter-group">
+                    <label for="filter_status"><?php esc_html_e( 'Status', 'ifsedu-sms' ); ?></label>
+                    <select name="filter_status" id="filter_status" class="afdp-filter-select">
+                        <option value=""><?php esc_html_e( 'All Statuses', 'ifsedu-sms' ); ?></option>
+                        <option value="Paid" <?php selected( $filter_status, 'Paid' ); ?>><?php esc_html_e( 'Paid', 'ifsedu-sms' ); ?></option>
+                        <option value="Partial" <?php selected( $filter_status, 'Partial' ); ?>><?php esc_html_e( 'Partial', 'ifsedu-sms' ); ?></option>
+                        <option value="Unpaid" <?php selected( $filter_status, 'Unpaid' ); ?>><?php esc_html_e( 'Unpaid', 'ifsedu-sms' ); ?></option>
+                    </select>
+                </div>
+
+                <!-- Student Filter -->
+                <div class="afdp-filter-group">
+                    <label for="filter_student"><?php esc_html_e( 'Student / Invoice', 'ifsedu-sms' ); ?></label>
+                    <input type="text" name="filter_student" id="filter_student" class="afdp-filter-input" placeholder="<?php esc_attr_e( 'Name, ID, or Invoice...', 'ifsedu-sms' ); ?>" value="<?php echo esc_attr( $filter_student ); ?>" />
+                </div>
+
+                <!-- Date Range From -->
+                <div class="afdp-filter-group">
+                    <label for="filter_date_from"><?php esc_html_e( 'From Date', 'ifsedu-sms' ); ?></label>
+                    <input type="date" name="filter_date_from" id="filter_date_from" class="afdp-filter-input" value="<?php echo esc_attr( $filter_date_from ); ?>" />
+                </div>
+
+                <!-- Date Range To -->
+                <div class="afdp-filter-group">
+                    <label for="filter_date_to"><?php esc_html_e( 'To Date', 'ifsedu-sms' ); ?></label>
+                    <input type="date" name="filter_date_to" id="filter_date_to" class="afdp-filter-input" value="<?php echo esc_attr( $filter_date_to ); ?>" />
+                </div>
+
+                <!-- Filter Action Buttons -->
+                <div class="afdp-filter-actions">
+                    <button type="submit" class="dpt-btn-filter-submit">
+                        <span class="dashicons dashicons-filter" style="font-size:16px; width:16px; height:16px;"></span>
+                        <?php esc_html_e( 'Filter Ledger', 'ifsedu-sms' ); ?>
+                    </button>
+                    <a href="<?php echo esc_url( $page_url ); ?>" class="dpt-btn-filter-reset" title="<?php esc_attr_e( 'Reset Filters', 'ifsedu-sms' ); ?>">
+                        <span class="dashicons dashicons-dismiss" style="font-size:16px; width:16px; height:16px;"></span>
+                        <?php esc_html_e( 'Reset', 'ifsedu-sms' ); ?>
+                    </a>
+                </div>
+            </form>
         </div>
 
         <!-- Action Header -->

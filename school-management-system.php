@@ -191,47 +191,48 @@ public function execute_database_migration() {
     ) $charset_collate;";
     dbDelta( $sql_students );
 
-    // Schema Model 2: Staff Matrix (Full 35-Column Architecture)
-    $table_staff = $wpdb->prefix . 'sms_staff';
-    $sql_staff = "CREATE TABLE $table_staff (
-        id bigint(20) NOT NULL AUTO_INCREMENT,
-        wp_user_id bigint(20) DEFAULT NULL,
-        full_name varchar(255) NOT NULL,
-        name_bn varchar(255) DEFAULT '' NOT NULL,
-        father_name varchar(255) DEFAULT '' NOT NULL,
-        mother_name varchar(255) DEFAULT '' NOT NULL,
-        designation varchar(100) NOT NULL,
-        staff_type varchar(50) DEFAULT '' NOT NULL,
-        pay_grade varchar(50) DEFAULT '' NOT NULL,
-        index_no varchar(50) DEFAULT '' NOT NULL,
-        nid_no varchar(50) DEFAULT '' NOT NULL,
-        dob date DEFAULT '1970-01-01' NOT NULL,
-        gender varchar(20) DEFAULT 'Male' NOT NULL,
-        phone varchar(50) NOT NULL,
-        whatsapp_no varchar(50) DEFAULT '' NOT NULL,
-        email varchar(100) NOT NULL,
-        blood_group varchar(10) DEFAULT '' NOT NULL,
-        quota_type varchar(50) DEFAULT 'General' NOT NULL,
-        joining_date date DEFAULT '1970-01-01' NOT NULL,
-        salary decimal(10,2) DEFAULT '0.00' NOT NULL,
-        subject_expert varchar(255) DEFAULT '' NOT NULL,
-        highest_degree varchar(255) DEFAULT '' NOT NULL,
-        emergency_name varchar(255) DEFAULT '' NOT NULL,
-        emergency_phone varchar(50) DEFAULT '' NOT NULL,
-        emergency_relation varchar(50) DEFAULT '' NOT NULL,
-        bank_name varchar(255) DEFAULT '' NOT NULL,
-        bank_acc_no varchar(100) DEFAULT '' NOT NULL,
-        bank_routing varchar(50) DEFAULT '' NOT NULL,
-        address text NOT NULL,
-        permanent_address text NOT NULL,
-        linkedin_url varchar(255) DEFAULT '' NOT NULL,
-        facebook_url varchar(255) DEFAULT '' NOT NULL,
-        website_url varchar(255) DEFAULT '' NOT NULL,
-        profile_image varchar(255) DEFAULT '' NOT NULL,
-        status varchar(30) DEFAULT 'Active' NOT NULL,
-        PRIMARY KEY  (id)
-    ) $charset_collate;";
-    dbDelta( $sql_staff );
+    // Schema Model 2: Staff Matrix (Full 36-Column Architecture)
+$table_staff = $wpdb->prefix . 'sms_staff';
+$sql_staff = "CREATE TABLE $table_staff (
+    id bigint(20) NOT NULL AUTO_INCREMENT,
+    wp_user_id bigint(20) DEFAULT NULL,
+    full_name varchar(255) NOT NULL,
+    name_bn varchar(255) DEFAULT '' NOT NULL,
+    father_name varchar(255) DEFAULT '' NOT NULL,
+    mother_name varchar(255) DEFAULT '' NOT NULL,
+    designation varchar(100) NOT NULL,
+    staff_type varchar(50) DEFAULT '' NOT NULL,
+    pay_grade varchar(50) DEFAULT '' NOT NULL,
+    index_no varchar(50) DEFAULT '' NOT NULL,
+    nid_no varchar(50) DEFAULT '' NOT NULL,
+    dob date DEFAULT '1970-01-01' NOT NULL,
+    gender varchar(20) DEFAULT 'Male' NOT NULL,
+    phone varchar(50) NOT NULL,
+    whatsapp_no varchar(50) DEFAULT '' NOT NULL,
+    email varchar(100) NOT NULL,
+    blood_group varchar(10) DEFAULT '' NOT NULL,
+    quota_type varchar(50) DEFAULT 'General' NOT NULL,
+    joining_date date DEFAULT '1970-01-01' NOT NULL,
+    salary decimal(10,2) DEFAULT '0.00' NOT NULL,
+    subject_expert varchar(255) DEFAULT '' NOT NULL,
+    highest_degree varchar(255) DEFAULT '' NOT NULL,
+    emergency_name varchar(255) DEFAULT '' NOT NULL,
+    emergency_phone varchar(50) DEFAULT '' NOT NULL,
+    emergency_relation varchar(50) DEFAULT '' NOT NULL,
+    bank_name varchar(255) DEFAULT '' NOT NULL,
+    bank_acc_no varchar(100) DEFAULT '' NOT NULL,
+    bank_routing varchar(50) DEFAULT '' NOT NULL,
+    address text NOT NULL,
+    permanent_address text NOT NULL,
+    linkedin_url varchar(255) DEFAULT '' NOT NULL,
+    facebook_url varchar(255) DEFAULT '' NOT NULL,
+    website_url varchar(255) DEFAULT '' NOT NULL,
+    profile_image varchar(255) DEFAULT '' NOT NULL,
+    order_number int(11) DEFAULT 0 NOT NULL,
+    status varchar(30) DEFAULT 'Active' NOT NULL,
+    PRIMARY KEY  (id)
+) $charset_collate;";
+dbDelta( $sql_staff );
 
     // Schema Model 3: Daily Attendance Logs
     $table_attendance = $wpdb->prefix . 'sms_attendance';

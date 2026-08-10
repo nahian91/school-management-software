@@ -34,6 +34,7 @@ function educore_exams_list_view() {
 
     $edit_exam_title = '';
     $edit_exam_year  = current_time( 'Y' );
+    $selected_classes = array();
 
     if ( $is_edit ) {
         $edit_exam = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table_exams} WHERE id = %d", $edit_id ) );
@@ -48,6 +49,11 @@ function educore_exams_list_view() {
             } else {
                 $edit_exam_title = $edit_exam->exam_name;
             }
+
+            // Parse selected classes into array for checkbox state
+            if ( ! empty( $edit_exam->class_name ) ) {
+                $selected_classes = array_map( 'trim', explode( ',', $edit_exam->class_name ) );
+            }
         }
     }
 
@@ -61,7 +67,15 @@ function educore_exams_list_view() {
         // Combine Title and Year for DB storage
         $full_exam_name = ! empty( $exam_year_input ) ? $exam_title_input . ' - ' . $exam_year_input : $exam_title_input;
 
-        $class_name = isset( $_POST['class_name'] ) ? sanitize_text_field( wp_unslash( $_POST['class_name'] ) ) : '';
+        // Process Checkbox Class/Tier Selection into Comma-Separated String
+        $class_names_input = isset( $_POST['class_name'] ) && is_array( $_POST['class_name'] ) ? array_map( 'sanitize_text_field', wp_unslash( $_POST['class_name'] ) ) : array();
+        
+        if ( in_array( 'All Classes', $class_names_input, true ) ) {
+            $class_name = 'All Classes';
+        } else {
+            $class_name = ! empty( $class_names_input ) ? implode( ', ', $class_names_input ) : 'All Classes';
+        }
+
         $start_date = isset( $_POST['start_date'] ) ? sanitize_text_field( wp_unslash( $_POST['start_date'] ) ) : current_time( 'Y-m-d' );
         $end_date   = isset( $_POST['end_date'] ) ? sanitize_text_field( wp_unslash( $_POST['end_date'] ) ) : current_time( 'Y-m-d' );
         $status     = isset( $_POST['status'] ) ? sanitize_text_field( wp_unslash( $_POST['status'] ) ) : 'Upcoming';
@@ -272,6 +286,43 @@ function educore_exams_list_view() {
             outline: none;
         }
 
+        /* Custom Checkbox Container Framework */
+        .afdp-checkbox-group-wrapper {
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 12px 14px;
+            max-height: 180px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            transition: border-color 0.2s ease;
+        }
+        .afdp-checkbox-group-wrapper:focus-within {
+            border-color: #006a4e;
+            background-color: #ffffff;
+            box-shadow: 0 0 0 3px rgba(0, 106, 78, 0.1);
+        }
+        .afdp-checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            color: #334155;
+            font-weight: 600;
+            cursor: pointer;
+            user-select: none;
+        }
+        .afdp-checkbox-item input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: #006a4e;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 0;
+        }
+
         /* Trigger Buttons Styling */
         .dpt-btn-submit-trigger {
             height: 40px;
@@ -464,7 +515,7 @@ function educore_exams_list_view() {
                     <?php endif; ?>
                 </h4>
 
-                <form method="POST" action="<?php echo esc_url( $base_url ); ?>">
+                <form method="POST" action="<?php echo esc_url( $base_url ); ?>" id="afdp-exam-form">
                     <?php wp_nonce_field( 'save_exam_action', 'educore_exam_nonce' ); ?>
                     <input type="hidden" name="exam_id" value="<?php echo $is_edit ? intval( $edit_exam->id ) : 0; ?>">
                     
@@ -482,16 +533,23 @@ function educore_exams_list_view() {
                         </div>
                     </div>
 
+                    <!-- Checkbox Class/Tier Selection -->
                     <div class="dpt-form-group">
                         <label class="dpt-form-label"><?php esc_html_e( 'Class / Tier', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
-                        <select name="class_name" class="dpt-select-field" required>
-                            <option value="All Classes" <?php selected( $is_edit ? $edit_exam->class_name : '', 'All Classes' ); ?>><?php esc_html_e( 'All Classes', 'ifsedu-sms' ); ?></option>
-                            <?php if ( ! empty( $raw_classes ) ) : foreach ( $raw_classes as $cls_obj ) : ?>
-                                <option value="<?php echo esc_attr( $cls_obj->class_name ); ?>" <?php selected( $is_edit ? $edit_exam->class_name : '', $cls_obj->class_name ); ?>>
-                                    <?php echo esc_html( $cls_obj->class_name ); ?>
-                                </option>
+                        <div class="afdp-checkbox-group-wrapper">
+                            <label class="afdp-checkbox-item">
+                                <input type="checkbox" name="class_name[]" value="All Classes" class="afdp-class-checkbox afdp-checkbox-all" <?php checked( in_array( 'All Classes', $selected_classes, true ) || ! $is_edit ); ?>>
+                                <span><?php esc_html_e( 'All Classes', 'ifsedu-sms' ); ?></span>
+                            </label>
+                            <?php if ( ! empty( $raw_classes ) ) : foreach ( $raw_classes as $cls_obj ) : 
+                                $is_checked = in_array( $cls_obj->class_name, $selected_classes, true );
+                            ?>
+                                <label class="afdp-checkbox-item">
+                                    <input type="checkbox" name="class_name[]" value="<?php echo esc_attr( $cls_obj->class_name ); ?>" class="afdp-class-checkbox afdp-checkbox-single" <?php checked( $is_checked ); ?>>
+                                    <span><?php echo esc_html( $cls_obj->class_name ); ?></span>
+                                </label>
                             <?php endforeach; endif; ?>
-                        </select>
+                        </div>
                     </div>
 
                     <div class="dpt-form-group">
@@ -601,6 +659,27 @@ function educore_exams_list_view() {
                 }
             });
         }
+
+        // Toggle handling between "All Classes" and dynamic specific classes
+        $(document).on('change', '.afdp-checkbox-all', function() {
+            if ($(this).is(':checked')) {
+                $('.afdp-checkbox-single').prop('checked', false);
+            }
+        });
+
+        $(document).on('change', '.afdp-checkbox-single', function() {
+            if ($(this).is(':checked')) {
+                $('.afdp-checkbox-all').prop('checked', false);
+            }
+        });
+
+        // Ensure at least one checkbox is selected before submitting
+        $('#afdp-exam-form').on('submit', function(e) {
+            if ($('.afdp-class-checkbox:checked').length === 0) {
+                e.preventDefault();
+                alert('<?php echo esc_js( __( 'Please select at least one Class / Tier.', 'ifsedu-sms' ) ); ?>');
+            }
+        });
     });
     </script>
     <?php

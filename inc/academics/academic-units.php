@@ -95,7 +95,49 @@ if ( ! empty( $classes ) ) {
         return $res;
     });
 }
+
+// Extract Unique Class Names for the Select Dropdown Filter
+$unique_class_names = array();
+if ( ! empty( $classes ) ) {
+    foreach ( $classes as $cls_item ) {
+        if ( ! in_array( $cls_item->class_name, $unique_class_names, true ) ) {
+            $unique_class_names[] = $cls_item->class_name;
+        }
+    }
+    usort( $unique_class_names, 'strnatcasecmp' );
+}
 ?>
+
+<style>
+    .dpt-filter-select {
+        min-width: 220px;
+        padding: 6px 12px;
+        background: #ffffff;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 600;
+        color: #0f172a;
+        height: 38px;
+        outline: none;
+        transition: all 0.2s ease;
+    }
+    .dpt-filter-select:focus {
+        border-color: #22c55e;
+        box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
+    }
+    .dpt-count-pill {
+        background: #f0fdf4;
+        color: #166534;
+        border: 1px solid #bbf7d0;
+        font-size: 12px;
+        font-weight: 700;
+        padding: 6px 12px;
+        border-radius: 20px;
+        display: inline-flex;
+        align-items: center;
+    }
+</style>
 
 <div class="dpt-bento-box" style="background:#fff; padding:24px; border-radius:12px; border:1px solid #e2e8f0; margin-bottom:24px;">
     <h5 class="dpt-bento-subheading" style="font-size:16px; font-weight:700; color:#0f172a; margin-top:0; margin-bottom:16px;"><?php echo $is_edit ? 'Edit Academic Unit' : 'Add Academic Unit (Class & Section)'; ?></h5>
@@ -128,9 +170,26 @@ if ( ! empty( $classes ) ) {
 </div>
 
 <div class="dpt-bento-box" style="background:#fff; padding:24px; border-radius:12px; border:1px solid #e2e8f0;">
-    <h5 class="dpt-bento-subheading" style="font-size:16px; font-weight:700; color:#0f172a; margin-top:0; margin-bottom:16px;">Configured Academic Units</h5>
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+        <h5 class="dpt-bento-subheading" style="font-size:16px; font-weight:700; color:#0f172a; margin:0;">Configured Academic Units</h5>
+        
+        <div style="display:flex; align-items:center; gap:12px;">
+            <!-- Class Name Select Filter Dropdown -->
+            <select id="dpt-unit-class-filter" class="dpt-filter-select">
+                <option value="all">All Classes Filter</option>
+                <?php foreach ( $unique_class_names as $cname ) : ?>
+                    <option value="<?php echo esc_attr( $cname ); ?>"><?php echo esc_html( $cname ); ?></option>
+                <?php endforeach; ?>
+            </select>
+
+            <span class="dpt-count-pill" id="dpt-unit-count-pill">
+                <?php echo esc_html( count( $classes ) ); ?> Units Configured
+            </span>
+        </div>
+    </div>
+
     <div class="dpt-responsive-datatable">
-        <table class="dpt-architecture-table" style="width:100%; border-collapse:collapse;">
+        <table class="dpt-architecture-table" id="dpt-units-table" style="width:100%; border-collapse:collapse;">
             <thead>
                 <tr style="background:#f8fafc; text-align:left;">
                     <th style="width: 40%; padding:12px 16px; border-bottom:2px solid #e2e8f0; color:#475569; font-size:12px; text-transform:uppercase;">Class Name</th>
@@ -143,7 +202,7 @@ if ( ! empty( $classes ) ) {
                     $edit_link   = add_query_arg( array( 'action' => 'edit_unit', 'id' => $cls->id ), $base_url );
                     $delete_link = wp_nonce_url( add_query_arg( array( 'action' => 'delete_unit', 'id' => $cls->id ), $base_url ), 'delete_unit_action_' . $cls->id );
                 ?>
-                    <tr style="border-bottom:1px solid #f1f5f9;">
+                    <tr style="border-bottom:1px solid #f1f5f9;" data-class-name="<?php echo esc_attr( $cls->class_name ); ?>">
                         <td style="font-weight: 700; color: #0f172a; padding:12px 16px;"><?php echo esc_html( $cls->class_name ); ?></td>
                         <td style="color: #334155; padding:12px 16px;">
                             <?php if ( ! empty( $cls->section_name ) ) : ?>
@@ -164,3 +223,33 @@ if ( ! empty( $classes ) ) {
         </table>
     </div>
 </div>
+
+<script type="text/javascript">
+document.addEventListener('DOMContentLoaded', function() {
+    const filterSelect = document.getElementById('dpt-unit-class-filter');
+    const tableBody    = document.querySelector('#dpt-units-table tbody');
+    const countPill    = document.getElementById('dpt-unit-count-pill');
+
+    if (filterSelect && tableBody) {
+        filterSelect.addEventListener('change', function() {
+            const selectedClass = this.value;
+            const rows          = tableBody.querySelectorAll('tr[data-class-name]');
+            let visibleCount    = 0;
+
+            rows.forEach(row => {
+                const className = row.getAttribute('data-class-name');
+                if (selectedClass === 'all' || className === selectedClass) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+
+            if (countPill) {
+                countPill.textContent = visibleCount + ' Units Configured';
+            }
+        });
+    }
+});
+</script>
