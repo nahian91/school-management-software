@@ -618,18 +618,34 @@ private function get_tabs_config() {
     <?php 
     // যদি ইউজারের কাস্টম ছবি থাকে, তবে সেটি দেখাবে
     if ( ! empty( $custom_avatar ) ) {
-        echo '<img src="' . esc_url( $custom_avatar ) . '" alt="' . esc_attr( $display_name ) . '" width="64" height="64" style="border-radius: 50%; object-fit: cover; border: 3px solid #10b981;" />';
+        echo '<img src="' . esc_url( $custom_avatar ) . '" alt="' . esc_attr( $display_name ) . '" width="64" height="64" style="border-radius: 50%; object-fit: cover; border: 3px solid #006a4e;" />';
     } else {
         // কাস্টম ছবি না থাকলে প্লাগিন ফোল্ডার থেকে ডিফল্ট ছবি লোড হবে
         $default_avatar_url = EDUCORE_URL . 'assets/img/logo.png'; 
-        echo '<img src="' . esc_url( $default_avatar_url ) . '" alt="' . esc_attr( $display_name ) . '" width="64" height="64" style="border-radius: 50%; object-fit: cover; border: 3px solid #10b981;" />'; 
+        echo '<img src="' . esc_url( $default_avatar_url ) . '" alt="' . esc_attr( $display_name ) . '" width="64" height="64" style="border-radius: 50%; object-fit: cover; border: 3px solid #006a4e;" />'; 
     }
     ?>
 </div>
-                        <div class="profile-meta">
-                            <h4 class="profile-name"><?php echo esc_html( $display_name ); ?></h4>
-                            <span class="profile-designation"><?php echo esc_html( $designation ); ?></span>
-                        </div>
+                        <?php
+if ( is_user_logged_in() ) : 
+    $current_user = wp_get_current_user();
+    
+    // Resolve Display Name (Falls back to display_name or user_login)
+    $display_name = ! empty( $current_user->display_name ) ? $current_user->display_name : $current_user->user_login;
+    
+    // Resolve Designation / Role
+    // Checks custom user meta 'designation' first, otherwise grabs the user's primary WP Role
+    $designation = get_user_meta( $current_user->ID, 'designation', true );
+    
+    if ( empty( $designation ) && ! empty( $current_user->roles ) ) {
+        $designation = ucfirst( $current_user->roles[0] );
+    }
+    ?>
+    <div class="profile-meta">
+        <h4 class="profile-name"><?php echo esc_html( $display_name ); ?></h4>
+        <span class="profile-designation"><?php echo esc_html( $designation ); ?></span>
+    </div>
+<?php endif; ?>
                     </div>
 
                     <ul class="educore-left-tabs">
@@ -739,7 +755,7 @@ private function get_tabs_config() {
         width: 52px !important; 
         height: 52px; 
         border-radius: 50%; 
-        border: 2.5px solid #10b981; 
+        border: 2.5px solid #006a4e; 
         object-fit: cover;
     }
 
@@ -812,12 +828,12 @@ private function get_tabs_config() {
     }
 
     .educore-left-tabs li a:hover svg { 
-        fill: #10b981; 
+        fill: #006a4e; 
     }
 
     /* Active State (EduCore Primary Emerald Accent) */
     .educore-left-tabs li a.active { 
-        background: #10b981; 
+        background: #006a4e; 
         color: #ffffff; 
         font-weight: 700; 
         box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
@@ -866,7 +882,7 @@ private function get_tabs_config() {
     }
 
     .educore-left-tabs::-webkit-scrollbar-thumb:hover {
-        background-color: #10b981; /* Emerald highlight on hover */
+        background-color: #006a4e; /* Emerald highlight on hover */
     }
 
     .educore-left-tabs::-webkit-scrollbar-thumb:active {
@@ -925,13 +941,13 @@ private function get_tabs_config() {
                 border: 1px solid #ddd;
                 background-color: #fff;
             }
-            .wp-core-ui .button-group.button-large .button, .wp-core-ui .button.button-large { background-color: #10b981 !important; }
+            .wp-core-ui .button-group.button-large .button, .wp-core-ui .button.button-large { background-color: #006a4e !important; }
             body.login { background: #f0fdf4 !important; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important; }
             #login { padding: 6% 0 0 !important; width: 360px !important; }
             .login form { background: #ffffff !important; border: 1px solid #e1e8ed !important; box-shadow: 0 10px 25px rgba(16, 185, 129, 0.1) !important; border-radius: 8px !important; padding: 30px !important; }
             .login label { color: #4a5568 !important; font-weight: 500 !important; }
             .login input[type="text"], .login input[type="password"] { border: 1px solid #cbd5e1 !important; border-radius: 6px !important; padding: 8px 12px !important; background: #f8fafc !important; box-shadow: none !important; }
-            .wp-core-ui .button-primary { background: #10b981 !important; border: none !important; border-radius: 6px !important; box-shadow: none !important; font-weight: 600 !important; height: 40px !important; width: 100% !important; margin-top: 15px !important; }
+            .wp-core-ui .button-primary { background: #006a4e !important; border: none !important; border-radius: 6px !important; box-shadow: none !important; font-weight: 600 !important; height: 40px !important; width: 100% !important; margin-top: 15px !important; }
             .wp-core-ui .button-primary:hover { background: #059669 !important; }
             .login #backtoblog, .login #nav, .privacy-policy-page-link { display: none !important; }
             .educore-captcha-container { margin: 15px 0; }

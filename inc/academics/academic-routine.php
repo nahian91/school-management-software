@@ -109,7 +109,7 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' && isset( $_POST['save_routine'] ) ) 
     }
 }
 
-// Fetch Classes
+// Fetch Classes with Natural Numeric Sorting (1, 2, 3, 7, 8, 9, 10...)
 $classes = $wpdb->get_results( 
     "SELECT id, class_name FROM {$table_units} 
      WHERE class_name IS NOT NULL AND class_name != '' 
@@ -126,9 +126,9 @@ if ( ! empty( $classes ) ) {
 // All academic units for dynamic section filtering
 $all_units = $wpdb->get_results( "SELECT id, class_name, section_name FROM {$table_units} ORDER BY section_name ASC" );
 
-// Fetch subjects
+// Fetch subjects mapped with Unit Class ID and Section Name
 $subjects = $wpdb->get_results( "
-    SELECT s.id, s.subject_name, u.class_name 
+    SELECT s.id, s.subject_name, s.class_id, u.class_name, u.section_name 
     FROM {$table_subjects} s 
     LEFT JOIN {$table_units} u ON s.class_id = u.id 
     ORDER BY s.subject_name ASC
@@ -140,7 +140,7 @@ $days = array( 'Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday
 $filter_class = isset( $_GET['filter_class'] ) ? sanitize_text_field( $_GET['filter_class'] ) : '';
 $filter_sec   = isset( $_GET['filter_section'] ) ? absint( $_GET['filter_section'] ) : 0;
 
-// Fetch Routines
+// Fetch Routines with Natural Class Name Sorting
 $query = "SELECT r.*, u.class_name, u.section_name, s.subject_name 
           FROM {$table_routine} r 
           LEFT JOIN {$table_units} u ON r.class_id = u.id 
@@ -151,7 +151,6 @@ if ( ! empty( $filter_class ) ) {
     $where[] = $wpdb->prepare( "u.class_name = %s", $filter_class );
 }
 if ( $filter_sec > 0 ) {
-    // FIXED: Query references u.id instead of non-existent r.section_id
     $where[] = $wpdb->prepare( "r.class_id = %d", $filter_sec );
 }
 
@@ -159,9 +158,27 @@ if ( ! empty( $where ) ) {
     $query .= " WHERE " . implode( " AND ", $where );
 }
 
-$query .= " ORDER BY FIELD(r.day_name, 'Saturday','Sunday','Monday','Tuesday','Wednesday','Thursday','Friday'), r.start_time ASC";
+$query .= " ORDER BY FIELD(r.day_name, 'Saturday','Sunday','Monday','Tuesday','Wednesday','Thursday','Friday'), CAST(u.class_name AS UNSIGNED) ASC, u.class_name ASC, r.start_time ASC";
 
 $routines = $wpdb->get_results( $query );
+
+if ( ! empty( $routines ) ) {
+    usort( $routines, function( $a, $b ) use ( $days ) {
+        $dayIndexA = array_search( $a->day_name, $days, true );
+        $dayIndexB = array_search( $b->day_name, $days, true );
+
+        if ( $dayIndexA !== $dayIndexB ) {
+            return $dayIndexA <=> $dayIndexB;
+        }
+
+        $classRes = strnatcasecmp( $a->class_name ?? '', $b->class_name ?? '' );
+        if ( $classRes !== 0 ) {
+            return $classRes;
+        }
+
+        return strcmp( $a->start_time, $b->start_time );
+    });
+}
 
 // Map routines by Day for weekly matrix preview
 $matrix_routine = array();
@@ -599,7 +616,7 @@ if ( ! empty( $routines ) ) {
                     <label class="dpt-form-label"><?php esc_html_e( 'Academic Subject', 'ifsedu-sms' ); ?></label>
                     <select name="subject_id" id="dpt_subject_select" class="dpt-field-select" required>
                         <option value=""><?php esc_html_e( 'Select Subject...', 'ifsedu-sms' ); ?></option>
-                        <!-- Options will load dynamically based on class selection -->
+                        <!-- Options will load dynamically based on class & section selection -->
                     </select>
                 </div>
 
@@ -794,7 +811,7 @@ if ( ! empty( $routines ) ) {
 
 </div>
 
-<!-- Dynamic Script for Class-wise Section Resolution (Forms & Filters) -->
+<!-- Dynamic Script for Class-wise Section & Subject Resolution -->
 <script type="text/javascript">
 document.addEventListener('DOMContentLoaded', function() {
     const unitsMap = <?php echo json_encode( $all_units ); ?>;
@@ -823,20 +840,39 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Helper to populate dynamic subjects based on selected class name
-    function populateSubjects(classSelectElem, subjectSelectElem) {
+    // Helper to populate dynamic subjects based on selected class AND section
+    function populateSubjects(classSelectElem, sectionSelectElem, subjectSelectElem) {
         const selectedClass = classSelectElem.value;
+        const selectedUnitId = sectionSelectElem ? sectionSelectElem.value : '';
+
         subjectSelectElem.innerHTML = '<option value=""><?php esc_html_e( 'Select Subject...', 'ifsedu-sms' ); ?></option>';
 
         if (!selectedClass) return;
 
-        const filteredSubjects = subjectsMap.filter(item => item.class_name === selectedClass);
+        let filteredSubjects = [];
 
+        if (selectedUnitId) {
+            // Filter strictly by the selected academic unit (class + section)
+            filteredSubjects = subjectsMap.filter(item => String(item.class_id) === String(selectedUnitId));
+            
+            // Fallback: if no subjects configured specifically for this unit ID, show class subjects
+            if (filteredSubjects.length === 0) {
+                filteredSubjects = subjectsMap.filter(item => item.class_name === selectedClass);
+            }
+        } else {
+            // Show all subjects for this class_name
+            filteredSubjects = subjectsMap.filter(item => item.class_name === selectedClass);
+        }
+
+        const seen = new Set();
         filteredSubjects.forEach(subject => {
-            const opt = document.createElement('option');
-            opt.value = subject.id;
-            opt.textContent = subject.subject_name;
-            subjectSelectElem.appendChild(opt);
+            if (!seen.has(subject.id)) {
+                seen.add(subject.id);
+                const opt = document.createElement('option');
+                opt.value = subject.id;
+                opt.textContent = subject.subject_name;
+                subjectSelectElem.appendChild(opt);
+            }
         });
     }
 
@@ -848,7 +884,11 @@ document.addEventListener('DOMContentLoaded', function() {
     if (formClassSelect && formSecSelect && formSubjectSelect) {
         formClassSelect.addEventListener('change', function() {
             populateSections(formClassSelect, formSecSelect);
-            populateSubjects(formClassSelect, formSubjectSelect);
+            populateSubjects(formClassSelect, formSecSelect, formSubjectSelect);
+        });
+
+        formSecSelect.addEventListener('change', function() {
+            populateSubjects(formClassSelect, formSecSelect, formSubjectSelect);
         });
     }
 

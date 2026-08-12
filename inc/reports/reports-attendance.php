@@ -4,106 +4,58 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Premium Student Attendance Analytics & Audit Module
- * Theme Aesthetic: Elite Neo-Bento Grid & Visual Progress System
- * Custom Prefixes Applied: dpt-, afdp-
+ * Premium Student & Employee Attendance Analytics & Audit Module
  * File: reports-attendance-view.php
  */
-
-// 1. Register AJAX Endpoint for Dynamic Class-to-Section Dropdown Filtering
-add_action( 'wp_ajax_educore_get_sections_by_class', 'educore_get_sections_by_class_ajax_handler' );
-
-function educore_get_sections_by_class_ajax_handler() {
-    check_ajax_referer( 'educore_attendance_nonce', 'security' );
-
-    global $wpdb;
-    $class_name  = isset( $_POST['class_name'] ) ? sanitize_text_field( wp_unslash( $_POST['class_name'] ) ) : '';
-    $table_units = $wpdb->prefix . 'sms_academic_units';
-
-    $sections = array();
-
-    if ( ! empty( $class_name ) ) {
-        // Fetch distinct sections associated with the selected class from sms_academic_units
-        $section_rows = $wpdb->get_results( $wpdb->prepare( "
-            SELECT DISTINCT section_name 
-            FROM {$table_units} 
-            WHERE class_name = %s 
-              AND section_name != '' 
-              AND section_name IS NOT NULL 
-            ORDER BY section_name ASC
-        ", $class_name ) );
-
-        if ( ! empty( $section_rows ) ) {
-            $sections = wp_list_pluck( $section_rows, 'section_name' );
-        }
-    }
-
-    wp_send_json_success( $sections );
-}
 
 function educore_reports_attendance_view() {
     global $wpdb;
     $table_students   = $wpdb->prefix . 'sms_students';
-    $table_attendance = $wpdb->prefix . 'sms_attendance';
+    $table_staff      = $wpdb->prefix . 'sms_staff';
+    $table_stu_att    = $wpdb->prefix . 'sms_attendance';
+    $table_staff_att  = $wpdb->prefix . 'sms_staff_attendance';
     $table_units      = $wpdb->prefix . 'sms_academic_units';
 
-    // Fetch distinct classes directly from Academic Units table
-    $class_rows = $wpdb->get_results( "SELECT DISTINCT class_name FROM {$table_units} WHERE class_name != '' AND class_name IS NOT NULL" );
-    $classes    = ! empty( $class_rows ) ? wp_list_pluck( $class_rows, 'class_name' ) : array();
+    // Audit Target Mode Switcher (Student vs Employee)
+    $report_target = isset( $_GET['report_target'] ) ? sanitize_text_field( wp_unslash( $_GET['report_target'] ) ) : 'student';
 
-    // Natural Numeric Sorting for Classes (Ensures 1, 2, 3, ... 10, 11 sequence)
-    if ( ! empty( $classes ) ) {
-        natsort( $classes );
-    }
+    // Student Filters
+    $filter_class   = isset( $_GET['class_name'] ) ? sanitize_text_field( wp_unslash( $_GET['class_name'] ) ) : '';
+    $filter_section = isset( $_GET['section_name'] ) ? sanitize_text_field( wp_unslash( $_GET['section_name'] ) ) : '';
 
-    // Filter State Management
-    $filter_class          = isset( $_GET['class_name'] ) ? sanitize_text_field( wp_unslash( $_GET['class_name'] ) ) : '';
-    $filter_section        = isset( $_GET['section_name'] ) ? sanitize_text_field( wp_unslash( $_GET['section_name'] ) ) : '';
+    // Employee Filters
+    $filter_staff_type = isset( $_GET['staff_type'] ) ? sanitize_text_field( wp_unslash( $_GET['staff_type'] ) ) : '';
+
+    // Date Filters
     $filter_selected_month = isset( $_GET['report_month'] ) ? sanitize_text_field( wp_unslash( $_GET['report_month'] ) ) : current_time('m');
     $filter_year           = isset( $_GET['report_year'] ) ? sanitize_text_field( wp_unslash( $_GET['report_year'] ) ) : current_time('Y');
+    $filter_month          = $filter_year . '-' . sprintf( '%02d', intval( $filter_selected_month ) );
 
-    // Pre-fetch related sections for the initially selected class from sms_academic_units
-    $initial_sections = array();
-    if ( ! empty( $filter_class ) ) {
-        $section_rows = $wpdb->get_results( $wpdb->prepare( "
-            SELECT DISTINCT section_name 
-            FROM {$table_units} 
-            WHERE class_name = %s 
-              AND section_name != '' 
-              AND section_name IS NOT NULL 
-            ORDER BY section_name ASC
-        ", $filter_class ) );
-        if ( ! empty( $section_rows ) ) {
-            $initial_sections = wp_list_pluck( $section_rows, 'section_name' );
-        }
+    // Fetch classes and units
+    $class_rows = $wpdb->get_results( "SELECT DISTINCT class_name FROM {$table_units} WHERE class_name != '' AND class_name IS NOT NULL ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC" );
+    $classes    = ! empty( $class_rows ) ? wp_list_pluck( $class_rows, 'class_name' ) : array();
+
+    if ( ! empty( $classes ) ) {
+        usort( $classes, function( $a, $b ) {
+            return strnatcasecmp( $a, $b );
+        });
     }
 
-    // Constructed Year-Month String (e.g. "2026-07") for DB Queries
-    $filter_month = $filter_year . '-' . sprintf( '%02d', intval( $filter_selected_month ) );
+    $all_units = $wpdb->get_results( "SELECT id, class_name, section_name FROM {$table_units} WHERE section_name != '' AND section_name IS NOT NULL ORDER BY section_name ASC" );
 
-    // Array of Months
+    // Fetch unique Staff Types for the Employee mode filter
+    $db_staff_types  = $wpdb->get_col( "SELECT DISTINCT staff_type FROM {$table_staff} WHERE status = 'Active' AND staff_type != '' ORDER BY staff_type ASC" );
+    $default_types   = array( 'Teacher (School)', 'Teacher (College)', 'Officer', 'Staff' );
+    $all_staff_types = array_unique( array_merge( $default_types, $db_staff_types ) );
+
     $months = array(
-        '01' => 'January',
-        '02' => 'February',
-        '03' => 'March',
-        '04' => 'April',
-        '05' => 'May',
-        '06' => 'June',
-        '07' => 'July',
-        '08' => 'August',
-        '09' => 'September',
-        '10' => 'October',
-        '11' => 'November',
-        '12' => 'December',
+        '01' => 'January', '02' => 'February', '03' => 'March', '04' => 'April',
+        '05' => 'May',     '06' => 'June',     '07' => 'July',  '08' => 'August',
+        '09' => 'September','10' => 'October', '11' => 'November','12' => 'December',
     );
 
-    // Dynamic Year Range Matrix
     $current_yr_int = intval( current_time('Y') );
-    $years          = array(
-        strval( $current_yr_int - 1 ),
-        strval( $current_yr_int ),
-        strval( $current_yr_int + 1 )
-    );
+    $years          = array( strval( $current_yr_int - 1 ), strval( $current_yr_int ), strval( $current_yr_int + 1 ) );
     ?>
     <style>
         /* ==========================================================================
@@ -115,7 +67,6 @@ function educore_reports_attendance_view() {
             color: #0f172a;
         }
 
-        /* Top Header Action Banner */
         .afdp-header-frame {
             background: linear-gradient(135deg, #006a4e 0%, #004d39 100%);
             padding: 24px 28px;
@@ -153,7 +104,64 @@ function educore_reports_attendance_view() {
             font-weight: 500;
         }
 
-        /* Filter Control Matrix Card */
+        /* Segmented Target Switcher */
+        .report-mode-segmented {
+            display: inline-flex;
+            background: #f1f5f9;
+            padding: 4px;
+            border-radius: 10px;
+            border: 1px solid #cbd5e1;
+            gap: 4px;
+        }
+
+        .report-mode-input {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+            pointer-events: none;
+        }
+
+        .report-mode-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 18px;
+            font-size: 13px;
+            font-weight: 700;
+            border-radius: 7px;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            color: #64748b;
+            user-select: none;
+            line-height: 1;
+            border: 1px solid transparent;
+        }
+
+        .report-mode-pill .dashicons {
+            font-size: 16px;
+            width: 16px;
+            height: 16px;
+            line-height: 1;
+            opacity: 0.7;
+        }
+
+        .report-mode-pill:hover {
+            color: #0f172a;
+            background: rgba(255, 255, 255, 0.6);
+        }
+
+        .report-mode-input:checked + .report-mode-pill {
+            background: #006a4e;
+            color: #ffffff;
+            border-color: #00523c;
+            box-shadow: 0 2px 8px rgba(0, 106, 78, 0.25);
+        }
+
+        .report-mode-input:checked + .report-mode-pill .dashicons {
+            opacity: 1;
+        }
+
         .dpt-filter-card {
             background: #ffffff;
             border: 1px solid #e2e8f0;
@@ -161,31 +169,6 @@ function educore_reports_attendance_view() {
             padding: 20px 24px;
             margin-bottom: 24px;
             box-shadow: 0 4px 15px -3px rgba(0, 0, 0, 0.03);
-        }
-
-        .dpt-filter-grid {
-            display: grid;
-            grid-template-columns: 1.5fr 1.2fr 1.2fr 1fr 160px;
-            gap: 14px;
-            align-items: flex-end;
-        }
-
-        @media (max-width: 1200px) {
-            .dpt-filter-grid {
-                grid-template-columns: 1fr 1fr 1fr;
-            }
-        }
-
-        @media (max-width: 768px) {
-            .dpt-filter-grid {
-                grid-template-columns: 1fr 1fr;
-            }
-        }
-
-        @media (max-width: 576px) {
-            .dpt-filter-grid {
-                grid-template-columns: 1fr;
-            }
         }
 
         .dpt-field-group {
@@ -198,7 +181,6 @@ function educore_reports_attendance_view() {
             font-size: 12.5px;
             font-weight: 700;
             color: #475569;
-            letter-spacing: -0.1px;
         }
 
         .dpt-select {
@@ -219,12 +201,6 @@ function educore_reports_attendance_view() {
             background-color: #ffffff;
             box-shadow: 0 0 0 3px rgba(0, 106, 78, 0.1);
             outline: none;
-        }
-
-        .dpt-select:disabled {
-            background-color: #f1f5f9;
-            color: #94a3b8;
-            cursor: not-allowed;
         }
 
         .dpt-btn-generate {
@@ -249,7 +225,6 @@ function educore_reports_attendance_view() {
             transform: translateY(-1px);
         }
 
-        /* Summary Bento Banner & Stats Bar */
         .dpt-summary-bento {
             background: #ffffff;
             border: 1px solid #e2e8f0;
@@ -287,7 +262,6 @@ function educore_reports_attendance_view() {
             gap: 6px;
         }
 
-        /* Attendance Table Node */
         .dpt-table-card {
             background: #ffffff;
             border: 1px solid #e2e8f0;
@@ -330,7 +304,6 @@ function educore_reports_attendance_view() {
             background-color: #f8fafc;
         }
 
-        /* Progress Meter Matrix */
         .dpt-progress-container {
             display: flex;
             align-items: center;
@@ -353,7 +326,7 @@ function educore_reports_attendance_view() {
             transition: width 0.3s ease;
         }
 
-        .dpt-fill-success { background: #10b981; }
+        .dpt-fill-success { background: #006a4e; }
         .dpt-fill-warning { background: #f59e0b; }
         .dpt-fill-danger  { background: #ef4444; }
 
@@ -369,6 +342,7 @@ function educore_reports_attendance_view() {
             text-align: center;
             margin-top: 20px;
         }
+
         .afdp-fallback-card .dashicons {
             font-size: 36px;
             width: 36px;
@@ -376,6 +350,7 @@ function educore_reports_attendance_view() {
             color: #94a3b8;
             margin-bottom: 10px;
         }
+
         .afdp-fallback-card p {
             margin: 0;
             font-size: 14px;
@@ -383,61 +358,38 @@ function educore_reports_attendance_view() {
             font-weight: 600;
         }
 
-        /* Screen Hidden Print Elements */
         .dpt-print-header-area {
             display: none;
         }
 
-        /* ==========================================================================
-           PRINT ENGINE WITH INSTITUTIONAL HEADER & TABLE ISOLATION
-           ========================================================================== */
         @media print {
             @page {
                 size: A4 portrait;
                 margin: 10mm;
             }
 
-            /* HIDE EVERYTHING ON THE PAGE BY DEFAULT */
             body * {
                 visibility: hidden !important;
             }
 
-            #adminmenumain,
-            #adminmenuwrap,
-            #adminmenuback,
-            #wpadminbar,
-            #wpfooter,
-            #screen-meta,
-            #screen-meta-links,
-            .afdp-header-frame,
-            .dpt-filter-card,
-            .dpt-summary-bento,
-            .notice,
-            .updated,
-            .error,
-            .no-print {
+            #adminmenumain, #adminmenuwrap, #adminmenuback, #wpadminbar, #wpfooter,
+            #screen-meta, #screen-meta-links, .afdp-header-frame, .dpt-filter-card,
+            .dpt-summary-bento, .notice, .updated, .error, .no-print {
                 display: none !important;
             }
 
-            /* RESET CONTAINER LAYOUT FOR PRINT */
             html, body, #wpcontent, #wpbody, #wpbody-content, .dpt-attendance-root {
                 background: #ffffff !important;
                 margin: 0 !important;
                 padding: 0 !important;
                 width: 100% !important;
-                float: none !important;
-                position: static !important;
             }
 
-            /* MAKE PRINT HEADER AND TABLE CONTAINER VISIBLE */
-            .dpt-print-header-area,
-            .dpt-print-header-area *,
-            .dpt-table-card, 
-            .dpt-table-card * {
+            .dpt-print-header-area, .dpt-print-header-area *,
+            .dpt-table-card, .dpt-table-card * {
                 visibility: visible !important;
             }
 
-            /* INSTITUTIONAL PRINT HEADER STYLING */
             .dpt-print-header-area {
                 display: block !important;
                 position: absolute !important;
@@ -473,11 +425,10 @@ function educore_reports_attendance_view() {
                 padding: 0 4px;
             }
 
-            /* TABLE CONTAINER OFFSET UNDER HEADER */
             .dpt-table-card {
                 position: absolute !important;
                 left: 0 !important;
-                top: 95px !important; /* Offset down to make room for header */
+                top: 95px !important;
                 width: 100% !important;
                 margin: 0 !important;
                 padding: 0 !important;
@@ -486,19 +437,13 @@ function educore_reports_attendance_view() {
                 background: transparent !important;
             }
 
-            .dpt-table-wrapper {
-                overflow: visible !important;
-                width: 100% !important;
-            }
-
             .dpt-data-table {
                 width: 100% !important;
                 border-collapse: collapse !important;
                 font-size: 9.5pt !important;
             }
 
-            .dpt-data-table th, 
-            .dpt-data-table td {
+            .dpt-data-table th, .dpt-data-table td {
                 border: 1px solid #000000 !important;
                 padding: 7px 8px !important;
                 color: #000000 !important;
@@ -526,51 +471,80 @@ function educore_reports_attendance_view() {
 
     <div class="dpt-attendance-root">
         
-        <!-- Header Banner (Screen Only) -->
+        <!-- Header Banner -->
         <div class="afdp-header-frame no-print">
             <div class="afdp-header-content">
                 <h2>
-                    <span class="dashicons dashicons-calendar-alt"></span> Monthly Student Attendance Audit
+                    <span class="dashicons dashicons-calendar-alt"></span> Monthly Attendance Audit Statement
                 </h2>
-                <p>Select academic class, section, month, and year to generate class-wide attendance percentages and aggregate reports.</p>
+                <p>Select target scope, month, and year to generate comprehensive monthly attendance audit reports.</p>
             </div>
         </div>
 
-        <!-- Filter Control Matrix Card (Screen Only) -->
+        <!-- Filter Control Matrix Card -->
         <div class="dpt-filter-card no-print">
             <form method="GET" action="<?php echo esc_url( admin_url( 'admin.php' ) ); ?>">
                 <input type="hidden" name="page" value="school_management_system">
                 <input type="hidden" name="tab" value="reports">
                 <input type="hidden" name="sub" value="attendance">
                 
-                <div class="dpt-filter-grid">
-                    <!-- Class Dropdown -->
-                    <div class="dpt-field-group">
-                        <label class="dpt-label">Select Class</label>
-                        <select name="class_name" id="afdp_class_select" class="dpt-select" required>
-                            <option value="">-- Choose Class --</option>
-                            <?php foreach ( $classes as $cls ) : ?>
-                                <option value="<?php echo esc_attr( $cls ); ?>" <?php selected( $filter_class, $cls ); ?>><?php echo esc_html( $cls ); ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
+                <!-- Target Scope Switcher -->
+                <div style="margin-bottom:20px; display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
+                    <span style="font-size:13px; font-weight:700; color:#475569;"><?php esc_html_e( 'Audit Target Scope:', 'ifsedu-sms' ); ?></span>
+                    
+                    <div class="report-mode-segmented">
+                        <input type="radio" class="report-mode-input" id="target_student" name="report_target" value="student" <?php checked( $report_target, 'student' ); ?>>
+                        <label class="report-mode-pill" for="target_student">
+                            <span class="dashicons dashicons-welcome-learn-more"></span>
+                            <?php esc_html_e( 'Students Audit', 'ifsedu-sms' ); ?>
+                        </label>
 
-                    <!-- Dependent Section Dropdown -->
-                    <div class="dpt-field-group">
-                        <label class="dpt-label">Select Section</label>
-                        <select name="section_name" id="afdp_section_select" class="dpt-select" <?php disabled( empty( $filter_class ) && empty( $initial_sections ) ); ?>>
-                            <option value="">-- All Sections --</option>
-                            <?php if ( ! empty( $initial_sections ) ) : ?>
-                                <?php foreach ( $initial_sections as $sec ) : ?>
-                                    <option value="<?php echo esc_attr( $sec ); ?>" <?php selected( $filter_section, $sec ); ?>><?php echo esc_html( $sec ); ?></option>
+                        <input type="radio" class="report-mode-input" id="target_staff" name="report_target" value="staff" <?php checked( $report_target, 'staff' ); ?>>
+                        <label class="report-mode-pill" for="target_staff">
+                            <span class="dashicons dashicons-businessman"></span>
+                            <?php esc_html_e( 'Employees (Staff / Faculty) Audit', 'ifsedu-sms' ); ?>
+                        </label>
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap;">
+                    
+                    <!-- STUDENT FILTERS -->
+                    <div id="wrapper_student_filters" style="display: <?php echo ( $report_target === 'student' ) ? 'flex' : 'none'; ?>; gap:14px; flex:2; flex-wrap:wrap;">
+                        <div class="dpt-field-group" style="flex:1; min-width:160px;">
+                            <label class="dpt-label"><?php esc_html_e( 'Select Class', 'ifsedu-sms' ); ?> *</label>
+                            <select name="class_name" id="afdp_class_select" class="dpt-select">
+                                <option value=""><?php esc_html_e( '-- Choose Class --', 'ifsedu-sms' ); ?></option>
+                                <?php foreach ( $classes as $cls ) : ?>
+                                    <option value="<?php echo esc_attr( $cls ); ?>" <?php selected( $filter_class, $cls ); ?>><?php echo esc_html( $cls ); ?></option>
                                 <?php endforeach; ?>
-                            <?php endif; ?>
-                        </select>
+                            </select>
+                        </div>
+
+                        <div class="dpt-field-group" style="flex:1; min-width:160px;">
+                            <label class="dpt-label"><?php esc_html_e( 'Select Section', 'ifsedu-sms' ); ?></label>
+                            <select name="section_name" id="afdp_section_select" class="dpt-select">
+                                <option value=""><?php esc_html_e( '-- All Sections --', 'ifsedu-sms' ); ?></option>
+                            </select>
+                        </div>
                     </div>
 
-                    <!-- Month Dropdown -->
-                    <div class="dpt-field-group">
-                        <label class="dpt-label">Select Month</label>
+                    <!-- EMPLOYEE FILTERS -->
+                    <div id="wrapper_staff_filters" style="display: <?php echo ( $report_target === 'staff' ) ? 'flex' : 'none'; ?>; gap:14px; flex:2; flex-wrap:wrap;">
+                        <div class="dpt-field-group" style="flex:1; min-width:220px;">
+                            <label class="dpt-label"><?php esc_html_e( 'Filter by Employment Type', 'ifsedu-sms' ); ?></label>
+                            <select name="staff_type" id="afdp_staff_type_select" class="dpt-select">
+                                <option value=""><?php esc_html_e( '-- All Employment Types --', 'ifsedu-sms' ); ?></option>
+                                <?php foreach ( $all_staff_types as $st_type ) : ?>
+                                    <option value="<?php echo esc_attr( $st_type ); ?>" <?php selected( $filter_staff_type, $st_type ); ?>><?php echo esc_html( $st_type ); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- MONTH & YEAR FILTERS -->
+                    <div class="dpt-field-group" style="flex:1; min-width:140px;">
+                        <label class="dpt-label"><?php esc_html_e( 'Select Month', 'ifsedu-sms' ); ?> *</label>
                         <select name="report_month" class="dpt-select" required>
                             <?php foreach ( $months as $m_num => $m_name ) : ?>
                                 <option value="<?php echo esc_attr( $m_num ); ?>" <?php selected( $filter_selected_month, $m_num ); ?>>
@@ -580,9 +554,8 @@ function educore_reports_attendance_view() {
                         </select>
                     </div>
 
-                    <!-- Year Dropdown -->
-                    <div class="dpt-field-group">
-                        <label class="dpt-label">Select Year</label>
+                    <div class="dpt-field-group" style="flex:1; min-width:120px;">
+                        <label class="dpt-label"><?php esc_html_e( 'Select Year', 'ifsedu-sms' ); ?> *</label>
                         <select name="report_year" class="dpt-select" required>
                             <?php foreach ( $years as $yr ) : ?>
                                 <option value="<?php echo esc_attr( $yr ); ?>" <?php selected( $filter_year, $yr ); ?>>
@@ -592,30 +565,30 @@ function educore_reports_attendance_view() {
                         </select>
                     </div>
 
-                    <button type="submit" class="dpt-btn-generate">
-                        <span class="dashicons dashicons-filter"></span> View Report
-                    </button>
+                    <div class="dpt-field-group" style="min-width:140px;">
+                        <button type="submit" class="dpt-btn-generate" style="width:100%;">
+                            <span class="dashicons dashicons-filter"></span> <?php esc_html_e( 'View Report', 'ifsedu-sms' ); ?>
+                        </button>
+                    </div>
                 </div>
             </form>
         </div>
 
+        <!-- REPORT STATEMENT ENGINE -->
         <?php
-        if ( ! empty( $filter_class ) && ! empty( $filter_selected_month ) && ! empty( $filter_year ) ) {
-            
-            // Prepare LIKE pattern safely with esc_like
-            $like_pattern = $wpdb->esc_like( $filter_month ) . '%';
+        $like_pattern = $wpdb->esc_like( $filter_month ) . '%';
+        $month_name   = isset( $months[$filter_selected_month] ) ? $months[$filter_selected_month] : '';
 
-            // Build Section SQL Condition
+        if ( $report_target === 'student' && ! empty( $filter_class ) ) {
+            
             $section_sql = "";
             $params_days = array( $filter_class );
-            
             if ( ! empty( $filter_section ) ) {
-                $section_sql   = " AND s.section = %s ";
+                $section_sql   = " AND s.section_name = %s ";
                 $params_days[] = $filter_section;
             }
             $params_days[] = $like_pattern;
 
-            // Find total working days in that month for that class & section
             $total_working_days = $wpdb->get_var( $wpdb->prepare( "
                 SELECT COUNT(DISTINCT a.attendance_date) 
                 FROM {$table_attendance} a
@@ -625,47 +598,37 @@ function educore_reports_attendance_view() {
 
             $total_working_days = $total_working_days ? intval( $total_working_days ) : 0;
 
-            // Query parameters for fetching students
             $params_students = array( $like_pattern, $filter_class );
             if ( ! empty( $filter_section ) ) {
                 $params_students[] = $filter_section;
             }
 
-            // Single Optimized Bulk Query: Fetch Students & Pre-Calculated Monthly Counts
             $students = $wpdb->get_results( $wpdb->prepare( "
                 SELECT 
-                    s.id, 
-                    s.student_id, 
-                    s.full_name, 
-                    s.roll_no,
-                    s.section,
+                    s.id, s.student_id, s.full_name, s.roll_no, s.section_name,
                     SUM(CASE WHEN a.status = 'Present' THEN 1 ELSE 0 END) as present_count,
                     SUM(CASE WHEN a.status = 'Absent' THEN 1 ELSE 0 END) as absent_count,
                     SUM(CASE WHEN a.status = 'Late' THEN 1 ELSE 0 END) as late_count
                 FROM {$table_students} s
                 LEFT JOIN {$table_attendance} a 
-                    ON s.id = a.student_id 
-                    AND a.attendance_date LIKE %s
+                    ON s.id = a.student_id AND a.attendance_date LIKE %s
                 WHERE s.status = 'Active' AND s.class_name = %s {$section_sql}
                 GROUP BY s.id
             ", $params_students ) );
 
-            // PHP Natural Roll Sorting (Ensures Roll 1, 2, ... 10, 11 are ordered naturally)
             if ( ! empty( $students ) ) {
                 usort( $students, function( $a, $b ) {
-                    return strnatcmp( $a->roll_no, $b->roll_no );
+                    return strnatcasecmp( $a->roll_no, $b->roll_no );
                 });
             }
 
-            // Title label for Section
             $section_label = ! empty( $filter_section ) ? 'Section: ' . esc_html( $filter_section ) : 'All Sections';
-            $month_name    = isset( $months[$filter_selected_month] ) ? $months[$filter_selected_month] : '';
             ?>
 
-            <!-- Institutional Print-Only Header Block -->
+            <!-- Print Header -->
             <div class="dpt-print-header-area">
                 <h1><?php echo esc_html( get_bloginfo( 'name' ) ); ?></h1>
-                <h3>Student Monthly Attendance Report</h3>
+                <h3>Student Monthly Attendance Audit Report</h3>
                 <div class="dpt-print-meta-grid">
                     <div>
                         <strong>Class:</strong> <?php echo esc_html( $filter_class ); ?> (<?php echo esc_html( $section_label ); ?>)<br>
@@ -678,13 +641,13 @@ function educore_reports_attendance_view() {
                 </div>
             </div>
 
-            <!-- Summary Bento Header (Screen Only) -->
+            <!-- Screen Summary Bento -->
             <div class="dpt-summary-bento no-print">
                 <h3 class="dpt-summary-title">
                     <span class="dashicons dashicons-groups" style="color:#006a4e;"></span> 
                     Class: <?php echo esc_html( $filter_class . ' - ' . $section_label ); ?> | Month: <?php echo esc_html( $month_name . ' ' . $filter_year ); ?>
                 </h3>
-                <div class="dpt-summary-right" style="display:flex; gap:12px; align-items:center;">
+                <div style="display:flex; gap:12px; align-items:center;">
                     <span class="dpt-badge-days">
                         <span class="dashicons dashicons-clock"></span> Total Working Days: <?php echo esc_html( $total_working_days ); ?>
                     </span>
@@ -694,7 +657,7 @@ function educore_reports_attendance_view() {
                 </div>
             </div>
 
-            <!-- Attendance Data Table Container -->
+            <!-- Table Card -->
             <div class="dpt-table-card">
                 <div class="dpt-table-wrapper">
                     <table class="dpt-data-table">
@@ -716,7 +679,6 @@ function educore_reports_attendance_view() {
                                 $absent_count  = intval( $student->absent_count );
                                 $late_count    = intval( $student->late_count );
 
-                                // Percentage considers Present + Late as attended days
                                 $total_attended = $present_count + $late_count;
                                 $percentage     = ($total_working_days > 0) ? round( ($total_attended / $total_working_days) * 100, 1 ) : 0;
                                 
@@ -732,11 +694,9 @@ function educore_reports_attendance_view() {
                             ?>
                             <tr>
                                 <td><strong>#<?php echo esc_html( $student->roll_no ); ?></strong></td>
-                                <td style="text-align: left;">
-                                    <div style="font-weight: 700;"><?php echo esc_html( $student->full_name ); ?></div>
-                                </td>
+                                <td style="text-align: left;"><div style="font-weight: 700;"><?php echo esc_html( $student->full_name ); ?></div></td>
                                 <td><code><?php echo esc_html( $student->student_id ); ?></code></td>
-                                <td><span><?php echo esc_html( ! empty( $student->section ) ? $student->section : 'N/A' ); ?></span></td>
+                                <td><span><?php echo esc_html( ! empty( $student->section_name ) ? $student->section_name : 'N/A' ); ?></span></td>
                                 <td style="color:#047857; font-weight:800;"><?php echo esc_html( $present_count ); ?> Days</td>
                                 <td style="color:#b91c1c; font-weight:800;"><?php echo esc_html( $absent_count ); ?> Days</td>
                                 <td style="color:#b45309; font-weight:800;"><?php echo esc_html( $late_count ); ?> Days</td>
@@ -750,64 +710,209 @@ function educore_reports_attendance_view() {
                                 </td>
                             </tr>
                             <?php endforeach; else : ?>
-                            <tr>
-                                <td colspan="8" style="padding: 30px; color: #94a3b8;">No active students found assigned to this class/section filter.</td>
-                            </tr>
+                            <tr><td colspan="8" style="padding: 30px; color: #94a3b8;">No active students found assigned to this class/section filter.</td></tr>
                             <?php endif; ?>
                         </tbody>
                     </table>
                 </div>
             </div>
 
-            <?php
-        } else {
-            echo '<div class="afdp-fallback-card no-print"><span class="dashicons dashicons-info"></span><p>' . esc_html__( 'Please select a Class, Section, Month, and Year above to generate the monthly attendance report.', 'ifsedu-sms' ) . '</p></div>';
+        <?php } elseif ( $report_target === 'staff' ) {
+            
+            $staff_type_sql = "";
+            $params_days    = array();
+
+            if ( ! empty( $filter_staff_type ) ) {
+                $staff_type_sql = " AND st.staff_type = %s ";
+                $params_days[]  = $filter_staff_type;
+            }
+            $params_days[] = $like_pattern;
+
+            $total_working_days = $wpdb->get_var( $wpdb->prepare( "
+                SELECT COUNT(DISTINCT a.attendance_date) 
+                FROM {$table_staff_att} a
+                INNER JOIN {$table_staff} st ON a.staff_id = st.id
+                WHERE st.status = 'Active' {$staff_type_sql} AND a.attendance_date LIKE %s
+            ", $params_days ) );
+
+            $total_working_days = $total_working_days ? intval( $total_working_days ) : 0;
+
+            $params_staff = array( $like_pattern );
+            if ( ! empty( $filter_staff_type ) ) {
+                 $params_staff[] = $filter_staff_type;
+            }
+
+            $staff_members = $wpdb->get_results( $wpdb->prepare( "
+                SELECT 
+                    st.id, st.staff_id, st.full_name, st.name_bn, st.designation, st.staff_type,
+                    SUM(CASE WHEN a.status = 'Present' THEN 1 ELSE 0 END) as present_count,
+                    SUM(CASE WHEN a.status = 'Absent' THEN 1 ELSE 0 END) as absent_count,
+                    SUM(CASE WHEN a.status = 'Late' THEN 1 ELSE 0 END) as late_count
+                FROM {$table_staff} st
+                LEFT JOIN {$table_staff_att} a 
+                    ON st.id = a.staff_id AND a.attendance_date LIKE %s
+                WHERE st.status = 'Active' {$staff_type_sql}
+                GROUP BY st.id
+                ORDER BY st.full_name ASC
+            ", $params_staff ) );
+
+            $type_label = ! empty( $filter_staff_type ) ? $filter_staff_type : 'All Employment Types';
+            ?>
+
+            <!-- Print Header -->
+            <div class="dpt-print-header-area">
+                <h1><?php echo esc_html( get_bloginfo( 'name' ) ); ?></h1>
+                <h3>Employee Monthly Attendance Audit Statement</h3>
+                <div class="dpt-print-meta-grid">
+                    <div>
+                        <strong>Employment Scope:</strong> <?php echo esc_html( $type_label ); ?><br>
+                        <strong>Academic Session:</strong> <?php echo esc_html( $filter_year ); ?>
+                    </div>
+                    <div style="text-align: right;">
+                        <strong>Report Month:</strong> <?php echo esc_html( $month_name . ' ' . $filter_year ); ?><br>
+                        <strong>Generated:</strong> <?php echo esc_html( current_time('M j, Y, g:i a') ); ?>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Screen Summary Bento -->
+            <div class="dpt-summary-bento no-print">
+                <h3 class="dpt-summary-title">
+                    <span class="dashicons dashicons-businessman" style="color:#006a4e;"></span> 
+                    Scope: <?php echo esc_html( $type_label ); ?> | Month: <?php echo esc_html( $month_name . ' ' . $filter_year ); ?>
+                </h3>
+                <div style="display:flex; gap:12px; align-items:center;">
+                    <span class="dpt-badge-days">
+                        <span class="dashicons dashicons-clock"></span> Total Working Days: <?php echo esc_html( $total_working_days ); ?>
+                    </span>
+                    <button onclick="window.print()" class="dpt-btn-generate no-print" style="height:34px; padding:0 14px; font-size:12.5px; background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; box-shadow:none;">
+                        <span class="dashicons dashicons-printer"></span> Print Report
+                    </button>
+                </div>
+            </div>
+
+            <!-- Table Card -->
+            <div class="dpt-table-card">
+                <div class="dpt-table-wrapper">
+                    <table class="dpt-data-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 12%;">Staff ID</th>
+                                <th style="text-align: left;">Employee Name</th>
+                                <th style="width: 18%;">Designation</th>
+                                <th style="width: 16%;">Employment Type</th>
+                                <th style="width: 10%;">Present</th>
+                                <th style="width: 10%;">Absent</th>
+                                <th style="width: 10%;">Late</th>
+                                <th style="width: 14%;">Percentage</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if ( ! empty( $staff_members ) ) : foreach ( $staff_members as $st ) : 
+                                $present_count = intval( $st->present_count );
+                                $absent_count  = intval( $st->absent_count );
+                                $late_count    = intval( $st->late_count );
+
+                                $total_attended = $present_count + $late_count;
+                                $percentage     = ($total_working_days > 0) ? round( ($total_attended / $total_working_days) * 100, 1 ) : 0;
+                                
+                                $fill_class = 'dpt-fill-danger';
+                                $text_class = 'dpt-text-danger';
+                                if ( $percentage >= 80 ) {
+                                    $fill_class = 'dpt-fill-success';
+                                    $text_class = 'dpt-text-success';
+                                } elseif ( $percentage >= 50 ) {
+                                    $fill_class = 'dpt-fill-warning';
+                                    $text_class = 'dpt-text-warning';
+                                }
+
+                                $name_display = ! empty( $st->name_bn ) ? $st->name_bn : $st->full_name;
+                            ?>
+                            <tr>
+                                <td><code><?php echo esc_html( ! empty( $st->staff_id ) ? $st->staff_id : '#' . $st->id ); ?></code></td>
+                                <td style="text-align: left;"><div style="font-weight: 700;"><?php echo esc_html( $name_display ); ?></div></td>
+                                <td><span><?php echo esc_html( ! empty( $st->designation ) ? $st->designation : 'Faculty' ); ?></span></td>
+                                <td><span style="background:#f1f5f9; padding:2px 8px; border-radius:4px; font-weight:600; font-size:12px;"><?php echo esc_html( $st->staff_type ); ?></span></td>
+                                <td style="color:#047857; font-weight:800;"><?php echo esc_html( $present_count ); ?> Days</td>
+                                <td style="color:#b91c1c; font-weight:800;"><?php echo esc_html( $absent_count ); ?> Days</td>
+                                <td style="color:#b45309; font-weight:800;"><?php echo esc_html( $late_count ); ?> Days</td>
+                                <td>
+                                    <div class="dpt-progress-container">
+                                        <div class="dpt-progress-bar-bg no-print">
+                                            <div class="dpt-progress-bar-fill <?php echo esc_attr( $fill_class ); ?>" style="width: <?php echo esc_attr( min(100, $percentage) ); ?>%;"></div>
+                                        </div>
+                                        <span class="<?php echo esc_attr( $text_class ); ?>"><?php echo esc_html( $percentage ); ?>%</span>
+                                    </div>
+                                </td>
+                            </tr>
+                            <?php endforeach; else : ?>
+                            <tr><td colspan="8" style="padding: 30px; color: #94a3b8;">No active employees found for the selected scope.</td></tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        <?php } else {
+            echo '<div class="afdp-fallback-card no-print"><span class="dashicons dashicons-info"></span><p>' . esc_html__( 'Please select your Target Scope, Class/Type, Month, and Year above to generate the monthly attendance report.', 'ifsedu-sms' ) . '</p></div>';
         }
         ?>
 
     </div>
 
-    <!-- Dynamic AJAX Class-to-Section Dropdown Script -->
+    <!-- Client-Side Target Switcher & Section Chaining Script -->
     <script type="text/javascript">
-        jQuery(document).ready(function($) {
-            $('#afdp_class_select').on('change', function() {
-                var selectedClass = $(this).val();
-                var $sectionSelect = $('#afdp_section_select');
+    document.addEventListener('DOMContentLoaded', function() {
+        const unitsMap        = <?php echo wp_json_encode( ! empty( $all_units ) ? $all_units : array() ); ?>;
+        const currentSection  = "<?php echo esc_js( $filter_section ); ?>";
+        const classSelect     = document.getElementById('afdp_class_select');
+        const sectionSelect   = document.getElementById('afdp_section_select');
 
-                if (!selectedClass) {
-                    $sectionSelect.html('<option value="">-- All Sections --</option>').prop('disabled', true);
-                    return;
+        const targetRadios    = document.querySelectorAll('input[name="report_target"]');
+        const wrapperStudents = document.getElementById('wrapper_student_filters');
+        const wrapperStaff    = document.getElementById('wrapper_staff_filters');
+
+        // Target Switcher Listener
+        targetRadios.forEach(radio => {
+            radio.addEventListener('change', function() {
+                if (this.value === 'student') {
+                    wrapperStudents.style.display = 'flex';
+                    wrapperStaff.style.display    = 'none';
+                } else {
+                    wrapperStudents.style.display = 'none';
+                    wrapperStaff.style.display    = 'flex';
                 }
-
-                $sectionSelect.html('<option value="">Loading sections...</option>').prop('disabled', true);
-
-                $.ajax({
-                    url: '<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>',
-                    type: 'POST',
-                    data: {
-                        action: 'educore_get_sections_by_class',
-                        class_name: selectedClass,
-                        security: '<?php echo esc_js( wp_create_nonce( "educore_attendance_nonce" ) ); ?>'
-                    },
-                    success: function(response) {
-                        if (response.success) {
-                            var optionsHtml = '<option value="">-- All Sections --</option>';
-                            if (response.data && response.data.length > 0) {
-                                $.each(response.data, function(index, sec) {
-                                    optionsHtml += '<option value="' + sec + '">' + sec + '</option>';
-                                });
-                            }
-                            $sectionSelect.html(optionsHtml).prop('disabled', false);
-                        } else {
-                            $sectionSelect.html('<option value="">-- All Sections --</option>').prop('disabled', false);
-                        }
-                    },
-                    error: function() {
-                        $sectionSelect.html('<option value="">-- All Sections --</option>').prop('disabled', false);
-                    }
-                });
             });
         });
+
+        // Section Chaining
+        function populateSections(selectedClass, selectedSecName = '') {
+            if (!sectionSelect) return;
+            sectionSelect.innerHTML = '<option value=""><?php esc_html_e( '-- All Sections --', 'ifsedu-sms' ); ?></option>';
+            if (!selectedClass) return;
+
+            const filtered = unitsMap.filter(item => item.class_name == selectedClass);
+            const uniqueSections = [...new Set(filtered.map(item => item.section_name).filter(Boolean))];
+
+            uniqueSections.forEach(secName => {
+                const opt = document.createElement('option');
+                opt.value = secName;
+                opt.textContent = secName;
+                if (secName == selectedSecName) {
+                    opt.selected = true;
+                }
+                sectionSelect.appendChild(opt);
+            });
+        }
+
+        if (classSelect && sectionSelect) {
+            populateSections(classSelect.value, currentSection);
+
+            classSelect.addEventListener('change', function() {
+                populateSections(this.value);
+            });
+        }
+    });
     </script>
     <?php
 }

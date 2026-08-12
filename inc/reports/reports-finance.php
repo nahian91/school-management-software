@@ -74,7 +74,7 @@ function educore_reports_finance_view() {
             font-size: 26px;
             width: 26px;
             height: 26px;
-            color: #10b981;
+            color: #006a4e;
         }
 
         .afdp-header-content p {
@@ -201,7 +201,7 @@ function educore_reports_finance_view() {
             height: 100%;
         }
 
-        .dpt-metric-card.dpt-card-emerald::before { background: #10b981; }
+        .dpt-metric-card.dpt-card-emerald::before { background: #006a4e; }
         .dpt-metric-card.dpt-card-rose::before { background: #f43f5e; }
         .dpt-metric-card.dpt-card-amber::before { background: #f59e0b; }
 
@@ -229,7 +229,7 @@ function educore_reports_finance_view() {
             justify-content: center;
         }
 
-        .dpt-card-emerald .dpt-metric-icon { background: #ecfdf5; color: #10b981; }
+        .dpt-card-emerald .dpt-metric-icon { background: #ecfdf5; color: #006a4e; }
         .dpt-card-rose .dpt-metric-icon { background: #fff1f2; color: #f43f5e; }
         .dpt-card-amber .dpt-metric-icon { background: #fffbeb; color: #f59e0b; }
 

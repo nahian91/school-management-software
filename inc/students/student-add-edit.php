@@ -266,9 +266,9 @@ function educore_student_add_edit_view() {
         }
 
         .dpt-step-node.completed .dpt-step-circle {
-            border-color: #10b981;
+            border-color: #006a4e;
             background: #ecfdf5;
-            color: #10b981;
+            color: #006a4e;
         }
 
         /* Step Panels & Transitions */
@@ -397,7 +397,7 @@ function educore_student_add_edit_view() {
         .btn-next { background: #006a4e; color: #ffffff; box-shadow: 0 4px 12px rgba(0, 106, 78, 0.15); }
         .btn-next:hover { background: #00523c; box-shadow: 0 6px 16px rgba(0, 106, 78, 0.25); }
 
-        .btn-submit { background: #10b981; color: #ffffff; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2); }
+        .btn-submit { background: #006a4e; color: #ffffff; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2); }
         .btn-submit:hover { background: #059669; }
     </style>
 

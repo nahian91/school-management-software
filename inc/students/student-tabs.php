@@ -121,7 +121,7 @@ function educore_students_tab() {
         /* Fallback Notice Interface */
         .afdp-notice-card {
             background: #f0fdf4;
-            border-left: 4px solid #10b981;
+            border-left: 4px solid #006a4e;
             padding: 16px 20px;
             border-radius: 0 8px 8px 0;
             color: #15803d;

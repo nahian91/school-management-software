@@ -109,7 +109,7 @@ function educore_staff_profile_view() {
             display: inline-block;
             margin-right: 6px;
         }
-        .status-dot-active { background-color: #22c55e; box-shadow: 0 0 8px #22c55e; }
+        .status-dot-active { background-color: #006a4e; box-shadow: 0 0 8px #006a4e; }
         .status-dot-inactive { background-color: #ef4444; box-shadow: 0 0 8px #ef4444; }
 
         /* Typography & Data Labels */

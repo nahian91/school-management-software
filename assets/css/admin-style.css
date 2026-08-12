@@ -777,7 +777,7 @@
         .financial-card .fin-val { font-size: 20px; font-weight: 700; color: #0f172a; }
         .financial-card.accent-due { border-left: 4px solid #ef4444; background: #fef2f2; }
         .financial-card.accent-due .fin-val { color: #dc2626; }
-        .financial-card.accent-paid { border-left: 4px solid #10b981; background: #ecfdf5; }
+        .financial-card.accent-paid { border-left: 4px solid #006a4e; background: #ecfdf5; }
         .financial-card.accent-paid .fin-val { color: #059669; }
         
         .badge-pill { display: inline-flex; padding: 2px 8px; font-size: 11px; font-weight: 600; border-radius: 9999px; line-height: 1.5; }
@@ -876,7 +876,7 @@
             --arms-text: #0f172a;
             --arms-muted: #64748b;
             --arms-border: #e2e8f0;
-            --arms-success: #10b981;
+            --arms-success: #006a4e;
             --arms-success-bg: #e6f4ea;
             --arms-warning: #f59e0b;
             --arms-warning-bg: #fef3c7;

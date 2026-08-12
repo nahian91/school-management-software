@@ -101,7 +101,7 @@ function educore_staff_add_edit_view() {
         .educore-step-content { display: none; }
         .educore-step-content.active { display: block; }
         .nav-tabs .nav-link { color: #495057; font-weight: 600; border: 1px solid #dee2e6; margin-right: 5px; border-radius: 5px 5px 0 0; background-color: #f8f9fa; }
-        .nav-tabs .nav-link.active { color: #fff !important; background-color: #10b981 !important; border-color: #10b981 !important; }
+        .nav-tabs .nav-link.active { color: #fff !important; background-color: #006a4e !important; border-color: #006a4e !important; }
         .nav-tabs .nav-link.completed { background-color: #e2fbf0; color: #047857; border-color: #a7f3d0; }
         .form-step-actions { border-top: 1px solid #dee2e6; padding-top: 20px; margin-top: 30px; }
     </style>
@@ -372,7 +372,7 @@ function educore_staff_add_edit_view() {
                 <button type="button" class="btn btn-secondary px-4" id="educorePrevBtn" style="display: none;">&larr; <?php esc_html_e( 'Previous Step', 'educore' ); ?></button>
                 <div class="ms-auto">
                     <button type="button" class="btn btn-primary px-4" id="educoreNextBtn" style="background-color: #2563eb; border: none;"><?php esc_html_e( 'Next Step &rarr;', 'educore' ); ?></button>
-                    <button type="submit" name="educore_save_staff" class="btn btn-success px-5" id="educoreSubmitBtn" style="display: none; background-color: #10b981; border: none; font-weight: bold;">
+                    <button type="submit" name="educore_save_staff" class="btn btn-success px-5" id="educoreSubmitBtn" style="display: none; background-color: #006a4e; border: none; font-weight: bold;">
                         <?php echo $is_edit ? esc_html__( 'Update Record Stack', 'educore' ) : esc_html__( 'Save Staff Member Details', 'educore' ); ?>
                     </button>
                 </div>

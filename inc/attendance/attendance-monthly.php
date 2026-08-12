@@ -25,9 +25,11 @@ function educore_monthly_attendance_summary_view( $classes, $sections, $filter_c
     
     $start_date     = $selected_month . '-01';
     $end_date       = date( 'Y-m-t', strtotime( $start_date ) );
+    $days_in_month  = (int) date( 't', strtotime( $start_date ) );
 
-    $students     = array();
-    $summary_data = array();
+    $students            = array();
+    $daily_records       = array();
+    $summary_counts      = array();
 
     if ( ! empty( $filter_class ) ) {
         $query = "SELECT id, student_id, full_name, roll_no FROM {$table_students} WHERE status = 'Active' AND class_name = %s";
@@ -50,20 +52,44 @@ function educore_monthly_attendance_summary_view( $classes, $sections, $filter_c
             $student_ids  = wp_list_pluck( $students, 'id' );
             $placeholders = implode( ',', array_fill( 0, count( $student_ids ), '%d' ) );
 
-            $raw_summary = $wpdb->get_results( $wpdb->prepare(
-                "SELECT student_id, status, COUNT(*) as count_total
+            // Fetch day-by-day attendance entries for matrix grid
+            $raw_daily = $wpdb->get_results( $wpdb->prepare(
+                "SELECT student_id, attendance_date, status
                  FROM {$table_attendance}
-                 WHERE attendance_date BETWEEN %s AND %s AND student_id IN ($placeholders)
-                 GROUP BY student_id, status",
+                 WHERE attendance_date BETWEEN %s AND %s AND student_id IN ($placeholders)",
                 array_merge( array( $start_date, $end_date ), $student_ids )
             ) );
 
-            foreach ( $raw_summary as $row ) {
-                $summary_data[ $row->student_id ][ $row->status ] = (int) $row->count_total;
+            foreach ( $raw_daily as $entry ) {
+                $day_num = (int) date( 'j', strtotime( $entry->attendance_date ) );
+                $daily_records[ $entry->student_id ][ $day_num ] = $entry->status;
+                
+                if ( ! isset( $summary_counts[ $entry->student_id ][ $entry->status ] ) ) {
+                    $summary_counts[ $entry->student_id ][ $entry->status ] = 0;
+                }
+                $summary_counts[ $entry->student_id ][ $entry->status ]++;
             }
         }
     }
     ?>
+
+    <style>
+        .att-status-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 800;
+            line-height: 1;
+        }
+        .att-badge-p { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; }
+        .att-badge-a { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+        .att-badge-l { background: #fff7ed; color: #d97706; border: 1px solid #fed7aa; }
+        .att-badge-empty { color: #cbd5e1; font-weight: 400; }
+    </style>
 
     <!-- Monthly Filter Control Bento Card -->
     <div class="dpt-bento-card no-print" style="background:#fff; border:1px solid #e2e8f0; padding:20px; border-radius:12px; margin-bottom:24px;">
@@ -74,7 +100,6 @@ function educore_monthly_attendance_summary_view( $classes, $sections, $filter_c
 
             <div class="dpt-form-group" style="flex:1; min-width:160px;">
                 <label style="display:block; font-size:12px; font-weight:700; color:#475569; margin-bottom:6px;"><?php esc_html_e( 'Target Month', 'ifsedu-sms' ); ?> *</label>
-                <!-- Input type "month" with max attribute set to current YYYY-MM -->
                 <input type="month" name="month" style="width:100%; height:40px; border:1px solid #cbd5e1; border-radius:8px; padding:0 12px;" value="<?php echo esc_attr( $selected_month ); ?>" max="<?php echo esc_attr( current_time( 'Y-m' ) ); ?>" required>
             </div>
 
@@ -124,38 +149,60 @@ function educore_monthly_attendance_summary_view( $classes, $sections, $filter_c
             </div>
 
             <div style="overflow-x:auto;">
-                <table style="width:100%; border-collapse:collapse; text-align:left; font-size:13.5px;">
+                <table style="width:100%; border-collapse:collapse; text-align:left; font-size:12.5px;">
                     <thead>
                         <tr style="background:#f8fafc;">
-                            <th style="padding:12px; color:#475569; border-bottom:1px solid #e2e8f0;"><?php esc_html_e( 'Roll', 'ifsedu-sms' ); ?></th>
-                            <th style="padding:12px; color:#475569; border-bottom:1px solid #e2e8f0;"><?php esc_html_e( 'Student ID', 'ifsedu-sms' ); ?></th>
-                            <th style="padding:12px; color:#475569; border-bottom:1px solid #e2e8f0;"><?php esc_html_e( 'Student Name', 'ifsedu-sms' ); ?></th>
-                            <th style="padding:12px; border-bottom:1px solid #e2e8f0; text-align:center; color:#059669;"><?php esc_html_e( 'Presents', 'ifsedu-sms' ); ?></th>
-                            <th style="padding:12px; border-bottom:1px solid #e2e8f0; text-align:center; color:#dc2626;"><?php esc_html_e( 'Absents', 'ifsedu-sms' ); ?></th>
-                            <th style="padding:12px; border-bottom:1px solid #e2e8f0; text-align:center; color:#d97706;"><?php esc_html_e( 'Lates', 'ifsedu-sms' ); ?></th>
-                            <th style="padding:12px; color:#475569; border-bottom:1px solid #e2e8f0; text-align:right; min-width:140px;"><?php esc_html_e( 'Attendance Ratio', 'ifsedu-sms' ); ?></th>
+                            <th style="padding:10px 8px; color:#475569; border-bottom:1px solid #e2e8f0; sticky:left; background:#f8fafc; min-width:50px;"><?php esc_html_e( 'Roll', 'ifsedu-sms' ); ?></th>
+                            <th style="padding:10px 8px; color:#475569; border-bottom:1px solid #e2e8f0; sticky:left; background:#f8fafc; min-width:140px;"><?php esc_html_e( 'Student Name', 'ifsedu-sms' ); ?></th>
+                            
+                            <!-- Calendar Days Columns -->
+                            <?php for ( $d = 1; $d <= $days_in_month; $d++ ) : ?>
+                                <th style="padding:6px 2px; color:#475569; border-bottom:1px solid #e2e8f0; text-align:center; min-width:28px; font-size:11px;"><?php echo $d; ?></th>
+                            <?php endfor; ?>
+
+                            <th style="padding:10px 8px; border-bottom:1px solid #e2e8f0; text-align:center; color:#059669; font-weight:800;"><?php esc_html_e( 'P', 'ifsedu-sms' ); ?></th>
+                            <th style="padding:10px 8px; border-bottom:1px solid #e2e8f0; text-align:center; color:#dc2626; font-weight:800;"><?php esc_html_e( 'A', 'ifsedu-sms' ); ?></th>
+                            <th style="padding:10px 8px; border-bottom:1px solid #e2e8f0; text-align:center; color:#d97706; font-weight:800;"><?php esc_html_e( 'L', 'ifsedu-sms' ); ?></th>
+                            <th style="padding:10px 8px; color:#475569; border-bottom:1px solid #e2e8f0; text-align:right; min-width:100px;"><?php esc_html_e( 'Ratio', 'ifsedu-sms' ); ?></th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php foreach ( $students as $st ) : 
                             $st_id          = (int) $st->id;
-                            $p_cnt          = isset( $summary_data[ $st_id ]['Present'] ) ? $summary_data[ $st_id ]['Present'] : 0;
-                            $a_cnt          = isset( $summary_data[ $st_id ]['Absent'] ) ? $summary_data[ $st_id ]['Absent'] : 0;
-                            $l_cnt          = isset( $summary_data[ $st_id ]['Late'] ) ? $summary_data[ $st_id ]['Late'] : 0;
+                            $p_cnt          = isset( $summary_counts[ $st_id ]['Present'] ) ? $summary_counts[ $st_id ]['Present'] : 0;
+                            $a_cnt          = isset( $summary_counts[ $st_id ]['Absent'] ) ? $summary_counts[ $st_id ]['Absent'] : 0;
+                            $l_cnt          = isset( $summary_counts[ $st_id ]['Late'] ) ? $summary_counts[ $st_id ]['Late'] : 0;
                             $total_recorded = $p_cnt + $a_cnt + $l_cnt;
                             $pct            = $total_recorded > 0 ? round( ( $p_cnt / $total_recorded ) * 100, 1 ) : 0;
                             $pct_color      = $pct >= 80 ? '#059669' : ( $pct >= 60 ? '#d97706' : '#dc2626' );
                         ?>
                             <tr style="border-bottom:1px solid #f1f5f9;">
-                                <td style="padding:12px;"><strong>#<?php echo esc_html( $st->roll_no ); ?></strong></td>
-                                <td style="padding:12px;"><code style="background:#f1f5f9; padding:3px 6px; border-radius:4px; border:1px solid #e2e8f0; color:#0f172a; font-weight:700;"><?php echo esc_html( $st->student_id ); ?></code></td>
-                                <td style="padding:12px;"><strong style="color:#0f172a;"><?php echo esc_html( $st->full_name ); ?></strong></td>
-                                <td style="padding:12px; text-align:center; font-weight:800; color:#059669; background:rgba(5, 150, 105, 0.03);"><?php echo $p_cnt; ?></td>
-                                <td style="padding:12px; text-align:center; font-weight:800; color:#dc2626; background:rgba(220, 38, 38, 0.03);"><?php echo $a_cnt; ?></td>
-                                <td style="padding:12px; text-align:center; font-weight:800; color:#d97706; background:rgba(217, 119, 6, 0.03);"><?php echo $l_cnt; ?></td>
-                                <td style="padding:12px; text-align:right;">
-                                    <strong style="color:<?php echo $pct_color; ?>;"><?php echo $pct; ?>%</strong>
-                                    <div style="height:6px; background:#e2e8f0; border-radius:10px; overflow:hidden; margin-top:6px;">
+                                <td style="padding:10px 8px;"><strong>#<?php echo esc_html( $st->roll_no ); ?></strong></td>
+                                <td style="padding:10px 8px;"><strong style="color:#0f172a;"><?php echo esc_html( $st->full_name ); ?></strong></td>
+                                
+                                <!-- Day Grid Output -->
+                                <?php for ( $d = 1; $d <= $days_in_month; $d++ ) : 
+                                    $st_status = isset( $daily_records[ $st_id ][ $d ] ) ? $daily_records[ $st_id ][ $d ] : '';
+                                ?>
+                                    <td style="padding:4px 1px; text-align:center;">
+                                        <?php if ( $st_status === 'Present' ) : ?>
+                                            <span class="att-status-badge att-badge-p">P</span>
+                                        <?php elseif ( $st_status === 'Absent' ) : ?>
+                                            <span class="att-status-badge att-badge-a">A</span>
+                                        <?php elseif ( $st_status === 'Late' ) : ?>
+                                            <span class="att-status-badge att-badge-l">L</span>
+                                        <?php else : ?>
+                                            <span class="att-status-badge att-badge-empty">-</span>
+                                        <?php endif; ?>
+                                    </td>
+                                <?php endfor; ?>
+
+                                <td style="padding:10px 6px; text-align:center; font-weight:800; color:#059669; background:rgba(5, 150, 105, 0.03);"><?php echo $p_cnt; ?></td>
+                                <td style="padding:10px 6px; text-align:center; font-weight:800; color:#dc2626; background:rgba(220, 38, 38, 0.03);"><?php echo $a_cnt; ?></td>
+                                <td style="padding:10px 6px; text-align:center; font-weight:800; color:#d97706; background:rgba(217, 119, 6, 0.03);"><?php echo $l_cnt; ?></td>
+                                <td style="padding:10px 8px; text-align:right;">
+                                    <strong style="color:<?php echo $pct_color; ?>; font-size:12px;"><?php echo $pct; ?>%</strong>
+                                    <div style="height:5px; background:#e2e8f0; border-radius:10px; overflow:hidden; margin-top:4px;">
                                         <div style="width:<?php echo $pct; ?>%; height:100%; background:<?php echo $pct_color; ?>; border-radius:10px;"></div>
                                     </div>
                                 </td>
@@ -224,7 +271,6 @@ function educore_monthly_attendance_summary_view( $classes, $sections, $filter_c
             filteredStudents.forEach(stu => {
                 const opt = document.createElement('option');
                 opt.value = stu.id;
-                // Format: [Roll: 1] John Doe
                 opt.textContent = stu.roll_no ? `[Roll: ${stu.roll_no}] ${stu.full_name}` : stu.full_name;
                 
                 if (String(stu.id) === String(selectedStudentId)) {
@@ -235,17 +281,15 @@ function educore_monthly_attendance_summary_view( $classes, $sections, $filter_c
         }
 
         if (classSelect && sectionSelect && studentSelect) {
-            // Initial load (Preserve selections if page reloaded)
+            // Initial load
             populateSections(classSelect.value, currentFilterSection);
             populateStudents(classSelect.value, currentFilterSection, currentFilterStudent);
 
-            // On change Class -> Update Section and Student dropdowns
             classSelect.addEventListener('change', function() {
                 populateSections(classSelect.value);
                 populateStudents(classSelect.value, sectionSelect.value);
             });
 
-            // On change Section -> Update Student dropdown to only show students in that section
             sectionSelect.addEventListener('change', function() {
                 populateStudents(classSelect.value, sectionSelect.value);
             });

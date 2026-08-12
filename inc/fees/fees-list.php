@@ -13,6 +13,7 @@ function educore_fees_list_view() {
     global $wpdb;
     $table_fees     = $wpdb->prefix . 'sms_fees';
     $table_students = $wpdb->prefix . 'sms_students';
+    $table_units    = $wpdb->prefix . 'sms_academic_units';
 
     // 1. Capability Security Check
     if ( ! current_user_can( 'manage_options' ) ) {
@@ -27,9 +28,20 @@ function educore_fees_list_view() {
     $filter_date_to   = isset( $_GET['filter_date_to'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_date_to'] ) ) : '';
     $filter_status    = isset( $_GET['filter_status'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_status'] ) ) : '';
 
-    // 3. Fetch Dropdown Options Dynamically
-    $available_classes  = $wpdb->get_col( "SELECT DISTINCT class_name FROM {$table_students} WHERE class_name IS NOT NULL AND class_name != '' ORDER BY class_name ASC" );
-    $available_sections = $wpdb->get_col( "SELECT DISTINCT section_name FROM {$table_students} WHERE section_name IS NOT NULL AND section_name != '' ORDER BY section_name ASC" );
+    // 3. Fetch Dropdown Options Dynamically with Natural Numerical Ordering
+    $raw_classes = $wpdb->get_results( "SELECT DISTINCT class_name FROM {$table_units} WHERE class_name IS NOT NULL AND class_name != '' ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC" );
+    $available_classes = array();
+    if ( ! empty( $raw_classes ) ) {
+        usort( $raw_classes, function( $a, $b ) {
+            return strnatcasecmp( $a->class_name, $b->class_name );
+        });
+        foreach ( $raw_classes as $cls_obj ) {
+            $available_classes[] = $cls_obj->class_name;
+        }
+    }
+
+    // All academic units for dynamic section filtering via JS
+    $all_units = $wpdb->get_results( "SELECT id, class_name, section_name FROM {$table_units} WHERE section_name != '' ORDER BY section_name ASC" );
 
     // 4. Construct SQL Query WHERE Conditions
     $where_clauses = array();
@@ -471,16 +483,11 @@ function educore_fees_list_view() {
                     </select>
                 </div>
 
-                <!-- Section Filter -->
+                <!-- Section Filter (Dynamic Dropdown via JS) -->
                 <div class="afdp-filter-group">
                     <label for="filter_section"><?php esc_html_e( 'Section', 'ifsedu-sms' ); ?></label>
                     <select name="filter_section" id="filter_section" class="afdp-filter-select">
                         <option value=""><?php esc_html_e( 'All Sections', 'ifsedu-sms' ); ?></option>
-                        <?php if ( ! empty( $available_sections ) ) : foreach ( $available_sections as $section ) : ?>
-                            <option value="<?php echo esc_attr( $section ); ?>" <?php selected( $filter_section, $section ); ?>>
-                                <?php echo esc_html( $section ); ?>
-                            </option>
-                        <?php endforeach; endif; ?>
                     </select>
                 </div>
 
@@ -611,8 +618,43 @@ function educore_fees_list_view() {
 
     </div>
 
-    <!-- DataTable Execution Engine -->
+    <!-- Dynamic Script Layer: Section Chaining & DataTables Engine -->
     <script type="text/javascript">
+    document.addEventListener('DOMContentLoaded', function() {
+        const unitsMap       = <?php echo wp_json_encode( ! empty( $all_units ) ? $all_units : array() ); ?>;
+        const currentSection = "<?php echo esc_js( $filter_section ); ?>";
+        const classSelect    = document.getElementById('filter_class');
+        const sectionSelect  = document.getElementById('filter_section');
+
+        // Populate Sections based on selected Class
+        function populateSections(selectedClass, selectedSecName = '') {
+            if (!sectionSelect) return;
+            sectionSelect.innerHTML = '<option value=""><?php esc_html_e( 'All Sections', 'ifsedu-sms' ); ?></option>';
+            if (!selectedClass) return;
+
+            const filtered = unitsMap.filter(item => item.class_name == selectedClass);
+            const uniqueSections = [...new Set(filtered.map(item => item.section_name).filter(Boolean))];
+
+            uniqueSections.forEach(secName => {
+                const opt = document.createElement('option');
+                opt.value = secName;
+                opt.textContent = secName;
+                if (secName == selectedSecName) {
+                    opt.selected = true;
+                }
+                sectionSelect.appendChild(opt);
+            });
+        }
+
+        if (classSelect && sectionSelect) {
+            populateSections(classSelect.value, currentSection);
+
+            classSelect.addEventListener('change', function() {
+                populateSections(this.value);
+            });
+        }
+    });
+
     jQuery(document).ready(function($) {
         if ($.fn.DataTable) {
             $('.educore-datatable').DataTable({ 

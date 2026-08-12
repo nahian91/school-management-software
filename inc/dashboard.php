@@ -158,7 +158,7 @@ function educore_dashboard_tab() {
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #10b981;
+            color: #006a4e;
             flex-shrink: 0;
             backdrop-filter: blur(12px);
             box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
@@ -295,7 +295,7 @@ function educore_dashboard_tab() {
         }
 
         .card-students::before { background: linear-gradient(180deg, #2563eb, #3b82f6); }
-        .card-present::before  { background: linear-gradient(180deg, #059669, #10b981); }
+        .card-present::before  { background: linear-gradient(180deg, #059669, #006a4e); }
         .card-absent::before   { background: linear-gradient(180deg, #d97706, #f59e0b); }
         .card-fees::before     { background: linear-gradient(180deg, #7c3aed, #8b5cf6); }
         .card-dues::before     { background: linear-gradient(180deg, #dc2626, #ef4444); }
@@ -764,7 +764,7 @@ function educore_dashboard_tab() {
                         <div style="font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:0.6px; color:#64748b; margin-bottom:6px;"><?php esc_html_e( 'Attendance Ratio', 'educore' ); ?></div>
                         <div style="font-size:22px; font-weight:800; color:#0f172a; letter-spacing:-0.5px;"><?php echo $attendance_percentage; ?>% <span style="font-size:13px; font-weight:600; color:#64748b;"><?php esc_html_e( 'Present Today', 'educore' ); ?></span></div>
                         <div style="height:8px; background:#e2e8f0; border-radius:10px; margin-top:10px; overflow:hidden;">
-                            <div style="width:<?php echo $attendance_percentage; ?>%; height:100%; background:linear-gradient(90deg, #10b981, #059669); border-radius:10px; transition: width 1s ease-in-out;"></div>
+                            <div style="width:<?php echo $attendance_percentage; ?>%; height:100%; background:linear-gradient(90deg, #006a4e, #059669); border-radius:10px; transition: width 1s ease-in-out;"></div>
                         </div>
                     </div>
 

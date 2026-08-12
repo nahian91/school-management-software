@@ -123,7 +123,7 @@ if ( ! empty( $classes ) ) {
         transition: all 0.2s ease;
     }
     .dpt-filter-select:focus {
-        border-color: #22c55e;
+        border-color: #006a4e;
         box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
     }
     .dpt-count-pill {
@@ -157,7 +157,7 @@ if ( ! empty( $classes ) ) {
             </div>
 
             <div>
-                <button type="submit" name="save_class_row" class="dpt-btn-action-trigger" style="background:#22c55e; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:600; cursor:pointer; height:38px; display:inline-flex; align-items:center; gap:6px;">
+                <button type="submit" name="save_class_row" class="dpt-btn-action-trigger" style="background:#006a4e; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:600; cursor:pointer; height:38px; display:inline-flex; align-items:center; gap:6px;">
                     <span class="dashicons <?php echo $is_edit ? 'dashicons-edit' : 'dashicons-plus-alt2'; ?>" style="font-size:18px; width:18px; height:18px;"></span> 
                     <?php echo $is_edit ? 'Update Unit' : 'Add Unit'; ?>
                 </button>

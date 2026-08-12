@@ -139,7 +139,7 @@ function educore_accounting_add_edit_view() {
         }
 
         .dpt-input-field:focus, .dpt-select-field:focus, .dpt-textarea-field:focus {
-            border-color: #10b981;
+            border-color: #006a4e;
             background-color: #ffffff;
             box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12);
             outline: none;
@@ -147,7 +147,7 @@ function educore_accounting_add_edit_view() {
 
         /* Dynamic Indicator Colors for Flow Type */
         .dpt-select-field.type-income-active {
-            border-color: #10b981;
+            border-color: #006a4e;
             background-color: #ecfdf5;
             color: #065f46;
         }
@@ -160,7 +160,7 @@ function educore_accounting_add_edit_view() {
 
         .dpt-btn-submit {
             height: 46px;
-            background: #10b981;
+            background: #006a4e;
             border: none;
             color: #ffffff;
             font-weight: 700;
@@ -201,7 +201,7 @@ function educore_accounting_add_edit_view() {
 
         <?php if ( ! empty( $notice_message ) ) : ?>
             <div class="afdp-status-banner">
-                <span class="dashicons dashicons-yes-alt" style="font-size: 20px; width:20px; height:20px; color:#10b981;"></span>
+                <span class="dashicons dashicons-yes-alt" style="font-size: 20px; width:20px; height:20px; color:#006a4e;"></span>
                 <?php echo esc_html( $notice_message ); ?>
             </div>
         <?php endif; ?>
@@ -210,7 +210,7 @@ function educore_accounting_add_edit_view() {
             
             <div class="afdp-card-title-group">
                 <h4 class="afdp-card-title">
-                    <span class="dashicons dashicons-plus-alt2" style="color: #10b981;"></span>
+                    <span class="dashicons dashicons-plus-alt2" style="color: #006a4e;"></span>
                     <?php esc_html_e( 'Record Financial Entry', 'ifsedu-sms' ); ?>
                 </h4>
                 <span style="font-size: 12px; color: #64748b; font-weight: 600;"><?php esc_html_e( 'General Ledger', 'ifsedu-sms' ); ?></span>

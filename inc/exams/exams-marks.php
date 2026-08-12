@@ -25,8 +25,6 @@ if ( ! function_exists( 'educore_calculate_grade' ) ) {
 /**
  * High-End Subject-wise Examination Marks Evaluation Matrix
  * File: exams-marks-view.php
- * Custom Prefixes Applied: dpt-, afdp-
- * Architecture: Neo-Bento Interface with Kinetic Data Input & Secure Batch Execution
  */
 function educore_exams_marks_view() {
     global $wpdb;
@@ -135,11 +133,16 @@ function educore_exams_marks_view() {
         });
     }
 
-    // Fetch Unique Sections
-    $raw_sections = $wpdb->get_results( "SELECT DISTINCT section_name FROM {$table_units} WHERE section_name != '' ORDER BY section_name ASC" );
+    // All academic units for dynamic section filtering
+    $all_units = $wpdb->get_results( "SELECT id, class_name, section_name FROM {$table_units} WHERE section_name != '' ORDER BY section_name ASC" );
 
-    // Subjects Dropdown List
-    $subjects = $wpdb->get_results( "SELECT DISTINCT subject_name FROM {$table_subjects} WHERE subject_name != '' ORDER BY subject_name ASC" );
+    // Fetch subjects with Unit Class ID & Class Name mapping
+    $all_subjects = $wpdb->get_results( "
+        SELECT s.id, s.subject_name, s.class_id, u.class_name, u.section_name 
+        FROM {$table_subjects} s 
+        LEFT JOIN {$table_units} u ON s.class_id = u.id 
+        ORDER BY s.subject_name ASC
+    " );
     
     $back_url = add_query_arg( array( 'sub' => 'list' ), $base_url );
     ?>
@@ -422,7 +425,7 @@ function educore_exams_marks_view() {
                     <!-- Class Selection -->
                     <div class="dpt-form-group dpt-col-2">
                         <label class="dpt-form-label"><?php esc_html_e( 'Select Class', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
-                        <select name="class_name" class="dpt-select-field" required>
+                        <select name="class_name" id="educore_marks_class_select" class="dpt-select-field" required>
                             <option value=""><?php esc_html_e( '-- Class --', 'ifsedu-sms' ); ?></option>
                             <?php foreach ( $raw_classes as $cls_obj ) : ?>
                                 <option value="<?php echo esc_attr( $cls_obj->class_name ); ?>" <?php selected( $filter_class, $cls_obj->class_name ); ?>>
@@ -432,29 +435,21 @@ function educore_exams_marks_view() {
                         </select>
                     </div>
 
-                    <!-- Section Selection -->
+                    <!-- Section Selection (Dynamic) -->
                     <div class="dpt-form-group dpt-col-2">
                         <label class="dpt-form-label"><?php esc_html_e( 'Select Section', 'ifsedu-sms' ); ?></label>
-                        <select name="section_name" class="dpt-select-field">
+                        <select name="section_name" id="educore_marks_section_select" class="dpt-select-field">
                             <option value=""><?php esc_html_e( '-- All Sections --', 'ifsedu-sms' ); ?></option>
-                            <?php foreach ( $raw_sections as $sec_obj ) : ?>
-                                <option value="<?php echo esc_attr( $sec_obj->section_name ); ?>" <?php selected( $filter_section, $sec_obj->section_name ); ?>>
-                                    <?php echo esc_html( $sec_obj->section_name ); ?>
-                                </option>
-                            <?php endforeach; ?>
+                            <!-- Dynamically populated via JS -->
                         </select>
                     </div>
 
-                    <!-- Subject Selection -->
+                    <!-- Subject Selection (Dynamic) -->
                     <div class="dpt-form-group dpt-col-3">
                         <label class="dpt-form-label"><?php esc_html_e( 'Subject Name', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
-                        <select name="subject_name" class="dpt-select-field" required>
+                        <select name="subject_name" id="educore_marks_subject_select" class="dpt-select-field" required>
                             <option value=""><?php esc_html_e( '-- Select Subject --', 'ifsedu-sms' ); ?></option>
-                            <?php if ( ! empty( $subjects ) ) : foreach ( $subjects as $sub_obj ) : ?>
-                                <option value="<?php echo esc_attr( $sub_obj->subject_name ); ?>" <?php selected( $subject_name, $sub_obj->subject_name ); ?>>
-                                    <?php echo esc_html( $sub_obj->subject_name ); ?>
-                                </option>
-                            <?php endforeach; endif; ?>
+                            <!-- Dynamically populated via JS -->
                         </select>
                     </div>
 
@@ -644,5 +639,86 @@ function educore_exams_marks_view() {
         }
         ?>
     </div>
+
+    <!-- DYNAMIC JS ENGINE: Class -> Section & Subject Chaining -->
+    <script type="text/javascript">
+    document.addEventListener('DOMContentLoaded', function() {
+        const unitsMap    = <?php echo wp_json_encode( ! empty( $all_units ) ? $all_units : array() ); ?>;
+        const subjectsMap = <?php echo wp_json_encode( ! empty( $all_subjects ) ? $all_subjects : array() ); ?>;
+
+        const currentClass   = "<?php echo esc_js( $filter_class ); ?>";
+        const currentSection = "<?php echo esc_js( $filter_section ); ?>";
+        const currentSubject = "<?php echo esc_js( $subject_name ); ?>";
+
+        const classSelect   = document.getElementById('educore_marks_class_select');
+        const sectionSelect = document.getElementById('educore_marks_section_select');
+        const subjectSelect = document.getElementById('educore_marks_subject_select');
+
+        // 1. Populate Sections based on selected Class
+        function populateSections(selectedClass, selectedSecName = '') {
+            if (!sectionSelect) return;
+            sectionSelect.innerHTML = '<option value=""><?php esc_html_e( '-- All Sections --', 'ifsedu-sms' ); ?></option>';
+            if (!selectedClass) return;
+
+            const filtered = unitsMap.filter(item => item.class_name == selectedClass);
+            const uniqueSections = [...new Set(filtered.map(item => item.section_name).filter(Boolean))];
+
+            uniqueSections.forEach(secName => {
+                const opt = document.createElement('option');
+                opt.value = secName;
+                opt.textContent = secName;
+                if (secName == selectedSecName) {
+                    opt.selected = true;
+                }
+                sectionSelect.appendChild(opt);
+            });
+        }
+
+        // 2. Populate Subjects based on selected Class and Section
+        function populateSubjects(selectedClass, selectedSecName = '', selectedSubName = '') {
+            if (!subjectSelect) return;
+            subjectSelect.innerHTML = '<option value=""><?php esc_html_e( '-- Select Subject --', 'ifsedu-sms' ); ?></option>';
+            if (!selectedClass) return;
+
+            let filteredSubjects = subjectsMap.filter(item => item.class_name == selectedClass);
+
+            if (selectedSecName) {
+                // If section chosen, check if subjects exist specifically for that section unit
+                const sectionSpecific = filteredSubjects.filter(item => item.section_name == selectedSecName);
+                if (sectionSpecific.length > 0) {
+                    filteredSubjects = sectionSpecific;
+                }
+            }
+
+            // Extract unique subject names
+            const uniqueSubjects = [...new Set(filteredSubjects.map(item => item.subject_name).filter(Boolean))];
+
+            uniqueSubjects.forEach(subName => {
+                const opt = document.createElement('option');
+                opt.value = subName;
+                opt.textContent = subName;
+                if (subName == selectedSubName) {
+                    opt.selected = true;
+                }
+                subjectSelect.appendChild(opt);
+            });
+        }
+
+        if (classSelect && sectionSelect && subjectSelect) {
+            // Initial load (Preserve existing selections on page refresh)
+            populateSections(classSelect.value, currentSection);
+            populateSubjects(classSelect.value, currentSection, currentSubject);
+
+            classSelect.addEventListener('change', function() {
+                populateSections(this.value);
+                populateSubjects(this.value, sectionSelect.value);
+            });
+
+            sectionSelect.addEventListener('change', function() {
+                populateSubjects(classSelect.value, this.value);
+            });
+        }
+    });
+    </script>
     <?php
 }

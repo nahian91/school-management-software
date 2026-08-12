@@ -125,34 +125,45 @@ if ( isset( $_GET['action'] ) && $_GET['action'] === 'delete_subject' && isset( 
     }
 }
 
-// Natural Numeric Sorting Query Strategy for Classes Dropdown (Unique Class Names)
+// Fetch Classes with Sections and Natural Serial Numeric Order (1,2,3...7,8,9,10)
 $classes = $wpdb->get_results( 
-    "SELECT MIN(id) as id, class_name FROM {$table_units} 
-     GROUP BY class_name 
-     ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC" 
+    "SELECT id, class_name, section_name FROM {$table_units} 
+     WHERE class_name IS NOT NULL AND class_name != '' 
+     ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC, section_name ASC" 
 );
 
 if ( ! empty( $classes ) ) {
     usort( $classes, function( $a, $b ) {
-        return strnatcasecmp( $a->class_name, $b->class_name );
+        $res = strnatcasecmp( $a->class_name, $b->class_name );
+        if ( $res === 0 ) {
+            return strnatcasecmp( $a->section_name, $b->section_name );
+        }
+        return $res;
     });
 }
 
-// Subjects Directory List with Class Join and Natural Numeric Sorting
+// Subjects Directory List with Class/Section Join and Natural Serial Numeric Order
 $subjects_list = $wpdb->get_results("
-    SELECT s.*, u.class_name 
+    SELECT s.*, u.class_name, u.section_name 
     FROM {$table_subjects} s 
     LEFT JOIN {$table_units} u ON s.class_id = u.id 
-    ORDER BY CAST(u.class_name AS UNSIGNED) ASC, u.class_name ASC, s.subject_name ASC
+    ORDER BY CAST(u.class_name AS UNSIGNED) ASC, u.class_name ASC, u.section_name ASC, s.subject_name ASC
 ");
 
 if ( ! empty( $subjects_list ) ) {
     usort( $subjects_list, function( $a, $b ) {
         $classA = $a->class_name ? $a->class_name : '';
         $classB = $b->class_name ? $b->class_name : '';
+        
         $res = strnatcasecmp( $classA, $classB );
         if ( $res === 0 ) {
-            return strnatcasecmp( $a->subject_name, $b->subject_name );
+            $secA = $a->section_name ? $a->section_name : '';
+            $secB = $b->section_name ? $b->section_name : '';
+            $secRes = strnatcasecmp( $secA, $secB );
+            if ( $secRes === 0 ) {
+                return strnatcasecmp( $a->subject_name, $b->subject_name );
+            }
+            return $secRes;
         }
         return $res;
     });
@@ -596,11 +607,13 @@ if ( ! empty( $subjects_list ) ) {
             <?php wp_nonce_field( 'subject_setup_action', 'subject_setup_nonce' ); ?>
             
             <div class="dpt-form-group" style="margin-bottom: 20px; max-width: 400px;">
-                <label class="dpt-form-label"><?php esc_html_e( 'Select Target Class', 'ifsedu-sms' ); ?> <span style="color:#dc2626;">*</span></label>
+                <label class="dpt-form-label"><?php esc_html_e( 'Select Target Class & Section', 'ifsedu-sms' ); ?> <span style="color:#dc2626;">*</span></label>
                 <select name="class_id" class="dpt-field-select" required>
                     <option value=""><?php esc_html_e( '-- Choose Target Class --', 'ifsedu-sms' ); ?></option>
-                    <?php foreach ( $classes as $cls ) : ?>
-                        <option value="<?php echo esc_attr( $cls->id ); ?>"><?php echo esc_html( $cls->class_name ); ?></option>
+                    <?php foreach ( $classes as $cls ) : 
+                        $label = $cls->class_name . ( ! empty( $cls->section_name ) ? ' (' . $cls->section_name . ')' : '' );
+                    ?>
+                        <option value="<?php echo esc_attr( $cls->id ); ?>"><?php echo esc_html( $label ); ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
@@ -647,8 +660,10 @@ if ( ! empty( $subjects_list ) ) {
                 <!-- Class Filter Dropdown -->
                 <select id="dpt-class-filter" class="dpt-field-select dpt-filter-select">
                     <option value="all"><?php esc_html_e( 'All Classes Filter', 'ifsedu-sms' ); ?></option>
-                    <?php foreach ( $classes as $cls ) : ?>
-                        <option value="<?php echo esc_attr( $cls->id ); ?>"><?php echo esc_html( $cls->class_name ); ?></option>
+                    <?php foreach ( $classes as $cls ) : 
+                        $label = $cls->class_name . ( ! empty( $cls->section_name ) ? ' (' . $cls->section_name . ')' : '' );
+                    ?>
+                        <option value="<?php echo esc_attr( $cls->id ); ?>"><?php echo esc_html( $label ); ?></option>
                     <?php endforeach; ?>
                 </select>
 
@@ -662,7 +677,7 @@ if ( ! empty( $subjects_list ) ) {
             <table class="dpt-architecture-table" id="dpt-subjects-table">
                 <thead>
                     <tr>
-                        <th style="width: 30%;"><?php esc_html_e( 'Class Name', 'ifsedu-sms' ); ?></th>
+                        <th style="width: 30%;"><?php esc_html_e( 'Class & Section', 'ifsedu-sms' ); ?></th>
                         <th style="width: 40%;"><?php esc_html_e( 'Subject Title', 'ifsedu-sms' ); ?></th>
                         <th style="width: 15%;"><?php esc_html_e( 'Code', 'ifsedu-sms' ); ?></th>
                         <th style="width: 15%; text-align:right;"><?php esc_html_e( 'Actions', 'ifsedu-sms' ); ?></th>
@@ -674,7 +689,7 @@ if ( ! empty( $subjects_list ) ) {
                             add_query_arg( array( 'action' => 'delete_subject', 'id' => $sub->id ), $base_url ), 
                             'delete_subject_action_' . $sub->id 
                         );
-                        $class_label = $sub->class_name ? $sub->class_name : 'N/A';
+                        $class_label = $sub->class_name ? $sub->class_name . ( ! empty( $sub->section_name ) ? ' (' . $sub->section_name . ')' : '' ) : 'N/A';
                     ?>
                         <tr data-class-id="<?php echo esc_attr( $sub->class_id ); ?>" data-subject-id="<?php echo esc_attr( $sub->id ); ?>">
                             <td style="font-weight: 700; color: #006a4e;" class="cell-class-name"><?php echo esc_html( $class_label ); ?></td>
@@ -729,11 +744,13 @@ if ( ! empty( $subjects_list ) ) {
             <?php wp_nonce_field( 'dpt_edit_subject_nonce', 'edit_subject_nonce_field' ); ?>
 
             <div class="dpt-form-group" style="margin-bottom: 14px;">
-                <label class="dpt-form-label"><?php esc_html_e( 'Academic Class', 'ifsedu-sms' ); ?> <span style="color:#dc2626;">*</span></label>
+                <label class="dpt-form-label"><?php esc_html_e( 'Academic Class & Section', 'ifsedu-sms' ); ?> <span style="color:#dc2626;">*</span></label>
                 <select id="edit_class_id" name="class_id" class="dpt-field-select" required>
                     <option value=""><?php esc_html_e( '-- Choose Target Class --', 'ifsedu-sms' ); ?></option>
-                    <?php foreach ( $classes as $cls ) : ?>
-                        <option value="<?php echo esc_attr( $cls->id ); ?>"><?php echo esc_html( $cls->class_name ); ?></option>
+                    <?php foreach ( $classes as $cls ) : 
+                        $label = $cls->class_name . ( ! empty( $cls->section_name ) ? ' (' . $cls->section_name . ')' : '' );
+                    ?>
+                        <option value="<?php echo esc_attr( $cls->id ); ?>"><?php echo esc_html( $label ); ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>

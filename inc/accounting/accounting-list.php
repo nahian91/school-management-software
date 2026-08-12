@@ -94,7 +94,7 @@ function educore_accounting_list_view() {
             width: 4px;
         }
 
-        .dpt-stat-card.income-card::before  { background: #10b981; }
+        .dpt-stat-card.income-card::before  { background: #006a4e; }
         .dpt-stat-card.expense-card::before { background: #ef4444; }
         .dpt-stat-card.net-card::before     { background: #3b82f6; }
         .dpt-stat-card.month-card::before   { background: #0284c7; }
@@ -350,7 +350,7 @@ function educore_accounting_list_view() {
             
             <!-- Income Total Card -->
             <div class="dpt-stat-card income-card">
-                <div class="dpt-stat-icon" style="background: #ecfdf5; color: #10b981;">
+                <div class="dpt-stat-icon" style="background: #ecfdf5; color: #006a4e;">
                     <svg viewBox="0 0 24 24"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 3.93 2.5.42 3 1.34 3 2.22 0 1.02-.9 1.83-2.7 1.83-2.1 0-2.88-.95-2.98-2.25H6.88c.11 2.25 1.77 3.45 3.62 3.97V21h3v-2.11c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-5.2-4.44z"/></svg>
                 </div>
                 <div class="dpt-stat-meta">
@@ -402,7 +402,7 @@ function educore_accounting_list_view() {
             <!-- Toolbar Header -->
             <div class="dpt-table-header-toolbar">
                 <h4 class="dpt-table-title">
-                    <span class="dashicons dashicons-list-view" style="color: #10b981;"></span>
+                    <span class="dashicons dashicons-list-view" style="color: #006a4e;"></span>
                     <?php esc_html_e( 'Master Financial Ledger Directory', 'ifsedu-sms' ); ?>
                 </h4>
 

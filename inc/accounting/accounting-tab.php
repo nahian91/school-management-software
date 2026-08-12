@@ -29,7 +29,7 @@ function educore_accounting_tab() {
         .dpt-nav-link-active { background: #006a4e; color: #ffffff; font-weight: 700; box-shadow: 0 4px 12px rgba(0, 106, 78, 0.15); }
         .dpt-nav-link-inactive { background: #f8fafc; border-color: #e2e8f0; color: #475569; }
         .dpt-nav-link-inactive:hover { background: #f1f5f9; color: #0f172a; }
-        .afdp-notice-card { background: #f0fdf4; border-left: 4px solid #10b981; padding: 16px 20px; border-radius: 0 8px 8px 0; color: #15803d; font-weight: 500; }
+        .afdp-notice-card { background: #f0fdf4; border-left: 4px solid #006a4e; padding: 16px 20px; border-radius: 0 8px 8px 0; color: #15803d; font-weight: 500; }
     </style>
 
     <div class="dpt-acct-nav-root">

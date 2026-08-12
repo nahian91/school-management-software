@@ -74,9 +74,92 @@ function educore_daily_attendance_view( $classes, $sections, $filter_class, $fil
             }
         }
 
-        echo '<div class="afdp-success-banner" style="background:#ecfdf5; border:1px solid #a7f3d0; color:#047857; padding:12px; border-radius:8px; margin-bottom:20px;"><span class="dashicons dashicons-yes-alt"></span> ' . sprintf( esc_html__( 'Attendance records successfully updated for %d students.', 'ifsedu-sms' ), intval( $saved_count ) ) . '</div>';
+        echo '<div class="afdp-success-banner" style="background:#ecfdf5; border:1px solid #a7f3d0; color:#047857; padding:12px 18px; border-radius:10px; margin-bottom:20px; font-weight:700; display:flex; align-items:center; gap:8px;"><span class="dashicons dashicons-yes-alt"></span> ' . sprintf( esc_html__( 'Attendance records successfully updated for %d students.', 'ifsedu-sms' ), intval( $saved_count ) ) . '</div>';
     }
     ?>
+
+    <style>
+        /* Modern Segmented Status Control Styling */
+        .att-segmented-group {
+            display: inline-flex;
+            background: #f1f5f9;
+            padding: 4px;
+            border-radius: 10px;
+            border: 1px solid #cbd5e1;
+            gap: 4px;
+        }
+
+        .att-radio-input {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+            pointer-events: none;
+        }
+
+        .att-status-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 8px 16px;
+            font-size: 12.5px;
+            font-weight: 700;
+            border-radius: 7px;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            color: #64748b;
+            user-select: none;
+            line-height: 1;
+            border: 1px solid transparent;
+        }
+
+        .att-status-pill .dashicons {
+            font-size: 15px;
+            width: 15px;
+            height: 15px;
+            line-height: 1;
+            opacity: 0.7;
+        }
+
+        .att-status-pill:hover {
+            color: #0f172a;
+            background: rgba(255, 255, 255, 0.6);
+        }
+
+        /* Active State: Present */
+        .att-radio-input[value="Present"]:checked + .att-status-pill {
+            background: #059669;
+            color: #ffffff;
+            border-color: #047857;
+            box-shadow: 0 2px 8px rgba(5, 150, 105, 0.3);
+        }
+        .att-radio-input[value="Present"]:checked + .att-status-pill .dashicons {
+            opacity: 1;
+        }
+
+        /* Active State: Absent */
+        .att-radio-input[value="Absent"]:checked + .att-status-pill {
+            background: #dc2626;
+            color: #ffffff;
+            border-color: #b91c1c;
+            box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
+        }
+        .att-radio-input[value="Absent"]:checked + .att-status-pill .dashicons {
+            opacity: 1;
+        }
+
+        /* Active State: Late */
+        .att-radio-input[value="Late"]:checked + .att-status-pill {
+            background: #d97706;
+            color: #ffffff;
+            border-color: #b45309;
+            box-shadow: 0 2px 8px rgba(217, 119, 6, 0.3);
+        }
+        .att-radio-input[value="Late"]:checked + .att-status-pill .dashicons {
+            opacity: 1;
+        }
+    </style>
 
     <!-- Daily Filter Controls Bento Card -->
     <div class="dpt-bento-card no-print" style="background:#fff; border:1px solid #e2e8f0; padding:20px; border-radius:12px; margin-bottom:24px;">
@@ -87,7 +170,6 @@ function educore_daily_attendance_view( $classes, $sections, $filter_class, $fil
             
             <div class="dpt-form-group" style="flex:1; min-width:180px;">
                 <label style="display:block; font-size:12px; font-weight:700; color:#475569; margin-bottom:6px;"><?php esc_html_e( 'Select Target Date', 'ifsedu-sms' ); ?> *</label>
-                <!-- Added max="current_time('Y-m-d')" to block future dates -->
                 <input type="date" name="attendance_date" style="width:100%; height:40px; border:1px solid #cbd5e1; border-radius:8px; padding:0 12px;" value="<?php echo esc_attr( $filter_date ); ?>" max="<?php echo esc_attr( current_time( 'Y-m-d' ) ); ?>" required>
             </div>
             
@@ -133,7 +215,6 @@ function educore_daily_attendance_view( $classes, $sections, $filter_class, $fil
             $sql_args[] = $filter_section;
         }
 
-        // Apply student filter if selected
         if ( $filter_student > 0 ) {
             $query .= " AND id = %d";
             $sql_args[] = $filter_student;
@@ -204,24 +285,30 @@ function educore_daily_attendance_view( $classes, $sections, $filter_class, $fil
                                     <td style="padding:12px 20px;"><code style="color:#0f172a; font-weight:700; background:#f1f5f9; padding:4px 8px; border-radius:6px; border:1px solid #e2e8f0;"><?php echo esc_html( $student->student_id ); ?></code></td>
                                     <td style="padding:12px 20px;"><span style="font-weight:700; color:#0f172a;"><?php echo esc_html( $student->full_name ); ?></span></td>
                                     <td style="padding:12px 20px; text-align:center;">
-                                        <div style="display:inline-flex; gap:12px; background:#f8fafc; padding:6px 8px; border-radius:8px; border:1px solid #e2e8f0;">
+                                        
+                                        <!-- Segmented Pill Control -->
+                                        <div class="att-segmented-group">
                                             
-                                            <label style="display:flex; align-items:center; gap:4px; font-weight:600; font-size:12px; cursor:pointer; color:#059669;">
-                                                <input type="radio" class="status-radio-node" name="attendance[<?php echo $student_internal_id; ?>]" value="Present" <?php checked( $current_status, 'Present' ); ?>>
+                                            <input type="radio" class="att-radio-input status-radio-node" name="attendance[<?php echo $student_internal_id; ?>]" id="stu_pres_<?php echo $student_internal_id; ?>" value="Present" <?php checked( $current_status, 'Present' ); ?>>
+                                            <label class="att-status-pill" for="stu_pres_<?php echo $student_internal_id; ?>">
+                                                <span class="dashicons dashicons-yes-alt"></span>
                                                 <?php esc_html_e( 'Present', 'ifsedu-sms' ); ?>
                                             </label>
 
-                                            <label style="display:flex; align-items:center; gap:4px; font-weight:600; font-size:12px; cursor:pointer; color:#dc2626;">
-                                                <input type="radio" class="status-radio-node" name="attendance[<?php echo $student_internal_id; ?>]" value="Absent" <?php checked( $current_status, 'Absent' ); ?>>
+                                            <input type="radio" class="att-radio-input status-radio-node" name="attendance[<?php echo $student_internal_id; ?>]" id="stu_abs_<?php echo $student_internal_id; ?>" value="Absent" <?php checked( $current_status, 'Absent' ); ?>>
+                                            <label class="att-status-pill" for="stu_abs_<?php echo $student_internal_id; ?>">
+                                                <span class="dashicons dashicons-dismiss"></span>
                                                 <?php esc_html_e( 'Absent', 'ifsedu-sms' ); ?>
                                             </label>
 
-                                            <label style="display:flex; align-items:center; gap:4px; font-weight:600; font-size:12px; cursor:pointer; color:#ea580c;">
-                                                <input type="radio" class="status-radio-node" name="attendance[<?php echo $student_internal_id; ?>]" value="Late" <?php checked( $current_status, 'Late' ); ?>>
+                                            <input type="radio" class="att-radio-input status-radio-node" name="attendance[<?php echo $student_internal_id; ?>]" id="stu_late_<?php echo $student_internal_id; ?>" value="Late" <?php checked( $current_status, 'Late' ); ?>>
+                                            <label class="att-status-pill" for="stu_late_<?php echo $student_internal_id; ?>">
+                                                <span class="dashicons dashicons-clock"></span>
                                                 <?php esc_html_e( 'Late', 'ifsedu-sms' ); ?>
                                             </label>
 
                                         </div>
+
                                     </td>
                                 </tr>
                                 <?php endforeach; ?>
@@ -298,7 +385,6 @@ function educore_daily_attendance_view( $classes, $sections, $filter_class, $fil
             filteredStudents.forEach(stu => {
                 const opt = document.createElement('option');
                 opt.value = stu.id;
-                // Format: [Roll: 1] John Doe
                 opt.textContent = stu.roll_no ? `[Roll: ${stu.roll_no}] ${stu.full_name}` : stu.full_name;
                 
                 if (String(stu.id) === String(selectedStudentId)) {
@@ -309,17 +395,15 @@ function educore_daily_attendance_view( $classes, $sections, $filter_class, $fil
         }
 
         if (classSelect && sectionSelect && studentSelect) {
-            // Initial load (Preserve selections if page reloaded)
+            // Initial load
             populateSections(classSelect.value, currentFilterSection);
             populateStudents(classSelect.value, currentFilterSection, currentFilterStudent);
 
-            // On change Class -> Update Section and Student dropdowns
             classSelect.addEventListener('change', function() {
                 populateSections(classSelect.value);
                 populateStudents(classSelect.value, sectionSelect.value);
             });
 
-            // On change Section -> Update Student dropdown to only show students in that section
             sectionSelect.addEventListener('change', function() {
                 populateStudents(classSelect.value, sectionSelect.value);
             });
@@ -343,13 +427,11 @@ function educore_daily_attendance_view( $classes, $sections, $filter_class, $fil
             if (elLate) elLate.textContent = late;
         }
 
-        // Attach listeners to all individual radio buttons to update counters when changed manually
         const allRadios = document.querySelectorAll('.status-radio-node');
         allRadios.forEach(radio => {
             radio.addEventListener('change', updateLiveCounters);
         });
         
-        // Attach listeners to Bulk action buttons
         const bulkBtns = document.querySelectorAll('.dpt-bulk-btn');
         bulkBtns.forEach(btn => {
             btn.addEventListener('click', function() {
@@ -364,11 +446,9 @@ function educore_daily_attendance_view( $classes, $sections, $filter_class, $fil
             });
         });
 
-        // Initialize counters on page load
         updateLiveCounters();
         
     });
     </script>
-
 <?php
 }

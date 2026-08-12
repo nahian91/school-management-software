@@ -14,7 +14,7 @@ function educore_staff_attendance_view() {
     $table_attendance = $wpdb->prefix . 'sms_staff_attendance';
 
     $filter_date       = isset( $_REQUEST['attendance_date'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['attendance_date'] ) ) : current_time( 'Y-m-d' );
-    $filter_designation = isset( $_REQUEST['designation'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['designation'] ) ) : '';
+    $filter_staff_type = isset( $_REQUEST['staff_type'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['staff_type'] ) ) : '';
 
     // Save Staff Attendance Form Action
     if ( isset( $_POST['educore_save_staff_attendance'] ) && isset( $_POST['educore_staff_att_nonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['educore_staff_att_nonce'] ) ), 'save_staff_attendance_action' ) ) {
@@ -53,22 +53,40 @@ function educore_staff_attendance_view() {
             $saved_count++;
         }
 
-        echo '<div class="afdp-success-banner" style="background:#ecfdf5; border:1px solid #a7f3d0; color:#047857; padding:12px; border-radius:8px; margin-bottom:20px;"><span class="dashicons dashicons-yes-alt"></span> ' . sprintf( esc_html__( 'Staff attendance successfully updated for %d employees.', 'ifsedu-sms' ), $saved_count ) . '</div>';
+        echo '<div class="afdp-success-banner" style="background:#ecfdf5; border:1px solid #a7f3d0; color:#047857; padding:12px 18px; border-radius:10px; margin-bottom:20px; font-weight:700; display:flex; align-items:center; gap:8px;"><span class="dashicons dashicons-yes-alt"></span> ' . sprintf( esc_html__( 'Staff attendance successfully updated for %d employees.', 'ifsedu-sms' ), $saved_count ) . '</div>';
     }
 
-    // Fetch Unique Designations for the dropdown filter
-    $all_designations = $wpdb->get_col( "SELECT DISTINCT designation FROM {$table_staff} WHERE status = 'Active' AND designation != '' ORDER BY designation ASC" );
+    // Fetch Unique Employment Types (staff_type) for the dropdown filter
+    $all_staff_types = $wpdb->get_col( "SELECT DISTINCT staff_type FROM {$table_staff} WHERE status = 'Active' AND staff_type != '' ORDER BY staff_type ASC" );
 
-    // Build Query for Active Staff Members with optional Designation filter
-    $query = "SELECT id, staff_id, full_name, designation FROM {$table_staff} WHERE status = 'Active'";
+    // Dynamic order column detection for proper staff ordering
+    $db_columns = $wpdb->get_col( "DESCRIBE {$table_staff}", 0 );
+    $order_col  = 'id';
+
+    if ( in_array( 'order_number', $db_columns, true ) ) {
+        $order_col = 'order_number';
+    } elseif ( in_array( 'sort_order', $db_columns, true ) ) {
+        $order_col = 'sort_order';
+    } elseif ( in_array( 'serial_number', $db_columns, true ) ) {
+        $order_col = 'serial_number';
+    } elseif ( in_array( 'position', $db_columns, true ) ) {
+        $order_col = 'position';
+    } elseif ( in_array( 'order_no', $db_columns, true ) ) {
+        $order_col = 'order_no';
+    } elseif ( in_array( 'serial', $db_columns, true ) ) {
+        $order_col = 'serial';
+    }
+
+    // Build Query for Active Staff Members with optional Employment Type filter
+    $query = "SELECT *, {$order_col} AS db_order_number FROM {$table_staff} WHERE status = 'Active'";
     $query_args = array();
 
-    if ( ! empty( $filter_designation ) ) {
-        $query .= " AND designation = %s";
-        $query_args[] = $filter_designation;
+    if ( ! empty( $filter_staff_type ) ) {
+        $query .= " AND staff_type = %s";
+        $query_args[] = $filter_staff_type;
     }
 
-    $query .= " ORDER BY full_name ASC";
+    $query .= " ORDER BY CAST({$order_col} AS UNSIGNED) ASC, {$order_col} ASC, full_name ASC";
     
     if ( ! empty( $query_args ) ) {
         $staff_members = $wpdb->get_results( $wpdb->prepare( $query, ...$query_args ) );
@@ -93,9 +111,93 @@ function educore_staff_attendance_view() {
     }
     ?>
 
+    <style>
+        /* Modern Segmented Status Control Styling */
+        .att-segmented-group {
+            display: inline-flex;
+            background: #f1f5f9;
+            padding: 4px;
+            border-radius: 10px;
+            border: 1px solid #cbd5e1;
+            gap: 4px;
+        }
+
+        .att-radio-input {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+            pointer-events: none;
+        }
+
+        .att-status-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 8px 16px;
+            font-size: 12.5px;
+            font-weight: 700;
+            border-radius: 7px;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            color: #64748b;
+            user-select: none;
+            line-height: 1;
+            border: 1px solid transparent;
+        }
+
+        .att-status-pill .dashicons {
+            font-size: 15px;
+            width: 15px;
+            height: 15px;
+            line-height: 1;
+            opacity: 0.7;
+        }
+
+        .att-status-pill:hover {
+            color: #0f172a;
+            background: rgba(255, 255, 255, 0.6);
+        }
+
+        /* Active State: Present */
+        .att-radio-input[value="Present"]:checked + .att-status-pill {
+            background: #059669;
+            color: #ffffff;
+            border-color: #047857;
+            box-shadow: 0 2px 8px rgba(5, 150, 105, 0.3);
+        }
+        .att-radio-input[value="Present"]:checked + .att-status-pill .dashicons {
+            opacity: 1;
+        }
+
+        /* Active State: Absent */
+        .att-radio-input[value="Absent"]:checked + .att-status-pill {
+            background: #dc2626;
+            color: #ffffff;
+            border-color: #b91c1c;
+            box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
+        }
+        .att-radio-input[value="Absent"]:checked + .att-status-pill .dashicons {
+            opacity: 1;
+        }
+
+        /* Active State: Late */
+        .att-radio-input[value="Late"]:checked + .att-status-pill {
+            background: #d97706;
+            color: #ffffff;
+            border-color: #b45309;
+            box-shadow: 0 2px 8px rgba(217, 119, 6, 0.3);
+        }
+        .att-radio-input[value="Late"]:checked + .att-status-pill .dashicons {
+            opacity: 1;
+        }
+    </style>
+
     <!-- Staff Filter Controls Bento Card -->
     <div class="dpt-bento-card no-print" style="background:#fff; border:1px solid #e2e8f0; padding:20px; border-radius:12px; margin-bottom:24px;">
         <form method="GET" action="<?php echo esc_url( admin_url( 'admin.php' ) ); ?>" style="display:flex; gap:16px; align-items:flex-end; flex-wrap:wrap;">
+            <!-- Hidden Page Controllers to Fix Routing -->
             <input type="hidden" name="page" value="school_management_system">
             <input type="hidden" name="tab" value="attendance">
             <input type="hidden" name="sub" value="staff">
@@ -106,11 +208,15 @@ function educore_staff_attendance_view() {
             </div>
 
             <div class="dpt-form-group" style="flex:1; min-width:220px;">
-                <label style="display:block; font-size:12px; font-weight:700; color:#475569; margin-bottom:6px;"><?php esc_html_e( 'Filter by Designation', 'ifsedu-sms' ); ?></label>
-                <select name="designation" style="width:100%; height:40px; border:1px solid #cbd5e1; border-radius:8px; padding:0 12px; background:#fff;">
-                    <option value=""><?php esc_html_e( '-- All Designations --', 'ifsedu-sms' ); ?></option>
-                    <?php foreach ( $all_designations as $desig ) : ?>
-                        <option value="<?php echo esc_attr( $desig ); ?>" <?php selected( $filter_designation, $desig ); ?>><?php echo esc_html( $desig ); ?></option>
+                <label style="display:block; font-size:12px; font-weight:700; color:#475569; margin-bottom:6px;"><?php esc_html_e( 'Filter by Employment Type', 'ifsedu-sms' ); ?></label>
+                <select name="staff_type" style="width:100%; height:40px; border:1px solid #cbd5e1; border-radius:8px; padding:0 12px; background:#fff;">
+                    <option value=""><?php esc_html_e( '-- All Employment Types --', 'ifsedu-sms' ); ?></option>
+                    <?php 
+                    $default_staff_types = array( 'Teacher (School)', 'Teacher (College)', 'Officer', 'Staff' );
+                    $merged_staff_types  = array_unique( array_merge( $default_staff_types, $all_staff_types ) );
+
+                    foreach ( $merged_staff_types as $st_type ) : ?>
+                        <option value="<?php echo esc_attr( $st_type ); ?>" <?php selected( $filter_staff_type, $st_type ); ?>><?php echo esc_html( $st_type ); ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
@@ -169,30 +275,38 @@ function educore_staff_attendance_view() {
                             <?php foreach ( $staff_members as $st ) : 
                                 $st_id  = (int) $st->id;
                                 $status = isset( $attendance_states[ $st_id ] ) ? $attendance_states[ $st_id ] : 'Present';
+                                $full_name = ! empty( $st->name_bn ) ? $st->name_bn : $st->full_name;
+                                $display_staff_id = ( property_exists( $st, 'staff_id' ) && ! empty( $st->staff_id ) ) ? $st->staff_id : '#' . $st_id;
                             ?>
                                 <tr class="staff-attendance-row" style="border-bottom:1px solid #f1f5f9;">
-                                    <td style="padding:12px 20px;"><code style="color:#0f172a; font-weight:700; background:#f1f5f9; padding:4px 8px; border-radius:6px; border:1px solid #e2e8f0;"><?php echo esc_html( $st->staff_id ); ?></code></td>
-                                    <td style="padding:12px 20px;"><span style="font-weight:700; color:#0f172a;"><?php echo esc_html( $st->full_name ); ?></span></td>
-                                    <td style="padding:12px 20px; color:#475569;"><?php echo esc_html( $st->designation ? $st->designation : 'Faculty' ); ?></td>
+                                    <td style="padding:12px 20px;"><code style="color:#0f172a; font-weight:700; background:#f1f5f9; padding:4px 8px; border-radius:6px; border:1px solid #e2e8f0;"><?php echo esc_html( $display_staff_id ); ?></code></td>
+                                    <td style="padding:12px 20px;"><span style="font-weight:700; color:#0f172a;"><?php echo esc_html( $full_name ); ?></span></td>
+                                    <td style="padding:12px 20px; color:#475569;"><?php echo esc_html( ! empty( $st->designation ) ? $st->designation : 'Faculty' ); ?></td>
                                     <td style="padding:12px 20px; text-align:center;">
-                                        <div style="display:inline-flex; gap:12px; background:#f8fafc; padding:6px 8px; border-radius:8px; border:1px solid #e2e8f0;">
+                                        
+                                        <!-- Modern Segmented Pill Control -->
+                                        <div class="att-segmented-group">
                                             
-                                            <label style="display:flex; align-items:center; gap:4px; font-weight:600; font-size:12px; cursor:pointer; color:#059669;">
-                                                <input type="radio" class="status-radio-node" name="staff_attendance[<?php echo $st_id; ?>]" value="Present" <?php checked( $status, 'Present' ); ?>>
+                                            <input type="radio" class="att-radio-input status-radio-node" name="staff_attendance[<?php echo $st_id; ?>]" id="st_pres_<?php echo $st_id; ?>" value="Present" <?php checked( $status, 'Present' ); ?>>
+                                            <label class="att-status-pill" for="st_pres_<?php echo $st_id; ?>">
+                                                <span class="dashicons dashicons-yes-alt"></span>
                                                 <?php esc_html_e( 'Present', 'ifsedu-sms' ); ?>
                                             </label>
 
-                                            <label style="display:flex; align-items:center; gap:4px; font-weight:600; font-size:12px; cursor:pointer; color:#dc2626;">
-                                                <input type="radio" class="status-radio-node" name="staff_attendance[<?php echo $st_id; ?>]" value="Absent" <?php checked( $status, 'Absent' ); ?>>
+                                            <input type="radio" class="att-radio-input status-radio-node" name="staff_attendance[<?php echo $st_id; ?>]" id="st_abs_<?php echo $st_id; ?>" value="Absent" <?php checked( $status, 'Absent' ); ?>>
+                                            <label class="att-status-pill" for="st_abs_<?php echo $st_id; ?>">
+                                                <span class="dashicons dashicons-dismiss"></span>
                                                 <?php esc_html_e( 'Absent', 'ifsedu-sms' ); ?>
                                             </label>
 
-                                            <label style="display:flex; align-items:center; gap:4px; font-weight:600; font-size:12px; cursor:pointer; color:#ea580c;">
-                                                <input type="radio" class="status-radio-node" name="staff_attendance[<?php echo $st_id; ?>]" value="Late" <?php checked( $status, 'Late' ); ?>>
+                                            <input type="radio" class="att-radio-input status-radio-node" name="staff_attendance[<?php echo $st_id; ?>]" id="st_late_<?php echo $st_id; ?>" value="Late" <?php checked( $status, 'Late' ); ?>>
+                                            <label class="att-status-pill" for="st_late_<?php echo $st_id; ?>">
+                                                <span class="dashicons dashicons-clock"></span>
                                                 <?php esc_html_e( 'Late', 'ifsedu-sms' ); ?>
                                             </label>
 
                                         </div>
+
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
