@@ -9,7 +9,7 @@ $table_units    = $wpdb->prefix . 'sms_academic_units';
 $table_subjects = $wpdb->prefix . 'sms_subjects';
 
 // Dynamic Base URL preservation from current URI without action state params
-$current_uri = remove_query_arg( array( 'action', 'id', '_wpnonce', 'status' ), $_SERVER['REQUEST_URI'] );
+$current_uri = remove_query_arg( array( 'action', 'id', '_wpnonce', 'status', 'msg' ), $_SERVER['REQUEST_URI'] );
 $base_url    = esc_url_raw( $current_uri );
 
 // Handle Routine Deletion
@@ -41,17 +41,22 @@ if ( isset( $_GET['action'] ) && $_GET['action'] === 'delete_routine' && isset( 
 if ( $_SERVER['REQUEST_METHOD'] === 'POST' && isset( $_POST['save_routine'] ) ) {
     check_admin_referer( 'routine_action', 'routine_nonce' );
     
-    $class_unit_id  = absint( $_POST['section_id'] ); // Academic unit ID containing both class and section
-    $class_name_val = sanitize_text_field( $_POST['class_id'] );
-    $subject_id     = absint( $_POST['subject_id'] );
-    $day_name       = sanitize_text_field( $_POST['day_name'] );
-    $start_time     = sanitize_text_field( $_POST['start_time'] );
-    $end_time       = sanitize_text_field( $_POST['end_time'] );
-    $room_no        = sanitize_text_field( $_POST['room_no'] );
+    $class_unit_id  = isset( $_POST['section_id'] ) ? absint( $_POST['section_id'] ) : 0; // Unit ID
+    $class_name_val = isset( $_POST['class_id'] ) ? sanitize_text_field( $_POST['class_id'] ) : '';
+    $subject_id     = isset( $_POST['subject_id'] ) ? absint( $_POST['subject_id'] ) : 0;
+    $day_name       = isset( $_POST['day_name'] ) ? sanitize_text_field( $_POST['day_name'] ) : '';
+    
+    // MySQL Strict Mode requires TIME to be HH:MM:SS
+    $raw_start      = isset( $_POST['start_time'] ) ? sanitize_text_field( $_POST['start_time'] ) : '';
+    $raw_end        = isset( $_POST['end_time'] ) ? sanitize_text_field( $_POST['end_time'] ) : '';
+    $start_time     = $raw_start ? date( 'H:i:s', strtotime( $raw_start ) ) : '00:00:00';
+    $end_time       = $raw_end ? date( 'H:i:s', strtotime( $raw_end ) ) : '00:00:00';
 
-    $final_class_id   = $class_unit_id > 0 ? $class_unit_id : 0;
-    $final_section_id = $class_unit_id > 0 ? $class_unit_id : 0;
+    $room_no        = isset( $_POST['room_no'] ) ? sanitize_text_field( $_POST['room_no'] ) : '';
 
+    $final_class_id = $class_unit_id > 0 ? $class_unit_id : 0;
+
+    // Fallback if no section was specifically chosen
     if ( $final_class_id === 0 && ! empty( $class_name_val ) ) {
         $unit_match = $wpdb->get_row( $wpdb->prepare( "SELECT id FROM {$table_units} WHERE class_name = %s LIMIT 1", $class_name_val ) );
         if ( $unit_match ) {
@@ -64,14 +69,13 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' && isset( $_POST['save_routine'] ) ) 
             $table_routine, 
             array(
                 'class_id'   => $final_class_id,
-                'section_id' => $final_section_id,
                 'subject_id' => $subject_id,
                 'day_name'   => $day_name,
                 'start_time' => $start_time,
                 'end_time'   => $end_time,
                 'room_no'    => $room_no,
             ), 
-            array( '%d', '%d', '%d', '%s', '%s', '%s', '%s' )
+            array( '%d', '%d', '%s', '%s', '%s', '%s' )
         );
 
         if ( $inserted ) {
@@ -79,7 +83,9 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' && isset( $_POST['save_routine'] ) ) 
                 IFSEdu_School_Management_System::log_activity( "Added new class routine for {$day_name}" );
             }
             
-            $redirect_target = add_query_arg( array( 'status' => 'success' ), $base_url );
+            // Clear filters so the new item shows immediately
+            $clean_url = remove_query_arg( array( 'filter_class', 'filter_section' ), $base_url );
+            $redirect_target = add_query_arg( array( 'status' => 'success' ), $clean_url );
 
             if ( function_exists( 'educore_safe_redirect_helper' ) ) {
                 educore_safe_redirect_helper( $redirect_target );
@@ -89,11 +95,21 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' && isset( $_POST['save_routine'] ) ) 
                 echo '<script type="text/javascript">window.location.href="' . esc_url_raw( $redirect_target ) . '";</script>';
             }
             exit;
+        } else {
+            // Capture exact MySQL error for debugging
+            $db_error = $wpdb->last_error;
+            $redirect_target = add_query_arg( array( 'status' => 'db_error', 'msg' => urlencode( $db_error ) ), $base_url );
+            echo '<script type="text/javascript">window.location.href="' . esc_url_raw( $redirect_target ) . '";</script>';
+            exit;
         }
+    } else {
+        $redirect_target = add_query_arg( array( 'status' => 'validation_error' ), $base_url );
+        echo '<script type="text/javascript">window.location.href="' . esc_url_raw( $redirect_target ) . '";</script>';
+        exit;
     }
 }
 
-// Fetch Classes with Natural Numeric Sorting
+// Fetch Classes
 $classes = $wpdb->get_results( 
     "SELECT id, class_name FROM {$table_units} 
      WHERE class_name IS NOT NULL AND class_name != '' 
@@ -110,8 +126,15 @@ if ( ! empty( $classes ) ) {
 // All academic units for dynamic section filtering
 $all_units = $wpdb->get_results( "SELECT id, class_name, section_name FROM {$table_units} ORDER BY section_name ASC" );
 
-$subjects = $wpdb->get_results( "SELECT id, subject_name FROM {$table_subjects} ORDER BY subject_name ASC" );
-$days     = array( 'Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday' );
+// Fetch subjects
+$subjects = $wpdb->get_results( "
+    SELECT s.id, s.subject_name, u.class_name 
+    FROM {$table_subjects} s 
+    LEFT JOIN {$table_units} u ON s.class_id = u.id 
+    ORDER BY s.subject_name ASC
+" );
+
+$days = array( 'Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday' );
 
 // Preview Filter Params
 $filter_class = isset( $_GET['filter_class'] ) ? sanitize_text_field( $_GET['filter_class'] ) : '';
@@ -128,7 +151,8 @@ if ( ! empty( $filter_class ) ) {
     $where[] = $wpdb->prepare( "u.class_name = %s", $filter_class );
 }
 if ( $filter_sec > 0 ) {
-    $where[] = $wpdb->prepare( "r.section_id = %d", $filter_sec );
+    // FIXED: Query references u.id instead of non-existent r.section_id
+    $where[] = $wpdb->prepare( "r.class_id = %d", $filter_sec );
 }
 
 if ( ! empty( $where ) ) {
@@ -477,6 +501,19 @@ if ( ! empty( $routines ) ) {
         align-items: center;
         gap: 8px;
     }
+    
+    .afdp-alert-error {
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        color: #dc2626;
+        padding: 12px 16px;
+        border-radius: 10px;
+        font-weight: 700;
+        font-size: 13.5px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
 
     /* Print View Styling Overrides */
     @media print {
@@ -506,6 +543,22 @@ if ( ! empty( $routines ) ) {
         <div class="afdp-alert-success">
             <span class="dashicons dashicons-yes-alt"></span>
             <?php esc_html_e( 'Routine slot deleted successfully.', 'ifsedu-sms' ); ?>
+        </div>
+    <?php elseif ( isset( $_GET['status'] ) && $_GET['status'] === 'db_error' ) : ?>
+        <div class="afdp-alert-error">
+            <span class="dashicons dashicons-warning"></span>
+            <div>
+                <strong><?php esc_html_e( 'Database Error:', 'ifsedu-sms' ); ?></strong>
+                <?php esc_html_e( 'Could not save the routine slot.', 'ifsedu-sms' ); ?>
+                <?php if ( ! empty( $_GET['msg'] ) ) : ?>
+                    <br><span style="font-size: 12px; opacity: 0.8; font-family: monospace;"><?php echo esc_html( urldecode( $_GET['msg'] ) ); ?></span>
+                <?php endif; ?>
+            </div>
+        </div>
+    <?php elseif ( isset( $_GET['status'] ) && $_GET['status'] === 'validation_error' ) : ?>
+        <div class="afdp-alert-error">
+            <span class="dashicons dashicons-warning"></span>
+            <?php esc_html_e( 'Validation Error: Please ensure you have selected a Target Class and an Academic Subject.', 'ifsedu-sms' ); ?>
         </div>
     <?php endif; ?>
 
@@ -544,11 +597,9 @@ if ( ! empty( $routines ) ) {
                 <!-- Subject Selection -->
                 <div class="dpt-input-wrapper">
                     <label class="dpt-form-label"><?php esc_html_e( 'Academic Subject', 'ifsedu-sms' ); ?></label>
-                    <select name="subject_id" class="dpt-field-select" required>
+                    <select name="subject_id" id="dpt_subject_select" class="dpt-field-select" required>
                         <option value=""><?php esc_html_e( 'Select Subject...', 'ifsedu-sms' ); ?></option>
-                        <?php foreach ( $subjects as $s ) : ?>
-                            <option value="<?php echo esc_attr( $s->id ); ?>"><?php echo esc_html( $s->subject_name ); ?></option>
-                        <?php endforeach; ?>
+                        <!-- Options will load dynamically based on class selection -->
                     </select>
                 </div>
 
@@ -600,9 +651,6 @@ if ( ! empty( $routines ) ) {
             </h5>
 
             <div class="no-print" style="display: flex; gap: 8px;">
-                <button type="button" onclick="window.print();" class="dpt-btn-secondary">
-                    <span class="dashicons dashicons-printer"></span> <?php esc_html_e( 'Print Timetable', 'ifsedu-sms' ); ?>
-                </button>
             </div>
         </div>
 
@@ -750,6 +798,7 @@ if ( ! empty( $routines ) ) {
 <script type="text/javascript">
 document.addEventListener('DOMContentLoaded', function() {
     const unitsMap = <?php echo json_encode( $all_units ); ?>;
+    const subjectsMap = <?php echo json_encode( $subjects ); ?>;
     const currentFilterSection = <?php echo json_encode( $filter_sec ); ?>;
 
     // Helper to populate dynamic sections based on selected class name
@@ -774,12 +823,32 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // Helper to populate dynamic subjects based on selected class name
+    function populateSubjects(classSelectElem, subjectSelectElem) {
+        const selectedClass = classSelectElem.value;
+        subjectSelectElem.innerHTML = '<option value=""><?php esc_html_e( 'Select Subject...', 'ifsedu-sms' ); ?></option>';
+
+        if (!selectedClass) return;
+
+        const filteredSubjects = subjectsMap.filter(item => item.class_name === selectedClass);
+
+        filteredSubjects.forEach(subject => {
+            const opt = document.createElement('option');
+            opt.value = subject.id;
+            opt.textContent = subject.subject_name;
+            subjectSelectElem.appendChild(opt);
+        });
+    }
+
     // 1. Creation Form Elements
     const formClassSelect = document.getElementById('dpt_class_select');
     const formSecSelect   = document.getElementById('dpt_section_select');
-    if (formClassSelect && formSecSelect) {
+    const formSubjectSelect = document.getElementById('dpt_subject_select');
+    
+    if (formClassSelect && formSecSelect && formSubjectSelect) {
         formClassSelect.addEventListener('change', function() {
             populateSections(formClassSelect, formSecSelect);
+            populateSubjects(formClassSelect, formSubjectSelect);
         });
     }
 

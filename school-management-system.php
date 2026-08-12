@@ -615,14 +615,17 @@ private function get_tabs_config() {
                     
                     <div class="educore-author-profile">
                         <div class="profile-avatar">
-                            <?php 
-                            if ( ! empty( $custom_avatar ) ) {
-                                echo '<img src="' . esc_url( $custom_avatar ) . '" alt="' . esc_attr( $display_name ) . '" width="64" height="64" style="border-radius: 50%; object-fit: cover;" />';
-                            } else {
-                                echo get_avatar( $user_id, 64, '', '', array( 'class' => 'avatar-round' ) ); 
-                            }
-                            ?>
-                        </div>
+    <?php 
+    // যদি ইউজারের কাস্টম ছবি থাকে, তবে সেটি দেখাবে
+    if ( ! empty( $custom_avatar ) ) {
+        echo '<img src="' . esc_url( $custom_avatar ) . '" alt="' . esc_attr( $display_name ) . '" width="64" height="64" style="border-radius: 50%; object-fit: cover; border: 3px solid #10b981;" />';
+    } else {
+        // কাস্টম ছবি না থাকলে প্লাগিন ফোল্ডার থেকে ডিফল্ট ছবি লোড হবে
+        $default_avatar_url = EDUCORE_URL . 'assets/img/logo.png'; 
+        echo '<img src="' . esc_url( $default_avatar_url ) . '" alt="' . esc_attr( $display_name ) . '" width="64" height="64" style="border-radius: 50%; object-fit: cover; border: 3px solid #10b981;" />'; 
+    }
+    ?>
+</div>
                         <div class="profile-meta">
                             <h4 class="profile-name"><?php echo esc_html( $display_name ); ?></h4>
                             <span class="profile-designation"><?php echo esc_html( $designation ); ?></span>
@@ -909,7 +912,7 @@ private function get_tabs_config() {
      * White-Label Branding Overrides for the Login Form Panel
      */
     public function apply_white_label_login_styles() {
-        $custom_logo_url = plugin_dir_url( __FILE__ ) . 'assets/img/school-logo.png';
+        $custom_logo_url = plugin_dir_url( __FILE__ ) . 'assets/img/logo.png';
         ?>
         <style type="text/css">
             #login h1 a, .login h1 a {
@@ -990,3 +993,14 @@ private function get_tabs_config() {
 
 // Fire up the Engine Instantiation Loop
 IFSEdu_School_Management_System::get_instance();
+
+
+function educore_custom_login_redirect( $redirect_to, $request, $user ) {
+    // Check if the user is successfully logged in and has a role
+    if ( isset( $user->roles ) && is_array( $user->roles ) ) {
+        // Redirect directly to the dashboard tab
+        return admin_url( 'admin.php?page=school_management_system&tab=dashboard' );
+    }
+    return $redirect_to;
+}
+add_filter( 'login_redirect', 'educore_custom_login_redirect', 10, 3 );

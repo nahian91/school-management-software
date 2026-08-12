@@ -57,10 +57,16 @@ function educore_attendance_tab() {
 
     <style>
         .dpt-attendance-root { margin: 20px 20px 24px 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        
+        /* Premium Sub-Navigation Wrapper */
         .afdp-top-nav-wrapper { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 12px 18px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin-bottom: 24px; }
         .dpt-nav-button-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        
         .dpt-nav-link { height: 38px; padding: 0 16px; border-radius: 8px; font-size: 13.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; text-decoration: none; transition: all 0.2s ease; border: 1px solid transparent; }
-        .dpt-nav-link-active { background: #006a4e; color: #ffffff; font-weight: 700; box-shadow: 0 4px 12px rgba(0, 106, 78, 0.15); }
+        
+        /* Vibrant Green Active State matching the uploaded image */
+        .dpt-nav-link-active { background: #008f5d; color: #ffffff; font-weight: 700; box-shadow: 0 4px 12px rgba(0, 143, 93, 0.2); }
+        
         .dpt-nav-link-inactive { background: #f8fafc; border-color: #e2e8f0; color: #475569; }
         .dpt-nav-link-inactive:hover { background: #f1f5f9; color: #0f172a; }
 
@@ -73,8 +79,8 @@ function educore_attendance_tab() {
         .dpt-input-field, .dpt-select-field { height: 40px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0 12px; font-size: 13.5px; color: #0f172a; background-color: #f8fafc; width: 100%; box-shadow: none; transition: all 0.2s; }
         .dpt-input-field:focus, .dpt-select-field:focus { border-color: #006a4e; background-color: #ffffff; box-shadow: 0 0 0 3px rgba(0, 106, 78, 0.1); outline: none; }
 
-        .dpt-btn-submit-trigger { height: 40px; background: #006a4e; border: 1px solid transparent; color: #ffffff; font-weight: 700; font-size: 13.5px; border-radius: 8px; padding: 0 20px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all 0.2s; box-shadow: 0 4px 12px rgba(0, 106, 78, 0.15); }
-        .dpt-btn-submit-trigger:hover { background: #00523c; color: #ffffff; }
+        .dpt-btn-submit-trigger { height: 40px; background: #008f5d; border: 1px solid transparent; color: #ffffff; font-weight: 700; font-size: 13.5px; border-radius: 8px; padding: 0 20px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all 0.2s; box-shadow: 0 4px 12px rgba(0, 143, 93, 0.2); }
+        .dpt-btn-submit-trigger:hover { background: #00734a; color: #ffffff; }
 
         .afdp-roster-meta-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; border-bottom: 1px solid #e2e8f0; padding-bottom: 16px; margin-bottom: 20px; }
         .dpt-counter-cluster { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -86,9 +92,9 @@ function educore_attendance_tab() {
 
         .afdp-bulk-automation-row { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
         .dpt-bulk-btn { background: #ffffff; border: 1px solid #cbd5e1; padding: 7px 16px; font-size: 12.5px; font-weight: 700; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; }
-        .dpt-bulk-btn[data-target-status="Present"]:hover { border-color: #006a4e; color: #006a4e; background: #f0fdf4; }
+        .dpt-bulk-btn[data-target-status="Present"]:hover { border-color: #059669; color: #059669; background: #ecfdf5; }
         .dpt-bulk-btn[data-target-status="Absent"]:hover { border-color: #dc2626; color: #dc2626; background: #fef2f2; }
-        .dpt-bulk-btn[data-target-status="Late"]:hover { border-color: #d97706; color: #d97706; background: #fffbeb; }
+        .dpt-bulk-btn[data-target-status="Late"]:hover { border-color: #ea580c; color: #ea580c; background: #fff7ed; }
 
         .dpt-table-responsive { width: 100%; overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 12px; }
         .dpt-attendance-matrix-table { width: 100%; border-collapse: separate; border-spacing: 0; text-align: left; }
@@ -100,9 +106,9 @@ function educore_attendance_tab() {
         .afdp-checkbox-label { display: inline-flex; align-items: center; gap: 6px; padding: 7px 18px; font-size: 12.5px; font-weight: 700; border-radius: 7px; cursor: pointer; transition: all 0.2s ease; color: #64748b; line-height: 1; }
         .afdp-checkbox-label svg { width: 14px; height: 14px; fill: currentColor; opacity: 0.6; }
         
-        .afdp-checkbox-item[value="Present"]:checked + .afdp-checkbox-label { background: #006a4e; color: #ffffff; box-shadow: 0 2px 8px rgba(0, 106, 78, 0.3); }
+        .afdp-checkbox-item[value="Present"]:checked + .afdp-checkbox-label { background: #059669; color: #ffffff; box-shadow: 0 2px 8px rgba(5, 150, 105, 0.3); }
         .afdp-checkbox-item[value="Absent"]:checked + .afdp-checkbox-label { background: #dc2626; color: #ffffff; box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3); }
-        .afdp-checkbox-item[value="Late"]:checked + .afdp-checkbox-label { background: #d97706; color: #ffffff; box-shadow: 0 2px 8px rgba(217, 119, 6, 0.3); }
+        .afdp-checkbox-item[value="Late"]:checked + .afdp-checkbox-label { background: #ea580c; color: #ffffff; box-shadow: 0 2px 8px rgba(234, 88, 12, 0.3); }
 
         .afdp-fallback-card { background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 12px; padding: 40px 20px; text-align: center; }
         .afdp-fallback-card .dashicons { font-size: 36px; width: 36px; height: 36px; color: #94a3b8; margin-bottom: 10px; }
@@ -142,18 +148,22 @@ function educore_attendance_tab() {
             <?php
             switch ( $sub_tab ) {
                 case 'monthly':
+                    require_once plugin_dir_path( __FILE__ ) . 'attendance-monthly.php';
                     if ( function_exists( 'educore_monthly_attendance_summary_view' ) ) {
                         educore_monthly_attendance_summary_view( $classes, $sections, $filter_class, $filter_section );
                     }
                     break;
 
                 case 'staff':
+                    require_once plugin_dir_path( __FILE__ ) . 'attendance-staff.php';
                     if ( function_exists( 'educore_staff_attendance_view' ) ) {
                         educore_staff_attendance_view();
                     }
                     break;
 
                 case 'reports':
+                    // Note: Ensure attendance-reports.php exists if you use this!
+                    // require_once plugin_dir_path( __FILE__ ) . 'attendance-reports.php';
                     if ( function_exists( 'educore_student_attendance_log_view' ) ) {
                         educore_student_attendance_log_view( $classes );
                     }
@@ -162,6 +172,7 @@ function educore_attendance_tab() {
                 case 'daily':
                 case 'roster':
                 default:
+                    require_once plugin_dir_path( __FILE__ ) . 'attendance-daily.php';
                     if ( function_exists( 'educore_daily_attendance_view' ) ) {
                         educore_daily_attendance_view( $classes, $sections, $filter_class, $filter_section, $filter_date );
                     }
@@ -170,71 +181,5 @@ function educore_attendance_tab() {
             ?>
         </div>
     </div>
-
-    <!-- Script Layer -->
-    <script type="text/javascript">
-    jQuery(document).ready(function($) {
-        var nonce = '<?php echo esc_js( wp_create_nonce( "educore_attendance_nonce" ) ); ?>';
-
-        $('#educore_attendance_class_select').on('change', function() {
-            var selectedClass   = $(this).val();
-            var $sectionSelect = $('#educore_attendance_section_select');
-
-            $sectionSelect.html('<option value=""><?php echo esc_js( __( '-- Loading Sections... --', 'ifsedu-sms' ) ); ?></option>');
-
-            if (!selectedClass) {
-                $sectionSelect.html('<option value=""><?php echo esc_js( __( '-- All Sections --', 'ifsedu-sms' ) ); ?></option>');
-                return;
-            }
-
-            $.ajax({
-                url: ajaxurl,
-                type: 'POST',
-                data: {
-                    action: 'educore_get_sections_by_class_attendance',
-                    security: nonce,
-                    class_name: selectedClass
-                },
-                success: function(response) {
-                    if (response.success && response.data.length > 0) {
-                        var options = '<option value=""><?php echo esc_js( __( '-- All Sections --', 'ifsedu-sms' ) ); ?></option>';
-                        $.each(response.data, function(i, sec) {
-                            options += '<option value="' + sec + '">' + sec + '</option>';
-                        });
-                        $sectionSelect.html(options);
-                    } else {
-                        $sectionSelect.html('<option value=""><?php echo esc_js( __( '-- All Sections --', 'ifsedu-sms' ) ); ?></option>');
-                    }
-                }
-            });
-        });
-
-        function recountLiveStatisticsDashboard() {
-            var total   = $('.student-attendance-row').length;
-            var present = $('.status-radio-node[value="Present"]:checked').length;
-            var absent  = $('.status-radio-node[value="Absent"]:checked').length;
-            var late    = $('.status-radio-node[value="Late"]:checked').length;
-
-            $('#cnt-total').text(total);
-            $('#cnt-present').text(present);
-            $('#cnt-absent').text(absent);
-            $('#cnt-late').text(late);
-        }
-
-        recountLiveStatisticsDashboard();
-
-        $('.status-radio-node').on('change', function() {
-            recountLiveStatisticsDashboard();
-        });
-
-        $('.dpt-bulk-btn').on('click', function() {
-            var targetedStatusType = $(this).data('target-status');
-            $('.student-attendance-row').each(function() {
-                $(this).find('.status-radio-node[value="' + targetedStatusType + '"]').prop('checked', true);
-            });
-            recountLiveStatisticsDashboard();
-        });
-    });
-    </script>
     <?php
 }
