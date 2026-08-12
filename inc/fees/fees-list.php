@@ -9,6 +9,58 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Theme Aesthetic: Elite Neo-Bento UI
  * Custom Prefixes Applied: dpt-, afdp-
  */
+
+// Handle Fee Invoice AJAX Update Action
+add_action( 'wp_ajax_dpt_update_fee_invoice', 'dpt_handle_update_fee_invoice_ajax' );
+function dpt_handle_update_fee_invoice_ajax() {
+    check_ajax_referer( 'dpt_edit_fee_nonce', 'security' );
+
+    if ( ! current_user_can( 'manage_options' ) ) {
+        wp_send_json_error( array( 'message' => __( 'Unauthorized access.', 'ifsedu-sms' ) ) );
+    }
+
+    global $wpdb;
+    $table_fees = $wpdb->prefix . 'sms_fees';
+
+    $fee_id         = isset( $_POST['fee_id'] ) ? absint( $_POST['fee_id'] ) : 0;
+    $fee_type       = isset( $_POST['fee_type'] ) ? sanitize_text_field( wp_unslash( $_POST['fee_type'] ) ) : '';
+    $fee_month      = isset( $_POST['fee_month'] ) ? sanitize_text_field( wp_unslash( $_POST['fee_month'] ) ) : '';
+    $fee_year       = isset( $_POST['fee_year'] ) ? sanitize_text_field( wp_unslash( $_POST['fee_year'] ) ) : '';
+    $net_payable    = isset( $_POST['net_payable'] ) ? floatval( $_POST['net_payable'] ) : 0.00;
+    $paid_amount    = isset( $_POST['paid_amount'] ) ? floatval( $_POST['paid_amount'] ) : 0.00;
+    $due_amount     = isset( $_POST['due_amount'] ) ? floatval( $_POST['due_amount'] ) : 0.00;
+    $payment_status = isset( $_POST['payment_status'] ) ? sanitize_text_field( wp_unslash( $_POST['payment_status'] ) ) : 'Unpaid';
+
+    if ( ! $fee_id ) {
+        wp_send_json_error( array( 'message' => __( 'Invalid invoice record specified.', 'ifsedu-sms' ) ) );
+    }
+
+    $updated = $wpdb->update(
+        $table_fees,
+        array(
+            'fee_type'       => $fee_type,
+            'fee_month'      => $fee_month,
+            'fee_year'       => $fee_year,
+            'net_payable'    => $net_payable,
+            'paid_amount'    => $paid_amount,
+            'due_amount'     => $due_amount,
+            'payment_status' => $payment_status,
+        ),
+        array( 'id' => $fee_id ),
+        array( '%s', '%s', '%s', '%f', '%f', '%f', '%s' ),
+        array( '%d' )
+    );
+
+    if ( false !== $updated ) {
+        if ( class_exists( 'IFSEdu_School_Management_System' ) ) {
+            IFSEdu_School_Management_System::log_activity( "Updated Fee Invoice ID #{$fee_id}" );
+        }
+        wp_send_json_success( array( 'message' => __( 'Fee record updated successfully.', 'ifsedu-sms' ) ) );
+    } else {
+        wp_send_json_error( array( 'message' => __( 'Failed to update database record.', 'ifsedu-sms' ) ) );
+    }
+}
+
 function educore_fees_list_view() {
     global $wpdb;
     $table_fees     = $wpdb->prefix . 'sms_fees';
@@ -113,6 +165,8 @@ function educore_fees_list_view() {
 
     $collect_url = admin_url( 'admin.php?page=school_management_system&tab=fees&sub=collect' );
     $page_url    = admin_url( 'admin.php?page=school_management_system&tab=fees' );
+
+    $months_list = array( 'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december' );
     ?>
 
     <style>
@@ -409,6 +463,37 @@ function educore_fees_list_view() {
             border: 1px solid #fecaca;
         }
 
+        .dpt-action-group {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 6px;
+        }
+
+        .dpt-square-btn {
+            width: 32px;
+            height: 32px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            border: 1px solid transparent;
+            cursor: pointer;
+        }
+
+        .dpt-btn-edit {
+            background: #eff6ff;
+            color: #2563eb;
+            border-color: #bfdbfe;
+        }
+
+        .dpt-btn-edit:hover {
+            background: #2563eb;
+            color: #ffffff;
+        }
+
         .dpt-btn-action-print {
             padding: 6px 12px;
             background: #ffffff;
@@ -428,6 +513,101 @@ function educore_fees_list_view() {
             border-color: #006a4e;
             color: #006a4e;
             background: #f0fdf4;
+        }
+
+        /* Modal Backdrop & Card Engine */
+        .dpt-modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(15, 23, 42, 0.45);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 999999;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.25s ease;
+        }
+
+        .dpt-modal-backdrop.is-visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .dpt-modal-card {
+            background: #ffffff;
+            width: 100%;
+            max-width: 500px;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);
+            border: 1px solid #e2e8f0;
+            transform: translateY(20px);
+            transition: transform 0.25s ease;
+        }
+
+        .dpt-modal-backdrop.is-visible .dpt-modal-card {
+            transform: translateY(0);
+        }
+
+        .dpt-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #f1f5f9;
+            padding-bottom: 14px;
+            margin-bottom: 20px;
+        }
+
+        .dpt-modal-title {
+            font-size: 16px;
+            font-weight: 800;
+            color: #0f172a;
+            margin: 0;
+        }
+
+        .dpt-modal-close {
+            background: transparent;
+            border: none;
+            color: #64748b;
+            cursor: pointer;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .dpt-modal-close:hover {
+            color: #dc2626;
+        }
+
+        .dpt-modal-footer {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 24px;
+            padding-top: 16px;
+            border-top: 1px solid #f1f5f9;
+        }
+
+        .dpt-btn-cancel {
+            padding: 9px 18px;
+            background: #f1f5f9;
+            color: #475569;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            font-weight: 700;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        .dpt-btn-cancel:hover {
+            background: #e2e8f0;
         }
 
         /* DataTables Custom Theme Fix */
@@ -559,7 +739,7 @@ function educore_fees_list_view() {
                         <th><?php esc_html_e( 'Paid', 'ifsedu-sms' ); ?></th>
                         <th><?php esc_html_e( 'Due', 'ifsedu-sms' ); ?></th>
                         <th><?php esc_html_e( 'Status', 'ifsedu-sms' ); ?></th>
-                        <th style="text-align: right; width: 90px;"><?php esc_html_e( 'Action', 'ifsedu-sms' ); ?></th>
+                        <th style="text-align: right; width: 110px;"><?php esc_html_e( 'Actions', 'ifsedu-sms' ); ?></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -578,37 +758,55 @@ function educore_fees_list_view() {
                         $class_str      = $fee->class_name ? $fee->class_name : 'Unassigned';
                         $section_str    = ! empty( $fee->section_name ) ? $fee->section_name : 'N/A';
                     ?>
-                    <tr>
+                    <tr data-fee-id="<?php echo esc_attr( $fee->id ); ?>">
                         <td>
                             <span class="dpt-invoice-code">#<?php echo esc_html( $fee->invoice_id ); ?></span>
                         </td>
                         <td>
-                            <strong style="color: #0f172a;"><?php echo esc_html( $fee->full_name ? $fee->full_name : 'N/A Record' ); ?></strong><br>
+                            <strong style="color: #0f172a;" class="cell-student-name"><?php echo esc_html( $fee->full_name ? $fee->full_name : 'N/A Record' ); ?></strong><br>
                             <span style="font-size: 11.5px; color: #64748b;">
                                 <?php echo esc_html( sprintf( 'ID: %s | Class: %s | Section: %s', $student_id_str, $class_str, $section_str ) ); ?>
                             </span>
                         </td>
                         <td>
-                            <span style="background: #f1f5f9; border: 1px solid #e2e8f0; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 11.5px;">
+                            <span style="background: #f1f5f9; border: 1px solid #e2e8f0; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 11.5px;" class="cell-month-year">
                                 <?php echo esc_html( ucfirst( $fee->fee_month ) . ' ' . $fee->fee_year ); ?>
                             </span>
                         </td>
                         <td>
-                            <strong style="color: #475569;"><?php echo esc_html( $fee->fee_type ); ?></strong>
+                            <strong style="color: #475569;" class="cell-fee-type"><?php echo esc_html( $fee->fee_type ); ?></strong>
                         </td>
-                        <td>৳<?php echo esc_html( number_format( $fee->net_payable, 2 ) ); ?></td>
-                        <td><strong style="color: #006a4e;">৳<?php echo esc_html( number_format( $fee->paid_amount, 2 ) ); ?></strong></td>
-                        <td><strong style="color: #dc2626;">৳<?php echo esc_html( number_format( $fee->due_amount, 2 ) ); ?></strong></td>
+                        <td class="cell-net-payable">৳<?php echo esc_html( number_format( $fee->net_payable, 2 ) ); ?></td>
+                        <td class="cell-paid-amount"><strong style="color: #006a4e;">৳<?php echo esc_html( number_format( $fee->paid_amount, 2 ) ); ?></strong></td>
+                        <td class="cell-due-amount"><strong style="color: #dc2626;">৳<?php echo esc_html( number_format( $fee->due_amount, 2 ) ); ?></strong></td>
                         <td>
-                            <span class="afdp-status-badge <?php echo esc_attr( $status_class ); ?>">
+                            <span class="afdp-status-badge <?php echo esc_attr( $status_class ); ?> cell-status">
                                 <?php echo esc_html( $fee->payment_status ); ?>
                             </span>
                         </td>
                         <td style="text-align: right;">
-                            <a href="<?php echo esc_url( $print_url ); ?>" class="dpt-btn-action-print" target="_blank" title="<?php esc_attr_e( 'Print Invoice Receipt', 'ifsedu-sms' ); ?>">
-                                <span class="dashicons dashicons-printer" style="font-size: 14px; width: 14px; height: 14px;"></span>
-                                <?php esc_html_e( 'Print', 'ifsedu-sms' ); ?>
-                            </a>
+                            <div class="dpt-action-group">
+                                <!-- Trigger Edit Modal -->
+                                <button type="button" 
+                                        class="dpt-square-btn dpt-btn-edit btn-trigger-edit-fee" 
+                                        data-id="<?php echo esc_attr( $fee->id ); ?>"
+                                        data-invoice="<?php echo esc_attr( $fee->invoice_id ); ?>"
+                                        data-type="<?php echo esc_attr( $fee->fee_type ); ?>"
+                                        data-month="<?php echo esc_attr( strtolower( $fee->fee_month ) ); ?>"
+                                        data-year="<?php echo esc_attr( $fee->fee_year ); ?>"
+                                        data-net="<?php echo esc_attr( $fee->net_payable ); ?>"
+                                        data-paid="<?php echo esc_attr( $fee->paid_amount ); ?>"
+                                        data-due="<?php echo esc_attr( $fee->due_amount ); ?>"
+                                        data-status="<?php echo esc_attr( $fee->payment_status ); ?>"
+                                        title="<?php esc_attr_e( 'Edit Invoice Record', 'ifsedu-sms' ); ?>">
+                                    <span class="dashicons dashicons-edit"></span>
+                                </button>
+
+                                <a href="<?php echo esc_url( $print_url ); ?>" class="dpt-btn-action-print" target="_blank" title="<?php esc_attr_e( 'Print Invoice Receipt', 'ifsedu-sms' ); ?>">
+                                    <span class="dashicons dashicons-printer" style="font-size: 14px; width: 14px; height: 14px;"></span>
+                                    <?php esc_html_e( 'Print', 'ifsedu-sms' ); ?>
+                                </a>
+                            </div>
                         </td>
                     </tr>
                     <?php endforeach; endif; ?>
@@ -618,7 +816,73 @@ function educore_fees_list_view() {
 
     </div>
 
-    <!-- Dynamic Script Layer: Section Chaining & DataTables Engine -->
+    <!-- Dynamic Edit Fee Invoice Modal -->
+    <div class="dpt-modal-backdrop" id="dpt-edit-fee-modal">
+        <div class="dpt-modal-card">
+            <div class="dpt-modal-header">
+                <h4 class="dpt-modal-title"><?php esc_html_e( 'Edit Fee Invoice Record', 'ifsedu-sms' ); ?></h4>
+                <button type="button" class="dpt-modal-close" id="dpt-close-fee-modal">&times;</button>
+            </div>
+            <form id="dpt-edit-fee-form">
+                <input type="hidden" id="edit_fee_id" name="fee_id" value="">
+                <?php wp_nonce_field( 'dpt_edit_fee_nonce', 'edit_fee_nonce_field' ); ?>
+
+                <div class="afdp-filter-group" style="margin-bottom: 12px;">
+                    <label><?php esc_html_e( 'Fee Category', 'ifsedu-sms' ); ?> <span style="color:#dc2626;">*</span></label>
+                    <input type="text" id="edit_fee_type" name="fee_type" class="afdp-filter-input" required>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                    <div class="afdp-filter-group">
+                        <label><?php esc_html_e( 'Fee Month', 'ifsedu-sms' ); ?> <span style="color:#dc2626;">*</span></label>
+                        <select id="edit_fee_month" name="fee_month" class="afdp-filter-select" required>
+                            <?php foreach ( $months_list as $m ) : ?>
+                                <option value="<?php echo esc_attr( $m ); ?>"><?php echo esc_html( ucfirst( $m ) ); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="afdp-filter-group">
+                        <label><?php esc_html_e( 'Fee Year', 'ifsedu-sms' ); ?> <span style="color:#dc2626;">*</span></label>
+                        <input type="number" id="edit_fee_year" name="fee_year" class="afdp-filter-input" min="2020" max="2099" required>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+                    <div class="afdp-filter-group">
+                        <label><?php esc_html_e( 'Net Payable', 'ifsedu-sms' ); ?></label>
+                        <input type="number" step="0.01" id="edit_net_payable" name="net_payable" class="afdp-filter-input" required>
+                    </div>
+                    <div class="afdp-filter-group">
+                        <label><?php esc_html_e( 'Paid Amount', 'ifsedu-sms' ); ?></label>
+                        <input type="number" step="0.01" id="edit_paid_amount" name="paid_amount" class="afdp-filter-input" required>
+                    </div>
+                    <div class="afdp-filter-group">
+                        <label><?php esc_html_e( 'Due Amount', 'ifsedu-sms' ); ?></label>
+                        <input type="number" step="0.01" id="edit_due_amount" name="due_amount" class="afdp-filter-input" required>
+                    </div>
+                </div>
+
+                <div class="afdp-filter-group">
+                    <label><?php esc_html_e( 'Payment Status', 'ifsedu-sms' ); ?> <span style="color:#dc2626;">*</span></label>
+                    <select id="edit_payment_status" name="payment_status" class="afdp-filter-select" required>
+                        <option value="Paid"><?php esc_html_e( 'Paid', 'ifsedu-sms' ); ?></option>
+                        <option value="Partial"><?php esc_html_e( 'Partial', 'ifsedu-sms' ); ?></option>
+                        <option value="Unpaid"><?php esc_html_e( 'Unpaid', 'ifsedu-sms' ); ?></option>
+                    </select>
+                </div>
+
+                <div class="dpt-modal-footer">
+                    <button type="button" class="dpt-btn-cancel" id="dpt-cancel-fee-edit"><?php esc_html_e( 'Cancel', 'ifsedu-sms' ); ?></button>
+                    <button type="submit" class="dpt-btn-collect" id="dpt-save-fee-edit-btn" style="height: auto; padding: 9px 20px;">
+                        <span class="dashicons dashicons-saved" style="font-size:16px; width:16px; height:16px;"></span>
+                        <?php esc_html_e( 'Update Invoice', 'ifsedu-sms' ); ?>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Dynamic Script Layer: Section Chaining, Modal Control & DataTables Engine -->
     <script type="text/javascript">
     document.addEventListener('DOMContentLoaded', function() {
         const unitsMap       = <?php echo wp_json_encode( ! empty( $all_units ) ? $all_units : array() ); ?>;
@@ -651,6 +915,132 @@ function educore_fees_list_view() {
 
             classSelect.addEventListener('change', function() {
                 populateSections(this.value);
+            });
+        }
+
+        // --------------------------------------------------------------------------
+        // EDIT MODAL AJAX ENGINE FOR FEES LEDGER
+        // --------------------------------------------------------------------------
+        const modal          = document.getElementById('dpt-edit-fee-modal');
+        const closeModalBtn  = document.getElementById('dpt-close-fee-modal');
+        const cancelModalBtn = document.getElementById('dpt-cancel-fee-edit');
+        const editForm       = document.getElementById('dpt-edit-fee-form');
+
+        function hideModal() {
+            if (modal) modal.classList.remove('is-visible');
+        }
+
+        if (closeModalBtn) closeModalBtn.addEventListener('click', hideModal);
+        if (cancelModalBtn) cancelModalBtn.addEventListener('click', hideModal);
+
+        // Auto-calculate Due Amount on Paid or Net input changes in Modal
+        const netInput  = document.getElementById('edit_net_payable');
+        const paidInput = document.getElementById('edit_paid_amount');
+        const dueInput  = document.getElementById('edit_due_amount');
+        const statusSelect = document.getElementById('edit_payment_status');
+
+        function updateModalCalculations() {
+            const net  = parseFloat(netInput.value) || 0;
+            const paid = parseFloat(paidInput.value) || 0;
+            const due  = Math.max(0, net - paid);
+            
+            dueInput.value = due.toFixed(2);
+
+            if (paid >= net && net > 0) {
+                statusSelect.value = 'Paid';
+            } else if (paid > 0 && paid < net) {
+                statusSelect.value = 'Partial';
+            } else {
+                statusSelect.value = 'Unpaid';
+            }
+        }
+
+        if (netInput && paidInput) {
+            netInput.addEventListener('input', updateModalCalculations);
+            paidInput.addEventListener('input', updateModalCalculations);
+        }
+
+        // Trigger Modal Open
+        document.addEventListener('click', function(e) {
+            const editBtn = e.target.closest('.btn-trigger-edit-fee');
+            if (editBtn) {
+                const id     = editBtn.getAttribute('data-id');
+                const type   = editBtn.getAttribute('data-type');
+                const month  = editBtn.getAttribute('data-month');
+                const year   = editBtn.getAttribute('data-year');
+                const net    = editBtn.getAttribute('data-net');
+                const paid   = editBtn.getAttribute('data-paid');
+                const due    = editBtn.getAttribute('data-due');
+                const status = editBtn.getAttribute('data-status');
+
+                document.getElementById('edit_fee_id').value         = id;
+                document.getElementById('edit_fee_type').value       = type;
+                document.getElementById('edit_fee_month').value      = month;
+                document.getElementById('edit_fee_year').value       = year;
+                document.getElementById('edit_net_payable').value    = net;
+                document.getElementById('edit_paid_amount').value    = paid;
+                document.getElementById('edit_due_amount').value     = due;
+                document.getElementById('edit_payment_status').value = status;
+
+                modal.classList.add('is-visible');
+            }
+        });
+
+        // Submit AJAX Handler
+        if (editForm) {
+            editForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+
+                const submitBtn    = document.getElementById('dpt-save-fee-edit-btn');
+                const originalText = submitBtn.innerHTML;
+                submitBtn.disabled  = true;
+                submitBtn.innerHTML = '<span class="dashicons dashicons-update spin"></span> Save...';
+
+                const formData = new FormData();
+                formData.append('action', 'dpt_update_fee_invoice');
+                formData.append('security', document.getElementById('edit_fee_nonce_field').value);
+                formData.append('fee_id', document.getElementById('edit_fee_id').value);
+                formData.append('fee_type', document.getElementById('edit_fee_type').value);
+                formData.append('fee_month', document.getElementById('edit_fee_month').value);
+                formData.append('fee_year', document.getElementById('edit_fee_year').value);
+                formData.append('net_payable', document.getElementById('edit_net_payable').value);
+                formData.append('paid_amount', document.getElementById('edit_paid_amount').value);
+                formData.append('due_amount', document.getElementById('edit_due_amount').value);
+                formData.append('payment_status', document.getElementById('edit_payment_status').value);
+
+                const ajaxUrl = '<?php echo esc_url( admin_url( "admin-ajax.php" ) ); ?>';
+
+                fetch(ajaxUrl, {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(async response => {
+                    const isJson = response.headers.get('content-type')?.includes('application/json');
+                    const data = isJson ? await response.json() : null;
+
+                    if (!response.ok) {
+                        const error = (data && data.data && data.data.message) || response.statusText;
+                        return Promise.reject(error);
+                    }
+                    return data;
+                })
+                .then(data => {
+                    submitBtn.disabled  = false;
+                    submitBtn.innerHTML = originalText;
+
+                    if (data && data.success) {
+                        hideModal();
+                        window.location.reload();
+                    } else {
+                        alert((data && data.data && data.data.message) || 'Error occurred while updating fee invoice.');
+                    }
+                })
+                .catch(err => {
+                    submitBtn.disabled  = false;
+                    submitBtn.innerHTML = originalText;
+                    console.error('AJAX Error:', err);
+                    alert('Request failed: ' + (typeof err === 'string' ? err : 'Connection/Server error.'));
+                });
             });
         }
     });
