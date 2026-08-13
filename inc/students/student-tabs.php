@@ -16,6 +16,7 @@ function educore_students_tab() {
     $add_student_url  = admin_url( 'admin.php?page=school_management_system&tab=students&sub=add' );
     $id_card_url      = admin_url( 'admin.php?page=school_management_system&tab=students&sub=id_card' );
     $admit_card_url   = admin_url( 'admin.php?page=school_management_system&tab=students&sub=admit_card' );
+    $certificate_url  = admin_url( 'admin.php?page=school_management_system&tab=students&sub=certificate' ); // NEW: Certificate URL
     ?>
 
     <style>
@@ -180,6 +181,12 @@ function educore_students_tab() {
                    class="dpt-nav-link <?php echo ( $sub_tab === 'admit_card' ) ? 'dpt-nav-link-active' : 'dpt-nav-link-inactive'; ?>">
                     <span class="dashicons dashicons-tickets-alt"></span> Admit Cards
                 </a>
+
+                <!-- NEW: Certificate Tab -->
+                <a href="<?php echo esc_url( $certificate_url ); ?>" 
+                   class="dpt-nav-link <?php echo ( $sub_tab === 'certificate' ) ? 'dpt-nav-link-active' : 'dpt-nav-link-inactive'; ?>">
+                    <span class="dashicons dashicons-awards"></span> Certificate
+                </a>
             </div>
 
             <?php if ( in_array( $sub_tab, array( 'edit', 'view' ), true ) ) : ?>
@@ -222,6 +229,15 @@ function educore_students_tab() {
                         educore_student_admit_card_view();
                     } else {
                         echo '<div class="afdp-notice-card"><span class="dashicons dashicons-info" style="vertical-align:middle; margin-right:6px;"></span> Admit Card Generator module is initializing. Define <code>educore_student_admit_card_view()</code>.</div>';
+                    }
+                    break;
+
+                // NEW: Certificate Routing Logic
+                case 'certificate':
+                    if ( function_exists( 'educore_student_certificate_view' ) ) {
+                        educore_student_certificate_view();
+                    } else {
+                        echo '<div class="afdp-notice-card"><span class="dashicons dashicons-info" style="vertical-align:middle; margin-right:6px;"></span> Certificate Generator module is initializing. Define <code>educore_student_certificate_view()</code>.</div>';
                     }
                     break;
 

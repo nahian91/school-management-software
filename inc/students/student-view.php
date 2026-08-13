@@ -350,6 +350,55 @@ function educore_student_profile_view() {
         .dpt-status-partial { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; }
         .dpt-status-unpaid { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
 
+        /* Enhanced Results CSS */
+        .dpt-exam-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            margin-bottom: 24px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.02);
+        }
+        .dpt-exam-header {
+            background: #f8fafc;
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        .dpt-exam-title {
+            font-size: 16px;
+            font-weight: 800;
+            color: #0f172a;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .dpt-exam-summary {
+            background: #f8fafc;
+            padding: 16px 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 28px;
+            border-top: 1px solid #e2e8f0;
+        }
+        .dpt-summary-item {
+            display: flex;
+            flex-direction: column;
+        }
+        .dpt-summary-label {
+            font-size: 11px;
+            color: #64748b;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        .dpt-summary-value {
+            font-size: 18px;
+            font-weight: 800;
+            color: #006a4e;
+        }
+
         @media print {
             .no-print, .dpt-action-bar, .dnt-profile-tabs { display: none !important; }
             .dpt-profile-header-card { background: #006a4e !important; color: #ffffff !important; box-shadow: none !important; }
@@ -419,7 +468,11 @@ function educore_student_profile_view() {
                 <div class="dpt-bento-icon" style="background:#eff6ff; color:#2563eb;"><span class="dashicons dashicons-clipboard"></span></div>
                 <div>
                     <div style="font-size:11.5px; color:#64748b; font-weight:800; text-transform:uppercase;"><?php esc_html_e( 'Exams Evaluated', 'ifsedu-sms' ); ?></div>
-                    <div style="font-size:22px; font-weight:800; color:#0f172a;"><?php echo count( $exam_results ); ?></div>
+                    <div style="font-size:22px; font-weight:800; color:#0f172a;"><?php 
+                        // Count unique exams from results
+                        $unique_exams = array_unique(array_column((array)$exam_results, 'exam_id'));
+                        echo count($unique_exams); 
+                    ?></div>
                 </div>
             </div>
 
@@ -503,37 +556,103 @@ function educore_student_profile_view() {
                 </div>
             </div>
 
-            <!-- 2. Results Tab -->
+            <!-- 2. Results Tab (Enhanced) -->
             <div id="dpt-results-tab" class="dpt-tab-content-block" style="display:none;">
                 <div class="dpt-section-title"><?php esc_html_e( 'Academic Marks Matrix', 'ifsedu-sms' ); ?></div>
-                <div style="overflow-x:auto;">
-                    <table class="dpt-data-responsive-table">
-                        <thead>
-                            <tr>
-                                <th>Exam Scheme</th>
-                                <th>Subject Title</th>
-                                <th>Total Marks</th>
-                                <th>Obtained Marks</th>
-                                <th>Grade</th>
-                                <th>GPA</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php if ( ! empty( $exam_results ) ) : foreach ( $exam_results as $res ) : ?>
-                                <tr>
-                                    <td><strong style="color:#0f172a;"><?php echo esc_html( $res->exam_name ); ?></strong></td>
-                                    <td><?php echo esc_html( $res->subject_name ); ?></td>
-                                    <td><?php echo esc_html( $res->total_marks ); ?></td>
-                                    <td><strong style="color:#0f172a;"><?php echo esc_html( $res->obtained_marks ); ?></strong></td>
-                                    <td><span style="background:#f1f5f9; padding:3px 8px; border-radius:4px; font-weight:700; border:1px solid #cbd5e1;"><?php echo esc_html( $res->grade ); ?></span></td>
-                                    <td><strong style="color:#2563eb;"><?php echo esc_html( $res->gpa ); ?></strong></td>
-                                </tr>
-                            <?php endforeach; else : ?>
-                                <tr><td colspan="6" style="text-align:center; color:#94a3b8; padding:30px;"><?php esc_html_e( 'No examination records evaluated for this student.', 'ifsedu-sms' ); ?></td></tr>
-                            <?php endif; ?>
-                        </tbody>
-                    </table>
-                </div>
+                
+                <?php 
+                // Group results by exam_name
+                $grouped_results = array();
+                if ( ! empty( $exam_results ) ) {
+                    foreach ( $exam_results as $res ) {
+                        $grouped_results[ $res->exam_name ][] = $res;
+                    }
+                }
+
+                if ( ! empty( $grouped_results ) ) :
+                    foreach ( $grouped_results as $exam_title => $results ) :
+                        $total_obtained = 0;
+                        $total_max = 0;
+                        $sum_gpa = 0;
+                        $has_failed = false;
+                        
+                        foreach ( $results as $r ) {
+                            $total_obtained += floatval($r->obtained_marks);
+                            $total_max += floatval($r->total_marks);
+                            $sum_gpa += floatval($r->gpa);
+                            if ( strtoupper(trim($r->grade)) === 'F' ) {
+                                $has_failed = true;
+                            }
+                        }
+                        
+                        $sub_count = count($results);
+                        $avg_gpa = $sub_count > 0 ? ($sum_gpa / $sub_count) : 0;
+                        $final_gpa = $has_failed ? 0.00 : number_format($avg_gpa, 2);
+                        $pass_status = $has_failed ? 'Failed' : 'Passed';
+                        $status_color = $has_failed ? '#dc2626' : '#059669';
+                ?>
+                    <div class="dpt-exam-card">
+                        <div class="dpt-exam-header">
+                            <div class="dpt-exam-title">
+                                <span class="dashicons dashicons-awards" style="color: #006a4e;"></span>
+                                <?php echo esc_html( $exam_title ); ?>
+                            </div>
+                            <span style="font-size: 12px; font-weight: 700; color: #64748b; background: #e2e8f0; padding: 4px 12px; border-radius: 20px;">
+                                <?php echo $sub_count; ?> Subjects Evaluated
+                            </span>
+                        </div>
+                        
+                        <div style="overflow-x:auto;">
+                            <table class="dpt-data-responsive-table" style="border: none; border-radius: 0;">
+                                <thead>
+                                    <tr>
+                                        <th>Subject Title</th>
+                                        <th>Total Marks</th>
+                                        <th>Obtained Marks</th>
+                                        <th>Grade</th>
+                                        <th>GPA</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ( $results as $res ) : 
+                                        $is_f = strtoupper(trim($res->grade)) === 'F';
+                                    ?>
+                                        <tr>
+                                            <td><strong style="color:#0f172a;"><?php echo esc_html( $res->subject_name ); ?></strong></td>
+                                            <td><?php echo floatval( $res->total_marks ); ?></td>
+                                            <td><strong style="color:<?php echo $is_f ? '#dc2626' : '#0f172a'; ?>;"><?php echo floatval( $res->obtained_marks ); ?></strong></td>
+                                            <td><span style="background:<?php echo $is_f ? '#fef2f2' : '#f1f5f9'; ?>; color:<?php echo $is_f ? '#dc2626' : 'inherit'; ?>; padding:3px 8px; border-radius:4px; font-weight:700; border:1px solid <?php echo $is_f ? '#fecaca' : '#cbd5e1'; ?>;"><?php echo esc_html( $res->grade ); ?></span></td>
+                                            <td><strong style="color:<?php echo $is_f ? '#dc2626' : '#2563eb'; ?>;"><?php echo number_format(floatval($res->gpa), 2); ?></strong></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="dpt-exam-summary">
+                            <div class="dpt-summary-item">
+                                <span class="dpt-summary-label">Total Marks</span>
+                                <span class="dpt-summary-value" style="color: #0f172a;"><?php echo $total_obtained; ?> / <?php echo $total_max; ?></span>
+                            </div>
+                            <div class="dpt-summary-item">
+                                <span class="dpt-summary-label">Final GPA</span>
+                                <span class="dpt-summary-value"><?php echo $final_gpa; ?></span>
+                            </div>
+                            <div class="dpt-summary-item">
+                                <span class="dpt-summary-label">Exam Status</span>
+                                <span class="dpt-summary-value" style="color: <?php echo $status_color; ?>;"><?php echo $pass_status; ?></span>
+                            </div>
+                        </div>
+                    </div>
+                <?php 
+                    endforeach; 
+                else : 
+                ?>
+                    <div style="text-align:center; color:#94a3b8; padding:40px; background:#f8fafc; border-radius:12px; border:1px dashed #cbd5e1;">
+                        <span class="dashicons dashicons-welcome-learn-more" style="font-size: 32px; width:32px; height:32px; opacity:0.5; margin-bottom:12px;"></span><br>
+                        <?php esc_html_e( 'No examination records evaluated for this student yet.', 'ifsedu-sms' ); ?>
+                    </div>
+                <?php endif; ?>
             </div>
 
             <!-- 3. Payments Tab -->
