@@ -14,6 +14,7 @@ function educore_staff_tab() {
     // Construct URLs for top submenu links
     $all_staff_url = admin_url( 'admin.php?page=school_management_system&tab=staff&sub=list' );
     $add_staff_url = admin_url( 'admin.php?page=school_management_system&tab=staff&sub=add' );
+    $id_card_url   = admin_url( 'admin.php?page=school_management_system&tab=staff&sub=id_card' );
     ?>
 
     <style>
@@ -168,6 +169,11 @@ function educore_staff_tab() {
                    class="dpt-nav-link <?php echo ( $sub_tab === 'add' ) ? 'dpt-nav-link-active' : 'dpt-nav-link-inactive'; ?>">
                     <span class="dashicons dashicons-plus-alt2"></span> + Add New Staff
                 </a>
+
+                <a href="<?php echo esc_url( $id_card_url ); ?>" 
+                   class="dpt-nav-link <?php echo ( $sub_tab === 'id_card' || $sub_tab === 'id_cards' ) ? 'dpt-nav-link-active' : 'dpt-nav-link-inactive'; ?>">
+                    <span class="dashicons dashicons-id"></span> Print ID Cards
+                </a>
             </div>
 
             <?php if ( $sub_tab === 'edit' || $sub_tab === 'view' ) : ?>
@@ -183,36 +189,44 @@ function educore_staff_tab() {
         <!-- System HR/Staff Viewport Execution Core -->
         <div class="dpt-module-viewport-container">
             <?php
-            // Inside educore_staff_tab() switch block:
-switch ( $sub_tab ) {
-    case 'add':
-    case 'edit':
-        if ( function_exists( 'educore_staff_add_edit_view' ) ) {
-            educore_staff_add_edit_view();
-        }
-        break;
+            switch ( $sub_tab ) {
+                case 'add':
+                case 'edit':
+                    if ( function_exists( 'educore_staff_add_edit_view' ) ) {
+                        educore_staff_add_edit_view();
+                    }
+                    break;
 
-    case 'view':
-        if ( function_exists( 'educore_staff_profile_view' ) ) {
-            educore_staff_profile_view();
-        } else {
-            echo '<div class="afdp-notice-card"><span class="dashicons dashicons-info"></span> Profile view module initializing.</div>';
-        }
-        break;
+                case 'view':
+                    if ( function_exists( 'educore_staff_profile_view' ) ) {
+                        educore_staff_profile_view();
+                    } else {
+                        echo '<div class="afdp-notice-card"><span class="dashicons dashicons-info"></span> Profile view module initializing.</div>';
+                    }
+                    break;
 
-    case 'delete':
-        if ( function_exists( 'educore_staff_delete_action' ) ) {
-            educore_staff_delete_action();
-        }
-        break;
+                case 'id_card':
+                case 'id_cards':
+                    if ( function_exists( 'educore_staff_id_cards_view' ) ) {
+                        educore_staff_id_cards_view();
+                    } else {
+                        echo '<div class="afdp-notice-card"><span class="dashicons dashicons-info"></span> Staff ID Cards module initializing. Please load <code>educore_staff_id_cards_view()</code> template file.</div>';
+                    }
+                    break;
 
-    case 'list':
-    default:
-        if ( function_exists( 'educore_staff_list_view' ) ) {
-            educore_staff_list_view();
-        }
-        break;
-}
+                case 'delete':
+                    if ( function_exists( 'educore_staff_delete_action' ) ) {
+                        educore_staff_delete_action();
+                    }
+                    break;
+
+                case 'list':
+                default:
+                    if ( function_exists( 'educore_staff_list_view' ) ) {
+                        educore_staff_list_view();
+                    }
+                    break;
+            }
             ?>
         </div>
     </div>

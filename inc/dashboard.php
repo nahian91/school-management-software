@@ -152,13 +152,13 @@ function educore_dashboard_tab() {
         .educore-hero-icon-box {
             width: 72px;
             height: 72px;
-            background: rgba(16, 185, 129, 0.12);
-            border: 1px solid rgba(16, 185, 129, 0.3);
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.35);
             border-radius: 20px;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #006a4e;
+            color: #34d399;
             flex-shrink: 0;
             backdrop-filter: blur(12px);
             box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
@@ -295,7 +295,7 @@ function educore_dashboard_tab() {
         }
 
         .card-students::before { background: linear-gradient(180deg, #2563eb, #3b82f6); }
-        .card-present::before  { background: linear-gradient(180deg, #059669, #006a4e); }
+        .card-present::before  { background: linear-gradient(180deg, #059669, #10b981); }
         .card-absent::before   { background: linear-gradient(180deg, #d97706, #f59e0b); }
         .card-fees::before     { background: linear-gradient(180deg, #7c3aed, #8b5cf6); }
         .card-dues::before     { background: linear-gradient(180deg, #dc2626, #ef4444); }
@@ -510,6 +510,23 @@ function educore_dashboard_tab() {
         .dpt-matrix-table tr:hover td {
             background: #f8fafc;
         }
+
+        /* Progress Ring & Meters */
+        .educore-progress-bar-bg {
+            background: #e2e8f0;
+            border-radius: 10px;
+            height: 8px;
+            width: 100%;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+
+        .educore-progress-bar-fill {
+            background: linear-gradient(90deg, #059669, #34d399);
+            height: 100%;
+            border-radius: 10px;
+            transition: width 0.6s ease;
+        }
     </style>
 
     <div class="educore-dashboard-wrapper">
@@ -582,7 +599,7 @@ function educore_dashboard_tab() {
                     </div>
                     <div class="educore-card-value val-green">
                         <?php echo esc_html( number_format_i18n( $today_present ) ); ?>
-                        <small style="font-size:14px; font-weight:700; color:#64748b; margin-left:4px;">(<?php echo $attendance_percentage; ?>%)</small>
+                        <small style="font-size:14px; font-weight:700; color:#64748b; margin-left:4px;">(<?php echo esc_html( $attendance_percentage ); ?>%)</small>
                     </div>
                 </div>
                 <div class="educore-card-footer">
@@ -761,57 +778,53 @@ function educore_dashboard_tab() {
 
                 <div style="display:flex; flex-direction:column; gap:18px;">
                     <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; padding:18px;">
-                        <div style="font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:0.6px; color:#64748b; margin-bottom:6px;"><?php esc_html_e( 'Attendance Ratio', 'educore' ); ?></div>
-                        <div style="font-size:22px; font-weight:800; color:#0f172a; letter-spacing:-0.5px;"><?php echo $attendance_percentage; ?>% <span style="font-size:13px; font-weight:600; color:#64748b;"><?php esc_html_e( 'Present Today', 'educore' ); ?></span></div>
-                        <div style="height:8px; background:#e2e8f0; border-radius:10px; margin-top:10px; overflow:hidden;">
-                            <div style="width:<?php echo $attendance_percentage; ?>%; height:100%; background:linear-gradient(90deg, #006a4e, #059669); border-radius:10px; transition: width 1s ease-in-out;"></div>
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                            <div style="font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:0.6px; color:#64748b;"><?php esc_html_e( 'Attendance Ratio', 'educore' ); ?></div>
+                            <span style="font-size:12px; font-weight:800; color:#059669;"><?php echo esc_html( $attendance_percentage ); ?>%</span>
+                        </div>
+                        <div style="font-size:22px; font-weight:800; color:#0f172a; letter-spacing:-0.5px;"><?php echo esc_html( $today_present ); ?> / <?php echo esc_html( $attendance_total_records ); ?> <span style="font-size:13px; font-weight:600; color:#64748b;"><?php esc_html_e( 'Students Logged', 'educore' ); ?></span></div>
+                        <div class="educore-progress-bar-bg">
+                            <div class="educore-progress-bar-fill" style="width: <?php echo esc_attr( min( 100, $attendance_percentage ) ); ?>%;"></div>
                         </div>
                     </div>
 
-                    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; padding:18px;">
-                        <div style="font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:0.6px; color:#64748b; margin-bottom:6px;"><?php esc_html_e( 'Database Engine', 'educore' ); ?></div>
-                        <div style="font-size:14px; font-weight:800; color:#059669; display:flex; align-items:center; gap:8px;">
-                            <span class="dashicons dashicons-database" style="font-size:18px; width:18px; height:18px;"></span>
-                            <?php esc_html_e( 'Connected & Synchronized', 'educore' ); ?>
+                    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; padding:18px; display:flex; align-items:center; justify-content:space-between;">
+                        <div>
+                            <div style="font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:0.6px; color:#64748b; margin-bottom:4px;"><?php esc_html_e( 'Database Engine', 'educore' ); ?></div>
+                            <div style="font-size:15px; font-weight:700; color:#0f172a;"><?php esc_html_e( 'Optimized & Synced', 'educore' ); ?></div>
                         </div>
+                        <span class="dashicons dashicons-database" style="font-size:24px; width:24px; height:24px; color:#006a4e;"></span>
                     </div>
 
-                    <div style="background:#ecfdf5; border:1px solid #a7f3d0; border-radius:14px; padding:18px; color:#065f46;">
-                        <div style="font-size:13px; font-weight:800; margin-bottom:4px; display:flex; align-items:center; gap:8px;">
-                            <span class="dashicons dashicons-shield" style="font-size:18px; width:18px; height:18px;"></span> 
-                            <?php esc_html_e( 'EduCore Active', 'educore' ); ?>
+                    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; padding:18px; display:flex; align-items:center; justify-content:space-between;">
+                        <div>
+                            <div style="font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:0.6px; color:#64748b; margin-bottom:4px;"><?php esc_html_e( 'Accounting Module', 'educore' ); ?></div>
+                            <div style="font-size:15px; font-weight:700; color:#0f172a;"><?php esc_html_e( 'Active Ledger', 'educore' ); ?></div>
                         </div>
-                        <div style="font-weight:600; font-size:12px; color:#047857; line-height:1.4;"><?php esc_html_e( 'All modules running smoothly with zero schema conflicts.', 'educore' ); ?></div>
+                        <a href="<?php echo esc_url( $acct_tab_url ); ?>" class="educore-action-link-btn link-emerald" style="font-size:12px;"><?php esc_html_e( 'View', 'educore' ); ?> &rarr;</a>
                     </div>
                 </div>
             </div>
 
         </div>
+
     </div>
 
-    <!-- Live Real-Time Ticker Clock Script -->
     <script type="text/javascript">
-    document.addEventListener('DOMContentLoaded', function() {
-        function educoreDashboardClockEngine() {
-            var timeObject = new Date();
-            var hours = timeObject.getHours();
-            var minutes = timeObject.getMinutes().toString().padStart(2, '0');
-            var seconds = timeObject.getSeconds().toString().padStart(2, '0');
-            var ampm = hours >= 12 ? 'PM' : 'AM';
-            
-            hours = hours % 12;
-            hours = hours ? hours : 12; // Hour '0' should be '12'
-            var formattedHours = hours.toString().padStart(2, '0');
-            
-            var processString = formattedHours + ':' + minutes + ':' + seconds + ' ' + ampm;
-            var tickerContainer = document.getElementById('educoreLiveTickerClock');
-            if (tickerContainer) {
-                tickerContainer.textContent = processString;
+        document.addEventListener('DOMContentLoaded', function() {
+            function updateClock() {
+                var now = new Date();
+                var hours = String(now.getHours()).padStart(2, '0');
+                var minutes = String(now.getMinutes()).padStart(2, '0');
+                var seconds = String(now.getSeconds()).padStart(2, '0');
+                var clockElem = document.getElementById('educoreLiveTickerClock');
+                if (clockElem) {
+                    clockElem.textContent = hours + ':' + minutes + ':' + seconds;
+                }
             }
-        }
-        setInterval(educoreDashboardClockEngine, 1000);
-        educoreDashboardClockEngine();
-    });
+            updateClock();
+            setInterval(updateClock, 1000);
+        });
     </script>
     <?php
 }
