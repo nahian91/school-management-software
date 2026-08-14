@@ -100,7 +100,7 @@ function educore_fees_collect_view() {
     $db_error = '';
 
     // Dynamic Base URL Preservation
-    $current_uri = remove_query_arg( array( 'status' ), $_SERVER['REQUEST_URI'] );
+    $current_uri = remove_query_arg( array( 'status', 'msg' ), $_SERVER['REQUEST_URI'] );
     $base_url    = esc_url_raw( $current_uri );
     $back_url    = add_query_arg( array( 'sub' => 'list' ), $base_url );
 
@@ -171,16 +171,18 @@ function educore_fees_collect_view() {
 
                 $page_slug = isset( $_GET['page'] ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : '';
                 
-                $print_url = add_query_arg(
+                // Redirect directly to All Fees Directory List
+                $redirect_url = add_query_arg(
                     array(
-                        'page'    => $page_slug,
-                        'sub'     => 'print',
-                        'invoice' => $invoice_id
+                        'page' => $page_slug,
+                        'tab'  => 'fees',
+                        'sub'  => 'list',
+                        'msg'  => 'collected'
                     ),
                     admin_url( 'admin.php' )
                 );
 
-                echo '<script type="text/javascript">window.location.href="' . esc_url_raw( $print_url ) . '";</script>';
+                echo '<script type="text/javascript">window.location.href="' . esc_url_raw( $redirect_url ) . '";</script>';
                 exit;
             } else {
                 $db_error = $wpdb->last_error ? $wpdb->last_error : __( 'Failed to write record to database. Verify table schema.', 'ifsedu-sms' );
@@ -613,7 +615,7 @@ function educore_fees_collect_view() {
                 <!-- Action Button -->
                 <button type="submit" name="educore_collect_fee" class="dpt-btn-submit">
                     <span class="dashicons dashicons-saved" style="font-size:20px; width:20px; height:20px;"></span>
-                    <?php esc_html_e( 'Receive Payment & Generate Receipt', 'ifsedu-sms' ); ?>
+                    <?php esc_html_e( 'Receive Payment & Save', 'ifsedu-sms' ); ?>
                 </button>
             </form>
         </div>

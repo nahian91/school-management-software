@@ -49,7 +49,7 @@ function educore_student_id_card_view() {
 
     if ( ! empty( $selected_class ) ) {
         // Fetch Students for Dropdown
-        $st_sql = "SELECT id, full_name, student_id, roll_no FROM {$table_students} WHERE status = 'Active' AND class_name = %s";
+        $st_sql = "SELECT id, full_name, student_id, roll_no, section_name FROM {$table_students} WHERE status = 'Active' AND class_name = %s";
         $st_params = array( $selected_class );
         if ( ! empty( $selected_section ) ) {
             $st_sql .= " AND section_name = %s";
@@ -76,6 +76,11 @@ function educore_student_id_card_view() {
         $query     = "SELECT * FROM {$table_students} WHERE {$where_sql} ORDER BY CAST(roll_no AS UNSIGNED) ASC, roll_no ASC";
 
         $students = $wpdb->get_results( $wpdb->prepare( $query, ...$query_params ) );
+    }
+
+    $site_name = get_bloginfo( 'name' );
+    if ( empty( $site_name ) || $site_name === 'WordPress' ) {
+        $site_name = 'Green Gems International School & College';
     }
     ?>
 
@@ -111,7 +116,7 @@ function educore_student_id_card_view() {
 
         .dpt-form-grid-wrapper {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
             gap: 16px;
             align-items: flex-end;
         }
@@ -162,6 +167,7 @@ function educore_student_id_card_view() {
             border: none;
             transition: all 0.2s ease;
             text-decoration: none;
+            white-space: nowrap;
         }
 
         .dpt-btn-primary { background: #006a4e; color: #ffffff; }
@@ -198,7 +204,7 @@ function educore_student_id_card_view() {
             border-radius: 4px;
             font-size: 0.72rem;
             font-weight: 700;
-            padding: 3px 8px;
+            padding: 4px 10px;
             cursor: pointer;
             display: inline-flex;
             align-items: center;
@@ -212,124 +218,146 @@ function educore_student_id_card_view() {
             border-color: #006a4e;
         }
 
-        /* ISO CR80 Dimensions: 3.375in x 2.125in (~85.6mm x 53.98mm) */
+        /* ISO CR80 Dimensions: 3.375in x 2.125in (~85.6mm x 54mm) */
         .id-card-box {
             width: 325px;
-            height: 204px;
+            height: 205px;
             border: 1px solid #cbd5e1;
-            border-radius: 8px;
+            border-radius: 10px;
             background: #ffffff;
             position: relative;
             overflow: hidden;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.06);
+            box-shadow: 0 4px 14px rgba(0,0,0,0.08);
             box-sizing: border-box;
             font-family: Arial, Helvetica, sans-serif;
             display: flex;
             flex-direction: column;
         }
 
+        .id-card-box::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at 90% 10%, rgba(0, 106, 78, 0.03) 0%, transparent 60%);
+            pointer-events: none;
+        }
+
+        /* Adjusted Header for Full Proper School Name */
         .id-card-header {
-            background: linear-gradient(135deg, #006a4e 0%, #004d38 100%);
+            background: linear-gradient(135deg, #006a4e 0%, #004533 100%);
             color: #ffffff;
-            padding: 5px 8px;
+            padding: 5px 6px;
             text-align: center;
-            border-bottom: 2px solid #f59e0b;
+            border-bottom: 2.5px solid #d97706;
             flex-shrink: 0;
+            min-height: 38px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
         }
 
         .id-card-header h6 {
             margin: 0;
             font-weight: 800;
             text-transform: uppercase;
-            font-size: 0.72rem;
+            font-size: 0.65rem;
             letter-spacing: 0.2px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            line-height: 1.1;
+            line-height: 1.15;
+            color: #ffffff;
+            white-space: normal;
+            word-break: keep-all;
+            text-align: center;
+            max-width: 98%;
         }
 
         .id-card-header small {
-            font-size: 0.52rem;
-            letter-spacing: 0.8px;
-            opacity: 0.92;
+            font-size: 0.48rem;
+            letter-spacing: 0.6px;
+            opacity: 0.95;
             display: block;
             margin-top: 1px;
-            font-weight: 600;
+            font-weight: 700;
             text-transform: uppercase;
+            color: #fef08a;
         }
 
         .id-card-body {
-            padding: 6px 8px 0 8px;
+            padding: 6px 10px 0 10px;
             display: flex;
-            gap: 8px;
+            gap: 10px;
             align-items: flex-start;
+            flex: 1;
         }
 
         .id-photo-frame {
-            width: 58px;
-            height: 68px;
-            border: 1px solid #94a3b8;
-            border-radius: 4px;
+            width: 62px;
+            height: 72px;
+            border: 1.5px solid #006a4e;
+            border-radius: 6px;
             overflow: hidden;
-            background: #f1f5f9;
+            background: #f8fafc;
             flex-shrink: 0;
             display: flex;
             align-items: center;
             justify-content: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.06);
         }
 
         .id-photo-frame img { width: 100%; height: 100%; object-fit: cover; }
 
         .id-card-table {
-            font-size: 0.62rem;
+            font-size: 0.63rem;
             width: 100%;
             border-collapse: collapse;
-            line-height: 1.2;
+            line-height: 1.25;
         }
 
-        .id-card-table td { padding: 0.5px 0; vertical-align: top; border: none !important; }
-        .id-card-table td.lbl { color: #475569; font-weight: 600; width: 30%; }
-        .id-card-table td.val { color: #0f172a; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .id-card-table td { padding: 1px 0; vertical-align: middle; border: none !important; }
+        .id-card-table td.lbl { color: #64748b; font-weight: 700; width: 32%; text-transform: uppercase; font-size: 0.58rem; }
+        .id-card-table td.val { color: #0f172a; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
         .id-code-area {
-            margin: auto 6px 20px 6px;
+            margin: auto 8px 22px 8px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            background: #fafafa;
+            background: #f8fafc;
             border: 1px dashed #cbd5e1;
-            padding: 1px 4px;
+            padding: 2px 6px;
             border-radius: 4px;
-            height: 26px;
+            height: 28px;
             box-sizing: border-box;
         }
 
         .id-barcode-svg { max-height: 22px; width: auto; max-width: 100%; display: block; margin: 0 auto; }
 
         .id-qrcode-box {
-            width: 22px;
-            height: 22px;
+            width: 24px;
+            height: 24px;
             display: flex;
             align-items: center;
             justify-content: center;
         }
 
-        .id-qrcode-box img { width: 22px !important; height: 22px !important; }
+        .id-qrcode-box img { width: 24px !important; height: 24px !important; }
 
         .id-card-footer {
             position: absolute;
             bottom: 0;
             left: 0;
             width: 100%;
-            height: 18px;
+            height: 20px;
             background: #f8fafc;
-            padding: 2px 8px;
+            padding: 2px 10px;
             border-top: 1px solid #e2e8f0;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            font-size: 0.54rem;
+            font-size: 0.56rem;
             box-sizing: border-box;
         }
 
@@ -337,14 +365,17 @@ function educore_student_id_card_view() {
             font-weight: 800;
             color: #dc2626;
             background: #fee2e2;
-            padding: 0px 4px;
-            border-radius: 2px;
+            padding: 1px 5px;
+            border-radius: 3px;
+            border: 1px solid #fecaca;
         }
 
         .id-card-footer span.sig-title {
             font-weight: 700;
             color: #334155;
             text-transform: uppercase;
+            border-top: 1px solid #94a3b8;
+            padding-top: 1px;
         }
 
         /* Print Media Overrides */
@@ -373,7 +404,7 @@ function educore_student_id_card_view() {
             .dpt-id-cards-container {
                 display: grid !important;
                 grid-template-columns: repeat(2, 85.6mm) !important;
-                gap: 5mm 6mm !important;
+                gap: 6mm 8mm !important;
                 justify-content: center !important;
             }
 
@@ -383,7 +414,7 @@ function educore_student_id_card_view() {
 
             .id-card-box {
                 width: 85.6mm !important;
-                height: 53.98mm !important;
+                height: 54mm !important;
                 border: 1px solid #000000 !important;
                 box-shadow: none !important;
                 border-radius: 3mm !important;
@@ -394,6 +425,11 @@ function educore_student_id_card_view() {
             .id-card-header {
                 background: #006a4e !important;
                 color: #ffffff !important;
+                min-height: 10mm !important;
+            }
+
+            .id-card-header h6 {
+                font-size: 0.65rem !important;
             }
         }
     </style>
@@ -407,12 +443,12 @@ function educore_student_id_card_view() {
                 <?php esc_html_e( 'Student ID Card Generator', 'ifsedu-sms' ); ?>
             </h4>
 
-            <form method="GET" action="" class="dpt-form-grid-wrapper">
+            <form method="GET" action="" class="dpt-form-grid-wrapper" id="dpt_id_filter_form">
                 <input type="hidden" name="page" value="school_management_system">
                 <input type="hidden" name="tab" value="students">
                 <input type="hidden" name="sub" value="id_card">
 
-                <!-- Class -->
+                <!-- Class Select -->
                 <div class="dpt-input-block">
                     <label><?php esc_html_e( 'Select Class', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
                     <select name="class_name" id="dpt_class_select" required>
@@ -425,7 +461,7 @@ function educore_student_id_card_view() {
                     </select>
                 </div>
 
-                <!-- Section -->
+                <!-- Section Select -->
                 <div class="dpt-input-block">
                     <label><?php esc_html_e( 'Select Section', 'ifsedu-sms' ); ?></label>
                     <select name="section_name" id="dpt_section_select">
@@ -433,14 +469,14 @@ function educore_student_id_card_view() {
                     </select>
                 </div>
 
-                <!-- Single Student Selector -->
+                <!-- Single Student Select -->
                 <div class="dpt-input-block">
                     <label><?php esc_html_e( 'Single Student (Optional)', 'ifsedu-sms' ); ?></label>
                     <select name="student_id" id="dpt_student_select">
-                        <option value="0"><?php esc_html_e( '-- All Students --', 'ifsedu-sms' ); ?></option>
+                        <option value="0"><?php esc_html_e( '-- All Students in Section --', 'ifsedu-sms' ); ?></option>
                         <?php foreach ( $available_students as $st_item ) : ?>
                             <option value="<?php echo intval( $st_item->id ); ?>" <?php selected( $selected_student, $st_item->id ); ?>>
-                                <?php echo esc_html( 'Roll ' . $st_item->roll_no . ': ' . $st_item->full_name ); ?>
+                                <?php echo esc_html( '[Roll ' . $st_item->roll_no . '] ' . $st_item->full_name . ' (' . $st_item->student_id . ')' ); ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
@@ -456,7 +492,7 @@ function educore_student_id_card_view() {
                     </select>
                 </div>
 
-                <!-- Actions -->
+                <!-- Action Buttons -->
                 <div class="dpt-action-block">
                     <button type="submit" class="dpt-btn dpt-btn-primary">
                         <span class="dashicons dashicons-filter"></span>
@@ -492,7 +528,7 @@ function educore_student_id_card_view() {
 
                                 <div class="id-card-box">
                                     <div class="id-card-header">
-                                        <h6><?php echo esc_html( get_bloginfo('name') ); ?></h6>
+                                        <h6><?php echo esc_html( $site_name ); ?></h6>
                                         <small><?php esc_html_e( 'Student Identity Card', 'ifsedu-sms' ); ?></small>
                                     </div>
                                     
@@ -508,7 +544,7 @@ function educore_student_id_card_view() {
                                         <table class="id-card-table">
                                             <tr>
                                                 <td class="lbl"><?php esc_html_e( 'ID No:', 'ifsedu-sms' ); ?></td>
-                                                <td class="val"><?php echo esc_html( $student->student_id ); ?></td>
+                                                <td class="val" style="color: #006a4e;"><?php echo esc_html( $student->student_id ); ?></td>
                                             </tr>
                                             <tr>
                                                 <td class="lbl"><?php esc_html_e( 'Name:', 'ifsedu-sms' ); ?></td>
@@ -524,11 +560,11 @@ function educore_student_id_card_view() {
                                             </tr>
                                             <tr>
                                                 <td class="lbl"><?php esc_html_e( 'Roll No:', 'ifsedu-sms' ); ?></td>
-                                                <td class="val"><?php echo esc_html( $student->roll_no ); ?></td>
+                                                <td class="val">#<?php echo esc_html( $student->roll_no ); ?></td>
                                             </tr>
                                             <tr>
-                                                <td class="lbl"><?php esc_html_e( 'Phone:', 'ifsedu-sms' ); ?></td>
-                                                <td class="val"><?php echo esc_html( $student->guardian_phone ); ?></td>
+                                                <td class="lbl"><?php esc_html_e( 'Emergency:', 'ifsedu-sms' ); ?></td>
+                                                <td class="val"><?php echo esc_html( ! empty( $student->guardian_phone ) ? $student->guardian_phone : $student->student_phone ); ?></td>
                                             </tr>
                                         </table>
                                     </div>
@@ -547,7 +583,7 @@ function educore_student_id_card_view() {
                                     
                                     <div class="id-card-footer">
                                         <span>Blood: <span class="blood-badge"><?php echo esc_html( $student->blood_group ? $student->blood_group : 'N/A' ); ?></span></span>
-                                        <span class="sig-title"><?php esc_html_e( 'Authorized Signature', 'ifsedu-sms' ); ?></span>
+                                        <span class="sig-title"><?php esc_html_e( 'Principal Signature', 'ifsedu-sms' ); ?></span>
                                     </div>
                                 </div>
                             </div>
@@ -556,7 +592,7 @@ function educore_student_id_card_view() {
                 <?php else : ?>
                     <div style="text-align:center; padding:50px; background:#fff; border:1px dashed #cbd5e1; border-radius:12px;" class="no-print">
                         <span class="dashicons dashicons-warning" style="font-size:36px; color:#94a3b8;"></span>
-                        <p style="margin:8px 0 0 0; font-weight:700; color:#64748b;"><?php esc_html_e( 'No active student records found.', 'ifsedu-sms' ); ?></p>
+                        <p style="margin:8px 0 0 0; font-weight:700; color:#64748b;"><?php esc_html_e( 'No active student records found for the selected criteria.', 'ifsedu-sms' ); ?></p>
                     </div>
                 <?php endif; ?>
             </div>
@@ -584,9 +620,9 @@ function educore_student_id_card_view() {
 
     document.addEventListener("DOMContentLoaded", function() {
         const classSectionsMap = <?php echo wp_json_encode( $class_sections_map ); ?>;
-        const classSelect      = document.getElementById('dpt_class_select');
-        const sectionSelect    = document.getElementById('dpt_section_select');
-        const selectedSection  = <?php echo wp_json_encode( $selected_section ); ?>;
+        const classSelect       = document.getElementById('dpt_class_select');
+        const sectionSelect     = document.getElementById('dpt_section_select');
+        const selectedSection   = <?php echo wp_json_encode( $selected_section ); ?>;
 
         function updateSections() {
             const selectedClass = classSelect.value;
@@ -604,7 +640,9 @@ function educore_student_id_card_view() {
         }
 
         if (classSelect) {
-            classSelect.addEventListener('change', updateSections);
+            classSelect.addEventListener('change', function() {
+                updateSections();
+            });
             updateSections();
         }
 
@@ -615,8 +653,8 @@ function educore_student_id_card_view() {
                 JsBarcode(el, val, {
                     format: "CODE128",
                     lineColor: "#0f172a",
-                    width: 1.0,
-                    height: 20,
+                    width: 1.1,
+                    height: 22,
                     displayValue: false,
                     margin: 0
                 });
@@ -629,11 +667,11 @@ function educore_student_id_card_view() {
             if (url && typeof QRCode === 'function') {
                 new QRCode(el, {
                     text: url,
-                    width: 22,
-                    height: 22,
+                    width: 24,
+                    height: 24,
                     colorDark: "#0f172a",
                     colorLight: "#ffffff",
-                    correctLevel: QRCode.CorrectLevel.L
+                    correctLevel: QRCode.CorrectLevel.M
                 });
             }
         });

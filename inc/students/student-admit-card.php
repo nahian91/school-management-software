@@ -4,7 +4,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Enterprise Academic Admit Card Engine & Individual Print Compiler
+ * Enterprise Academic Admit Card Engine & Precision Print Compiler
  * File: student-admit-card-view.php
  */
 
@@ -149,6 +149,11 @@ function educore_student_admit_card_view() {
         $query .= " ORDER BY CAST(roll_no AS UNSIGNED) ASC, roll_no ASC";
         $students = $wpdb->get_results( $wpdb->prepare( $query, ...$params ) );
     }
+
+    $school_name = get_bloginfo( 'name' );
+    if ( empty( $school_name ) || $school_name === 'WordPress' ) {
+        $school_name = 'Green Gems International School & College';
+    }
     ?>
 
     <style>
@@ -233,6 +238,7 @@ function educore_student_admit_card_view() {
             border: 1px solid transparent;
             transition: all 0.2s ease;
             text-decoration: none;
+            white-space: nowrap;
         }
 
         .dpt-btn-primary { background: #006a4e; color: #ffffff; }
@@ -241,7 +247,22 @@ function educore_student_admit_card_view() {
         .dpt-btn-secondary { background: #0f172a; color: #ffffff; }
         .dpt-btn-secondary:hover { background: #1e293b; }
 
-        /* Card Controls Top Bar */
+        /* Admit Card Outer Architecture */
+        .dpt-admit-cards-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(490px, 1fr));
+            gap: 24px;
+        }
+
+        .admit-card-wrapper {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            padding: 20px;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+            position: relative;
+        }
+
         .admit-card-top-tools {
             display: flex;
             justify-content: space-between;
@@ -274,60 +295,52 @@ function educore_student_admit_card_view() {
             border-color: #006a4e;
         }
 
-        /* Card Container & Box */
-        .dpt-admit-cards-container {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
-            gap: 24px;
-        }
-
-        .admit-card-wrapper {
-            background: #ffffff;
-            border: 1px solid #e2e8f0;
-            border-radius: 14px;
-            padding: 20px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
-            position: relative;
-        }
-
+        /* Professional Admit Design */
         .admit-card-box {
-            border: 2px solid #0f172a;
-            border-radius: 8px;
-            padding: 18px;
+            border: 2px solid #006a4e;
+            border-radius: 10px;
+            padding: 16px 20px;
             background: #ffffff;
+            position: relative;
         }
 
         .admit-header {
             text-align: center;
-            border-bottom: 2px solid #006a4e;
-            padding-bottom: 10px;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 12px;
             margin-bottom: 14px;
         }
 
-        .admit-header h3 {
-            font-size: 19px;
-            font-weight: 800;
-            color: #0f172a;
-            margin: 0 0 2px 0;
+        .admit-school-title {
+            font-size: 18px;
+            font-weight: 900;
+            color: #006a4e;
+            margin: 0;
             text-transform: uppercase;
+            letter-spacing: 0.3px;
+            line-height: 1.2;
         }
 
-        .admit-header p {
-            font-size: 12px;
+        .admit-school-sub {
+            font-size: 11px;
             color: #64748b;
-            margin: 0 0 8px 0;
+            margin: 3px 0 10px 0;
             font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         .admit-title-badge {
-            background: #006a4e;
+            background: linear-gradient(135deg, #006a4e 0%, #004d38 100%);
             color: #ffffff;
-            font-size: 10.5px;
+            font-size: 11px;
             font-weight: 800;
-            padding: 4px 14px;
+            padding: 4px 18px;
             border-radius: 20px;
             display: inline-block;
             text-transform: uppercase;
+            letter-spacing: 0.8px;
+            box-shadow: 0 2px 6px rgba(0, 106, 78, 0.25);
         }
 
         .admit-body-layout {
@@ -339,33 +352,55 @@ function educore_student_admit_card_view() {
 
         .admit-details-column { flex: 1; }
 
-        .admit-table { width: 100%; border-collapse: collapse; }
-        .admit-table td { padding: 5px 2px; font-size: 12.5px; color: #334155; border: none !important; }
-        .admit-table td.label-col { font-weight: 700; color: #64748b; width: 34%; }
-        .admit-table td.value-col { font-weight: 700; color: #0f172a; }
+        .admit-table { 
+            width: 100%; 
+            border-collapse: collapse; 
+        }
+
+        .admit-table td { 
+            padding: 4px 0; 
+            font-size: 12.5px; 
+            color: #334155; 
+            border: none !important; 
+        }
+
+        .admit-table td.label-col { 
+            font-weight: 700; 
+            color: #64748b; 
+            width: 32%; 
+            text-transform: uppercase;
+            font-size: 11px;
+        }
+
+        .admit-table td.value-col { 
+            font-weight: 800; 
+            color: #0f172a; 
+        }
 
         .student-photo-frame {
-            width: 95px;
-            height: 115px;
-            border: 2px dashed #cbd5e1;
-            border-radius: 8px;
+            width: 90px;
+            height: 110px;
+            border: 1.5px solid #006a4e;
+            border-radius: 6px;
             background: #f8fafc;
             overflow: hidden;
             display: flex;
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.06);
         }
 
         .student-photo-frame img { width: 100%; height: 100%; object-fit: cover; }
-        .student-photo-frame span { font-size: 9.5px; font-weight: 800; color: #94a3b8; text-align: center; }
+        .student-photo-frame span { font-size: 9px; font-weight: 800; color: #94a3b8; text-align: center; }
 
         .admit-instructions {
             background: #f8fafc;
             border: 1px solid #e2e8f0;
+            border-left: 3px solid #006a4e;
             border-radius: 6px;
-            padding: 8px 10px;
-            margin-top: 10px;
+            padding: 8px 12px;
+            margin-top: 8px;
             font-size: 10.5px;
             color: #475569;
         }
@@ -374,24 +409,28 @@ function educore_student_admit_card_view() {
             display: flex;
             justify-content: space-between;
             align-items: flex-end;
-            margin-top: 28px;
+            margin-top: 26px;
+            padding: 0 10px;
         }
 
         .signature-line {
-            width: 130px;
-            border-top: 1px dashed #0f172a;
+            width: 140px;
+            border-top: 1px dashed #334155;
             padding-top: 4px;
             font-size: 10px;
             font-weight: 800;
             color: #334155;
             text-align: center;
             text-transform: uppercase;
+            letter-spacing: 0.3px;
         }
 
         /* ==========================================================================
-           2. PRINT DIRECTIVES (BULK VS SINGLE PRINT ISOLATION)
+           PRINT STYLES
            ========================================================================== */
         @media print {
+            @page { size: A4 portrait; margin: 10mm 8mm; }
+
             .no-print, #adminmenumain, #wpadminbar, #wpfooter, .admit-card-top-tools { display: none !important; }
             body { background: #ffffff !important; margin: 0 !important; padding: 0 !important; }
 
@@ -402,7 +441,9 @@ function educore_student_admit_card_view() {
                 width: 100%;
             }
 
-            .dpt-admit-cards-container { display: block !important; }
+            .dpt-admit-cards-container { 
+                display: block !important; 
+            }
 
             .admit-card-wrapper {
                 page-break-inside: avoid;
@@ -410,7 +451,7 @@ function educore_student_admit_card_view() {
                 box-shadow: none !important;
                 border: none !important;
                 padding: 0 !important;
-                margin-bottom: 20px !important;
+                margin-bottom: 24px !important;
             }
 
             .admit-card-box {
@@ -418,14 +459,15 @@ function educore_student_admit_card_view() {
                 background: #ffffff !important;
             }
 
+            .admit-school-title { color: #000000 !important; }
+
             .admit-title-badge {
-                background-color: #006a4e !important;
+                background: #000000 !important;
                 color: #ffffff !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
             }
 
-            /* Single Card Print Isolation Class */
             body.printing-single-card .admit-card-wrapper {
                 display: none !important;
             }
@@ -491,10 +533,10 @@ function educore_student_admit_card_view() {
                 <div class="dpt-input-block">
                     <label><?php esc_html_e( 'Single Student (Optional)', 'ifsedu-sms' ); ?></label>
                     <select name="student_id" id="educore_admit_student_select">
-                        <option value="0"><?php esc_html_e( '-- All Students --', 'ifsedu-sms' ); ?></option>
+                        <option value="0"><?php esc_html_e( '-- All Students in Section --', 'ifsedu-sms' ); ?></option>
                         <?php foreach ( $available_students as $st_item ) : ?>
                             <option value="<?php echo intval( $st_item->id ); ?>" <?php selected( $selected_student, $st_item->id ); ?>>
-                                <?php echo esc_html( 'Roll ' . $st_item->roll_no . ': ' . $st_item->full_name ); ?>
+                                <?php echo esc_html( '[Roll ' . $st_item->roll_no . '] ' . $st_item->full_name . ' (' . $st_item->student_id . ')' ); ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
@@ -530,10 +572,10 @@ function educore_student_admit_card_view() {
                         ?>
                             <div class="admit-card-wrapper" id="<?php echo esc_attr( $card_id ); ?>">
                                 
-                                <!-- Card Header Tools (Individual Print) -->
+                                <!-- Individual Print Action -->
                                 <div class="admit-card-top-tools no-print">
-                                    <span style="font-size:11px; font-weight:700; color:#64748b;">
-                                        Roll: #<?php echo esc_html( $student->roll_no ); ?>
+                                    <span style="font-size:11.5px; font-weight:800; color:#0f172a;">
+                                        Roll: #<?php echo esc_html( $student->roll_no ); ?> &mdash; <?php echo esc_html( $student->full_name ); ?>
                                     </span>
                                     <button type="button" onclick="educorePrintSingleCard('<?php echo esc_js( $card_id ); ?>');" class="single-print-btn">
                                         <span class="dashicons dashicons-printer" style="font-size:13px; width:13px; height:13px;"></span>
@@ -544,8 +586,8 @@ function educore_student_admit_card_view() {
                                 <div class="admit-card-box">
                                     <!-- Header -->
                                     <div class="admit-header">
-                                        <h3><?php echo esc_html( get_bloginfo( 'name' ) ); ?></h3>
-                                        <p><?php echo esc_html( get_bloginfo( 'description' ) ); ?></p>
+                                        <h3 class="admit-school-title"><?php echo esc_html( $school_name ); ?></h3>
+                                        <div class="admit-school-sub"><?php echo esc_html( get_bloginfo( 'description' ) ); ?></div>
                                         <div class="admit-title-badge">
                                             <?php printf( esc_html__( 'ADMIT CARD : %1$s &mdash; %2$s', 'ifsedu-sms' ), esc_html( $exam_title ), esc_html( $exam_year ) ); ?>
                                         </div>
@@ -557,10 +599,10 @@ function educore_student_admit_card_view() {
                                             <table class="admit-table">
                                                 <tr>
                                                     <td class="label-col"><?php esc_html_e( 'Student ID:', 'ifsedu-sms' ); ?></td>
-                                                    <td class="value-col"><code><?php echo esc_html( $student->student_id ); ?></code></td>
+                                                    <td class="value-col" style="color: #006a4e;"><?php echo esc_html( $student->student_id ); ?></td>
                                                 </tr>
                                                 <tr>
-                                                    <td class="label-col"><?php esc_html_e( 'Student Name:', 'ifsedu-sms' ); ?></td>
+                                                    <td class="label-col"><?php esc_html_e( 'Candidate Name:', 'ifsedu-sms' ); ?></td>
                                                     <td class="value-col" style="text-transform: uppercase;"><?php echo esc_html( $student->full_name ); ?></td>
                                                 </tr>
                                                 <?php if ( ! empty( $student->name_bn ) ) : ?>
@@ -570,10 +612,10 @@ function educore_student_admit_card_view() {
                                                 </tr>
                                                 <?php endif; ?>
                                                 <tr>
-                                                    <td class="label-col"><?php esc_html_e( 'Class & Sec:', 'ifsedu-sms' ); ?></td>
+                                                    <td class="label-col"><?php esc_html_e( 'Class & Section:', 'ifsedu-sms' ); ?></td>
                                                     <td class="value-col">
                                                         <?php echo esc_html( $student->class_name ); ?>
-                                                        <?php echo ! empty( $student->section_name ) ? ' &mdash; Sec: ' . esc_html( $student->section_name ) : ''; ?>
+                                                        <?php echo ! empty( $student->section_name ) ? ' (Sec: ' . esc_html( $student->section_name ) . ')' : ''; ?>
                                                     </td>
                                                 </tr>
                                                 <tr>
@@ -585,9 +627,9 @@ function educore_student_admit_card_view() {
                                                     </td>
                                                 </tr>
                                                 <tr>
-                                                    <td class="label-col"><?php esc_html_e( 'Guardian:', 'ifsedu-sms' ); ?></td>
-                                                    <td class="value-col" style="color: #475569;">
-                                                        <?php echo esc_html( $student->guardian_name ? $student->guardian_name : $student->father_name ); ?>
+                                                    <td class="label-col"><?php esc_html_e( 'Guardian Phone:', 'ifsedu-sms' ); ?></td>
+                                                    <td class="value-col" style="color: #334155;">
+                                                        <?php echo esc_html( ! empty( $student->guardian_phone ) ? $student->guardian_phone : ( ! empty( $student->father_phone ) ? $student->father_phone : 'N/A' ) ); ?>
                                                     </td>
                                                 </tr>
                                             </table>
@@ -606,17 +648,17 @@ function educore_student_admit_card_view() {
 
                                     <!-- Candidate Instructions -->
                                     <div class="admit-instructions">
-                                        <strong><?php esc_html_e( 'Examinee Instructions:', 'ifsedu-sms' ); ?></strong>
-                                        <ol style="margin: 3px 0 0 14px; padding: 0;">
-                                            <li><?php esc_html_e( 'Examinees must present this admit card in the exam hall daily.', 'ifsedu-sms' ); ?></li>
-                                            <li><?php esc_html_e( 'Mobile phones or electronic devices are strictly prohibited.', 'ifsedu-sms' ); ?></li>
+                                        <strong><?php esc_html_e( 'Important Instructions:', 'ifsedu-sms' ); ?></strong>
+                                        <ol style="margin: 2px 0 0 14px; padding: 0;">
+                                            <li><?php esc_html_e( 'Candidates must carry this admit card to the examination hall daily.', 'ifsedu-sms' ); ?></li>
+                                            <li><?php esc_html_e( 'Any unauthorized materials or mobile phones are strictly prohibited.', 'ifsedu-sms' ); ?></li>
                                         </ol>
                                     </div>
 
                                     <!-- Signatures -->
                                     <div class="signature-container">
                                         <div class="signature-line"><?php esc_html_e( 'Controller of Exams', 'ifsedu-sms' ); ?></div>
-                                        <div class="signature-line"><?php esc_html_e( 'Headmaster / Principal', 'ifsedu-sms' ); ?></div>
+                                        <div class="signature-line"><?php esc_html_e( 'Principal / Headmaster', 'ifsedu-sms' ); ?></div>
                                     </div>
 
                                 </div>
@@ -638,14 +680,14 @@ function educore_student_admit_card_view() {
     jQuery(document).ready(function($) {
         var nonce = '<?php echo esc_js( wp_create_nonce( "educore_admit_nonce" ) ); ?>';
 
-        // Dynamic Class -> Section Loader
+        // Dynamic Class -> Section & Student Loader
         $('#educore_admit_class_select').on('change', function() {
             var selectedClass   = $(this).val();
             var $sectionSelect = $('#educore_admit_section_select');
             var $studentSelect = $('#educore_admit_student_select');
 
             $sectionSelect.html('<option value=""><?php echo esc_js( __( '-- Loading Sections... --', 'ifsedu-sms' ) ); ?></option>');
-            $studentSelect.html('<option value="0"><?php echo esc_js( __( '-- All Students --', 'ifsedu-sms' ) ); ?></option>');
+            $studentSelect.html('<option value="0"><?php echo esc_js( __( '-- All Students in Section --', 'ifsedu-sms' ) ); ?></option>');
 
             if (!selectedClass) {
                 $sectionSelect.html('<option value=""><?php echo esc_js( __( '-- All Sections --', 'ifsedu-sms' ) ); ?></option>');
@@ -697,20 +739,20 @@ function educore_student_admit_card_view() {
                 },
                 success: function(response) {
                     if (response.success && response.data.length > 0) {
-                        var options = '<option value="0"><?php echo esc_js( __( '-- All Students --', 'ifsedu-sms' ) ); ?></option>';
+                        var options = '<option value="0"><?php echo esc_js( __( '-- All Students in Section --', 'ifsedu-sms' ) ); ?></option>';
                         $.each(response.data, function(i, st) {
-                            options += '<option value="' + st.id + '">Roll ' + st.roll_no + ': ' + st.full_name + '</option>';
+                            options += '<option value="' + st.id + '">[Roll ' + st.roll_no + '] ' + st.full_name + ' (' + st.student_id + ')</option>';
                         });
                         $studentSelect.html(options);
                     } else {
-                        $studentSelect.html('<option value="0"><?php echo esc_js( __( '-- All Students --', 'ifsedu-sms' ) ); ?></option>');
+                        $studentSelect.html('<option value="0"><?php echo esc_js( __( '-- All Students in Section --', 'ifsedu-sms' ) ); ?></option>');
                     }
                 }
             });
         }
     });
 
-    // Individual Single Card Print Isolation JS Trigger
+    // Individual Single Card Print Isolation Trigger
     function educorePrintSingleCard(cardId) {
         const targetCard = document.getElementById(cardId);
         if (!targetCard) return;

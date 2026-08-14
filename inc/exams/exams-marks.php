@@ -40,23 +40,22 @@ function educore_exams_marks_view() {
     }
 
     // Dynamic Base URL preservation
-    $current_uri = remove_query_arg( array( 'status' ), $_SERVER['REQUEST_URI'] );
+    $current_uri = remove_query_arg( array( 'status', 'msg' ), $_SERVER['REQUEST_URI'] );
     $base_url    = esc_url_raw( $current_uri );
 
     $notice_message = '';
 
-    // 1. Handle Marks Submission (Single-Hit Processing Matrix)
+    // 1. Handle Marks Submission (Single-Hit Batch Processing Matrix)
     if ( isset( $_POST['save_marks'] ) && isset( $_POST['educore_marks_nonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['educore_marks_nonce'] ) ), 'save_marks_action' ) ) {
         $exam_id      = isset( $_POST['exam_id'] ) ? intval( $_POST['exam_id'] ) : 0;
         $subject_name = isset( $_POST['subject_name'] ) ? sanitize_text_field( wp_unslash( $_POST['subject_name'] ) ) : '';
-        $total_marks  = isset( $_POST['total_marks'] ) ? max( 0, floatval( $_POST['total_marks'] ) ) : 0;
+        $total_marks  = isset( $_POST['total_marks'] ) ? max( 0, floatval( $_POST['total_marks'] ) ) : 100;
         $marks_data   = isset( $_POST['marks'] ) ? (array) wp_unslash( $_POST['marks'] ) : array();
         
         $user_id = get_current_user_id();
         $saved   = 0;
 
         if ( ! empty( $marks_data ) && $total_marks > 0 ) {
-            // Bulk pre-fetching existing results for this batch transaction
             $target_student_ids = array_map( 'intval', array_keys( $marks_data ) );
             $ids_placeholder    = implode( ',', array_fill( 0, count( $target_student_ids ), '%d' ) );
             
@@ -67,11 +66,11 @@ function educore_exams_marks_view() {
             $existing_records = $wpdb->get_results( $prep_query, OBJECT_K );
 
             foreach ( $marks_data as $student_id => $obtained ) {
-                if ( $obtained === '' ) continue; // Skip empty inputs
+                if ( $obtained === '' || $obtained === null ) continue; // Skip empty fields
                 
                 $obtained = floatval( $obtained );
                 
-                // Server-Side Constraint: Cap at full marks
+                // Cap at full marks
                 if ( $obtained > $total_marks ) {
                     $obtained = $total_marks;
                 }
@@ -107,11 +106,11 @@ function educore_exams_marks_view() {
         }
 
         if ( class_exists( 'IFSEdu_School_Management_System' ) ) {
-            IFSEdu_School_Management_System::log_activity( "Updated marks for subject {$subject_name} across {$saved} students." );
+            IFSEdu_School_Management_System::log_activity( sprintf( "Saved marks evaluation for subject '%s' across %d students.", $subject_name, $saved ) );
         }
 
         $notice_message = sprintf(
-            esc_html__( 'Marks configuration parsed and saved successfully for %d students.', 'ifsedu-sms' ),
+            esc_html__( 'Marks configuration parsed and updated successfully for %d student(s).', 'ifsedu-sms' ),
             $saved
         );
     }
@@ -122,21 +121,30 @@ function educore_exams_marks_view() {
     $filter_section = isset( $_GET['section_name'] ) ? sanitize_text_field( wp_unslash( $_GET['section_name'] ) ) : '';
     $subject_name   = isset( $_GET['subject_name'] ) ? sanitize_text_field( wp_unslash( $_GET['subject_name'] ) ) : '';
 
-    // Fetch Dynamic Dropdowns Structure
-    $exams = $wpdb->get_results( "SELECT id, exam_name FROM {$table_exams} ORDER BY id DESC" );
-    
-    // Fetch Unique Classes with Natural Numeric Sorting (1, 2, 3... 11)
-    $raw_classes = $wpdb->get_results( "SELECT DISTINCT class_name FROM {$table_units} WHERE class_name != '' ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC" );
-    if ( ! empty( $raw_classes ) ) {
-        usort( $raw_classes, function( $a, $b ) {
-            return strnatcasecmp( $a->class_name, $b->class_name );
-        });
+    // Fetch Exams with their associated Class Details
+    $exams = $wpdb->get_results( "SELECT id, exam_name, class_name FROM {$table_exams} ORDER BY id DESC" );
+
+    // Build Exam-to-Classes Mapping
+    $exam_class_map = array();
+    foreach ( $exams as $ex_item ) {
+        $exam_class_map[ $ex_item->id ] = array();
+        if ( ! empty( $ex_item->class_name ) ) {
+            // Support comma-separated or single class names stored in exams
+            $classes_array = array_map( 'trim', explode( ',', $ex_item->class_name ) );
+            $exam_class_map[ $ex_item->id ] = array_filter( $classes_array );
+        }
+    }
+
+    // Fallback: If an exam has no specific class set, all classes will be available
+    $all_classes_raw = $wpdb->get_col( "SELECT DISTINCT class_name FROM {$table_units} WHERE class_name != '' ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC" );
+    if ( ! empty( $all_classes_raw ) ) {
+        usort( $all_classes_raw, 'strnatcasecmp' );
     }
 
     // All academic units for dynamic section filtering
     $all_units = $wpdb->get_results( "SELECT id, class_name, section_name FROM {$table_units} WHERE section_name != '' ORDER BY section_name ASC" );
 
-    // Fetch subjects with Unit Class ID & Class Name mapping
+    // Fetch subjects mapping
     $all_subjects = $wpdb->get_results( "
         SELECT s.id, s.subject_name, s.class_id, u.class_name, u.section_name 
         FROM {$table_subjects} s 
@@ -148,22 +156,21 @@ function educore_exams_marks_view() {
     ?>
 
     <style>
-        /* ==========================================================================
-           1. CORE BENTO UI MATRIX LAYER
-           ========================================================================== */
         .dpt-marks-root {
-            margin: 20px 20px 24px 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 20px 20px 30px 0;
+            font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            color: #0f172a;
         }
 
         .afdp-header-block {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
+            margin-bottom: 24px;
             flex-wrap: wrap;
             gap: 16px;
         }
+
         .afdp-header-block h2 {
             font-size: 22px;
             font-weight: 800;
@@ -172,13 +179,30 @@ function educore_exams_marks_view() {
             display: flex;
             align-items: center;
             gap: 10px;
-            letter-spacing: -0.5px;
         }
-        .afdp-header-block h2 .dashicons {
-            font-size: 26px;
-            width: 26px;
-            height: 26px;
-            color: #006a4e;
+
+        .dpt-btn-secondary {
+            height: 38px;
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            color: #475569;
+            font-weight: 700;
+            font-size: 13px;
+            border-radius: 8px;
+            padding: 0 16px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+
+        .dpt-btn-secondary:hover {
+            background: #f8fafc;
+            color: #0f172a;
+            border-color: #94a3b8;
         }
 
         .afdp-status-banner {
@@ -187,216 +211,253 @@ function educore_exams_marks_view() {
             border-radius: 10px;
             padding: 14px 18px;
             color: #065f46;
-            font-weight: 600;
+            font-weight: 700;
             font-size: 14px;
             margin-bottom: 24px;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.02);
         }
 
         .dpt-bento-card {
             background: #ffffff;
             border: 1px solid #e2e8f0;
-            border-radius: 14px;
-            padding: 24px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
+            border-radius: 16px;
+            padding: 24px 28px;
+            box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.03);
             margin-bottom: 24px;
         }
 
-        .afdp-card-title {
-            font-size: 16px;
-            font-weight: 800;
-            color: #0f172a;
-            margin: 0 0 20px 0;
-            padding-bottom: 12px;
-            border-bottom: 1px solid #e2e8f0;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        /* Filter Console Grid Layout for 5 Columns */
         .dpt-filter-grid {
             display: grid;
-            grid-template-columns: repeat(12, 1fr);
-            gap: 14px;
-            align-items: end;
+            grid-template-columns: 2fr 1.5fr 1.5fr 2fr 1.2fr;
+            gap: 16px;
+            align-items: flex-end;
         }
-        .dpt-col-3 { grid-column: span 3; }
-        .dpt-col-2 { grid-column: span 2; }
 
         @media (max-width: 992px) {
-            .dpt-col-3, .dpt-col-2 { grid-column: span 12; }
+            .dpt-filter-grid { grid-template-columns: 1fr; }
         }
 
-        /* Form Controls Framework */
         .dpt-form-group {
             display: flex;
             flex-direction: column;
             gap: 6px;
         }
+
         .dpt-form-label {
-            font-size: 12.5px;
+            font-size: 12px;
             font-weight: 700;
             color: #475569;
-            margin: 0;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
         }
-        .dpt-input-field, .dpt-select-field {
-            height: 40px;
+
+        .dpt-select-field, .dpt-input-field {
+            height: 42px;
             border: 1px solid #cbd5e1;
             border-radius: 8px;
-            padding: 0 12px;
+            padding: 0 14px;
             font-size: 13.5px;
             color: #0f172a;
             background-color: #f8fafc;
             width: 100%;
-            box-shadow: none;
-            transition: all 0.2s;
+            transition: all 0.2s ease;
             box-sizing: border-box;
         }
-        .dpt-input-field:focus, .dpt-select-field:focus {
+
+        .dpt-select-field:focus, .dpt-input-field:focus {
             border-color: #006a4e;
             background-color: #ffffff;
-            box-shadow: 0 0 0 3px rgba(0, 106, 78, 0.1);
+            box-shadow: 0 0 0 3px rgba(0, 106, 78, 0.12);
             outline: none;
         }
 
         .dpt-btn-submit-trigger {
-            height: 40px;
+            height: 42px;
             background: #006a4e;
-            border: 1px solid transparent;
             color: #ffffff;
             font-weight: 700;
-            font-size: 13.5px;
+            font-size: 14px;
             border-radius: 8px;
             padding: 0 20px;
             cursor: pointer;
+            border: none;
             display: inline-flex;
             align-items: center;
             justify-content: center;
             gap: 6px;
-            transition: all 0.2s;
-            text-decoration: none;
-            box-shadow: 0 4px 12px rgba(0, 106, 78, 0.15);
+            transition: all 0.2s ease;
             width: 100%;
+            box-shadow: 0 4px 12px rgba(0, 106, 78, 0.2);
         }
+
         .dpt-btn-submit-trigger:hover {
             background: #00523c;
-            color: #ffffff;
         }
 
-        .dpt-btn-secondary {
-            height: 36px;
-            background: #ffffff;
-            border: 1px solid #cbd5e1;
-            color: #475569;
-            font-weight: 700;
-            font-size: 13px;
-            border-radius: 8px;
-            padding: 0 14px;
-            cursor: pointer;
-            display: inline-flex;
+        /* Grade Scale Helper Guide */
+        .dpt-grade-legend-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
             align-items: center;
-            justify-content: center;
-            gap: 6px;
-            transition: all 0.2s;
-            text-decoration: none;
-        }
-        .dpt-btn-secondary:hover {
             background: #f8fafc;
-            color: #0f172a;
-            border-color: #94a3b8;
+            border: 1px dashed #cbd5e1;
+            border-radius: 10px;
+            padding: 10px 16px;
+            margin-bottom: 20px;
+            font-size: 12px;
         }
 
-        /* Matrix Table UI System */
+        .dpt-legend-pill {
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 11px;
+            display: inline-flex;
+            gap: 4px;
+            align-items: center;
+        }
+
+        /* Analytics Quick Header */
+        .dpt-analytics-strip {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 14px;
+            margin-bottom: 20px;
+        }
+
+        .dpt-strip-card {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 12px 16px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .dpt-strip-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: #64748b;
+            text-transform: uppercase;
+        }
+
+        .dpt-strip-val {
+            font-size: 20px;
+            font-weight: 800;
+            color: #0f172a;
+            margin-top: 2px;
+        }
+
+        /* Matrix Table Styling */
         .dpt-table-responsive {
             width: 100%;
             overflow-x: auto;
             border: 1px solid #e2e8f0;
-            border-radius: 10px;
+            border-radius: 12px;
         }
+
         .dpt-marks-table {
             width: 100%;
             border-collapse: separate;
             border-spacing: 0;
             text-align: left;
         }
+
         .dpt-marks-table th {
             background: #f8fafc;
             color: #475569;
             font-weight: 700;
-            font-size: 12.5px;
-            padding: 12px 16px;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            padding: 14px 16px;
             border-bottom: 1px solid #e2e8f0;
         }
+
         .dpt-marks-table td {
             padding: 12px 16px;
-            border-bottom: 1px solid #e2e8f0;
+            border-bottom: 1px solid #f1f5f9;
             font-size: 13.5px;
             color: #334155;
-            background: #ffffff;
+            vertical-align: middle;
         }
-        .dpt-marks-table tr:last-child td {
-            border-bottom: none;
-        }
+
         .dpt-marks-table tr:hover td {
             background: #f8fafc;
         }
 
-        /* Badges & Dynamic State Styling */
-        .afdp-badge {
-            font-size: 11.5px;
-            font-weight: 700;
-            padding: 4px 10px;
-            border-radius: 20px;
-            display: inline-block;
-        }
-        .afdp-badge-neutral { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
-        .afdp-badge-success { background: #e6f4ea; color: #137333; border: 1px solid #ceead6; }
-        .afdp-badge-danger  { background: #fce8e6; color: #c5221f; border: 1px solid #fad2cf; }
-        .afdp-badge-primary { background: #e8f0fe; color: #1a73e8; border: 1px solid #d2e3fc; }
-
         .afdp-mark-input {
             width: 110px;
+            height: 38px;
             text-align: center;
             font-weight: 800;
-            font-size: 14px;
+            font-size: 15px;
+            color: #0f172a;
+            border-radius: 6px;
             margin: 0 auto;
+            border: 1px solid #cbd5e1;
+            background: #ffffff;
+            transition: all 0.2s ease;
         }
+
+        .afdp-mark-input:focus {
+            border-color: #006a4e !important;
+            box-shadow: 0 0 0 3px rgba(0, 106, 78, 0.15) !important;
+            outline: none;
+            background: #ffffff;
+        }
+
         .afdp-mark-input.error {
             border-color: #ef4444 !important;
-            color: #ef4444 !important;
+            color: #dc2626 !important;
             background-color: #fef2f2 !important;
         }
+
+        .afdp-badge {
+            font-size: 12px;
+            font-weight: 800;
+            padding: 4px 12px;
+            border-radius: 20px;
+            display: inline-block;
+            text-align: center;
+            min-width: 32px;
+        }
+
+        .afdp-badge-success { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; }
+        .afdp-badge-primary { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
+        .afdp-badge-danger  { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+        .afdp-badge-neutral { background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; }
     </style>
 
     <div class="dpt-marks-root">
         
-        <!-- Navigation Header Block -->
+        <!-- Navigation Header -->
         <div class="afdp-header-block">
             <h2>
-                <span class="dashicons dashicons-edit"></span>
-                <?php esc_html_e( 'Subject-wise Marks Entry Matrix', 'ifsedu-sms' ); ?>
+                <span class="dashicons dashicons-awards" style="color:#006a4e;"></span>
+                <?php esc_html_e( 'Examination Marks Evaluation & Entry Matrix', 'ifsedu-sms' ); ?>
             </h2>
             <a href="<?php echo esc_url( $back_url ); ?>" class="dpt-btn-secondary">
-                &larr; <?php esc_html_e( 'Back to Exams List', 'ifsedu-sms' ); ?>
+                <span class="dashicons dashicons-arrow-left-alt" style="font-size:14px; width:14px; height:14px;"></span>
+                <?php esc_html_e( 'Back to Exams Directory', 'ifsedu-sms' ); ?>
             </a>
         </div>
 
-        <!-- System Notification Banner -->
         <?php if ( ! empty( $notice_message ) ) : ?>
             <div class="afdp-status-banner">
-                <span class="dashicons dashicons-yes-alt"></span>
-                <?php echo esc_html( $notice_message ); ?>
+                <span class="dashicons dashicons-yes-alt" style="font-size:20px; width:20px; height:20px; color:#006a4e;"></span>
+                <span><?php echo esc_html( $notice_message ); ?></span>
             </div>
         <?php endif; ?>
 
-        <!-- Filter Console Bento Card -->
+        <!-- Selection Console Bento Box -->
         <div class="dpt-bento-card">
-            <form method="GET" action="<?php echo esc_url( $base_url ); ?>">
+            <form method="GET" action="<?php echo esc_url( $base_url ); ?>" id="educoreMarksFilterForm">
                 <?php 
-                // Preserve URL Query parameters dynamically
                 $parsed_url = wp_parse_url( $base_url );
                 if ( isset( $parsed_url['query'] ) ) {
                     parse_str( $parsed_url['query'], $query_params );
@@ -409,10 +470,10 @@ function educore_exams_marks_view() {
                 ?>
                 
                 <div class="dpt-filter-grid">
-                    <!-- Exam Selection -->
-                    <div class="dpt-form-group dpt-col-3">
-                        <label class="dpt-form-label"><?php esc_html_e( 'Select Examination', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
-                        <select name="exam_id" class="dpt-select-field" required>
+                    <!-- 1. Exam Selection -->
+                    <div class="dpt-form-group">
+                        <label class="dpt-form-label"><?php esc_html_e( '1. Select Exam', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
+                        <select name="exam_id" id="educore_marks_exam_select" class="dpt-select-field" required>
                             <option value=""><?php esc_html_e( '-- Choose Exam --', 'ifsedu-sms' ); ?></option>
                             <?php foreach ( $exams as $ex ) : ?>
                                 <option value="<?php echo intval( $ex->id ); ?>" <?php selected( $filter_exam, $ex->id ); ?>>
@@ -422,52 +483,45 @@ function educore_exams_marks_view() {
                         </select>
                     </div>
 
-                    <!-- Class Selection -->
-                    <div class="dpt-form-group dpt-col-2">
-                        <label class="dpt-form-label"><?php esc_html_e( 'Select Class', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
+                    <!-- 2. Class Selection (Filtered strictly by chosen Exam) -->
+                    <div class="dpt-form-group">
+                        <label class="dpt-form-label"><?php esc_html_e( '2. Exam Class', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
                         <select name="class_name" id="educore_marks_class_select" class="dpt-select-field" required>
-                            <option value=""><?php esc_html_e( '-- Class --', 'ifsedu-sms' ); ?></option>
-                            <?php foreach ( $raw_classes as $cls_obj ) : ?>
-                                <option value="<?php echo esc_attr( $cls_obj->class_name ); ?>" <?php selected( $filter_class, $cls_obj->class_name ); ?>>
-                                    <?php echo esc_html( $cls_obj->class_name ); ?>
-                                </option>
-                            <?php endforeach; ?>
+                            <option value=""><?php esc_html_e( '-- Select Exam First --', 'ifsedu-sms' ); ?></option>
                         </select>
                     </div>
 
-                    <!-- Section Selection (Dynamic) -->
-                    <div class="dpt-form-group dpt-col-2">
-                        <label class="dpt-form-label"><?php esc_html_e( 'Select Section', 'ifsedu-sms' ); ?></label>
+                    <!-- 3. Section Selection -->
+                    <div class="dpt-form-group">
+                        <label class="dpt-form-label"><?php esc_html_e( '3. Section', 'ifsedu-sms' ); ?></label>
                         <select name="section_name" id="educore_marks_section_select" class="dpt-select-field">
                             <option value=""><?php esc_html_e( '-- All Sections --', 'ifsedu-sms' ); ?></option>
-                            <!-- Dynamically populated via JS -->
                         </select>
                     </div>
 
-                    <!-- Subject Selection (Dynamic) -->
-                    <div class="dpt-form-group dpt-col-3">
-                        <label class="dpt-form-label"><?php esc_html_e( 'Subject Name', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
+                    <!-- 4. Subject Selection -->
+                    <div class="dpt-form-group">
+                        <label class="dpt-form-label"><?php esc_html_e( '4. Subject', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
                         <select name="subject_name" id="educore_marks_subject_select" class="dpt-select-field" required>
                             <option value=""><?php esc_html_e( '-- Select Subject --', 'ifsedu-sms' ); ?></option>
-                            <!-- Dynamically populated via JS -->
                         </select>
                     </div>
 
-                    <!-- Trigger Button -->
-                    <div class="dpt-col-2">
+                    <!-- 5. Submit Button -->
+                    <div>
                         <button type="submit" class="dpt-btn-submit-trigger">
-                            <?php esc_html_e( 'Load Roster', 'ifsedu-sms' ); ?>
+                            <span class="dashicons dashicons-filter"></span>
+                            <?php esc_html_e( 'Load Matrix', 'ifsedu-sms' ); ?>
                         </button>
                     </div>
                 </div>
             </form>
         </div>
 
-        <!-- Marks Entry Table Module Area -->
+        <!-- Marks Matrix Evaluation Roster Area -->
         <?php
         if ( $filter_exam > 0 && ! empty( $filter_class ) && ! empty( $subject_name ) ) {
             
-            // Build dynamic query depending on whether a specific section is selected
             $sql = "SELECT id, student_id, full_name, roll_no, section_name FROM {$table_students} WHERE status = 'Active' AND class_name = %s";
             $params = array( $filter_class );
 
@@ -477,11 +531,9 @@ function educore_exams_marks_view() {
             }
 
             $sql .= " ORDER BY CAST(roll_no AS UNSIGNED) ASC, roll_no ASC";
-
             $students = $wpdb->get_results( $wpdb->prepare( $sql, ...$params ) );
             
-            if ( $students ) {
-                // Pre-fetch stored results for this roster
+            if ( ! empty( $students ) ) {
                 $student_ids  = wp_list_pluck( $students, 'id' );
                 $placeholders = implode( ',', array_fill( 0, count( $student_ids ), '%d' ) );
                 
@@ -490,38 +542,94 @@ function educore_exams_marks_view() {
                     array_merge( array( $filter_exam, $subject_name ), $student_ids )
                 );
                 $loaded_results_states = $wpdb->get_results( $cached_results_query, OBJECT_K );
+                
+                // Get default total marks
+                $default_total = 100;
+                if ( ! empty( $loaded_results_states ) ) {
+                    $first_row = reset( $loaded_results_states );
+                    if ( ! empty( $first_row->total_marks ) ) {
+                        $default_total = floatval( $first_row->total_marks );
+                    }
+                }
                 ?>
+
+                <!-- Grading Scale Reference Bar -->
+                <div class="dpt-grade-legend-bar">
+                    <strong style="color:#0f172a; margin-right:4px;"><?php esc_html_e( 'Grading Scale:', 'ifsedu-sms' ); ?></strong>
+                    <span class="dpt-legend-pill" style="background:#ecfdf5; color:#059669; border:1px solid #a7f3d0;">80%+ [A+ | 5.0]</span>
+                    <span class="dpt-legend-pill" style="background:#eff6ff; color:#2563eb; border:1px solid #bfdbfe;">70-79% [A | 4.0]</span>
+                    <span class="dpt-legend-pill" style="background:#eff6ff; color:#2563eb; border:1px solid #bfdbfe;">60-69% [A- | 3.5]</span>
+                    <span class="dpt-legend-pill" style="background:#eff6ff; color:#2563eb; border:1px solid #bfdbfe;">50-59% [B | 3.0]</span>
+                    <span class="dpt-legend-pill" style="background:#fffbeb; color:#b45309; border:1px solid #fde68a;">40-49% [C | 2.0]</span>
+                    <span class="dpt-legend-pill" style="background:#fffbeb; color:#b45309; border:1px solid #fde68a;">33-39% [D | 1.0]</span>
+                    <span class="dpt-legend-pill" style="background:#fef2f2; color:#dc2626; border:1px solid #fecaca;">&lt;33% [F | 0.0]</span>
+                </div>
+
+                <!-- Marks Table Bento Card -->
                 <div class="dpt-bento-card">
-                    <form method="POST" action="">
+                    <form method="POST" action="" id="educoreMarksMatrixForm">
                         <?php wp_nonce_field( 'save_marks_action', 'educore_marks_nonce' ); ?>
                         <input type="hidden" name="exam_id" value="<?php echo intval( $filter_exam ); ?>">
                         <input type="hidden" name="subject_name" value="<?php echo esc_attr( $subject_name ); ?>">
                         
-                        <div class="afdp-card-title">
+                        <!-- Roster Action Top Bar -->
+                        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; border-bottom:1px solid #f1f5f9; padding-bottom:16px; margin-bottom:20px;">
                             <div>
-                                <?php esc_html_e( 'Target Class:', 'ifsedu-sms' ); ?> <span style="color:#006a4e;"><?php echo esc_html( $filter_class ); ?></span> 
-                                <?php if ( ! empty( $filter_section ) ) : ?>
-                                    (<?php esc_html_e( 'Section:', 'ifsedu-sms' ); ?> <span style="color:#006a4e;"><?php echo esc_html( $filter_section ); ?></span>)
-                                <?php endif; ?>
-                                | <?php esc_html_e( 'Subject:', 'ifsedu-sms' ); ?> <span style="color:#2563eb;"><?php echo esc_html( $subject_name ); ?></span>
+                                <h3 style="margin:0; font-size:17px; font-weight:800; color:#0f172a;">
+                                    <?php echo esc_html( $filter_class ); ?> 
+                                    <?php echo ! empty( $filter_section ) ? '(' . esc_html( $filter_section ) . ')' : ''; ?>
+                                    &mdash; <span style="color:#006a4e;"><?php echo esc_html( $subject_name ); ?></span>
+                                </h3>
+                                <span style="font-size:12px; color:#64748b; font-weight:600;">
+                                    <?php printf( esc_html__( '%d Students in Evaluation Batch', 'ifsedu-sms' ), count( $students ) ); ?>
+                                </span>
                             </div>
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <label class="dpt-form-label"><?php esc_html_e( 'Full Subject Marks:', 'ifsedu-sms' ); ?></label>
-                                <input type="number" step="0.01" name="total_marks" id="educore_total_marks" class="dpt-input-field" style="width: 90px; text-align: center; font-weight: 800; border-color: #006a4e;" value="100" min="1" required>
+
+                            <div style="display:flex; align-items:center; gap:16px;">
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <label class="dpt-form-label" style="margin:0;"><?php esc_html_e( 'Total Marks:', 'ifsedu-sms' ); ?></label>
+                                    <input type="number" step="0.01" name="total_marks" id="educore_total_marks" class="dpt-input-field" style="width:85px; height:38px; text-align:center; font-weight:800; border-color:#006a4e; background:#ffffff;" value="<?php echo esc_attr( $default_total ); ?>" min="1" required>
+                                </div>
+
+                                <button type="submit" name="save_marks" class="dpt-btn-submit-trigger" style="width:auto; height:38px; padding:0 22px;">
+                                    <span class="dashicons dashicons-saved"></span>
+                                    <?php esc_html_e( 'Save All Marks', 'ifsedu-sms' ); ?>
+                                </button>
                             </div>
                         </div>
 
+                        <!-- Live Analytics Summary -->
+                        <div class="dpt-analytics-strip">
+                            <div class="dpt-strip-card">
+                                <span class="dpt-strip-title"><?php esc_html_e( 'Evaluated Count', 'ifsedu-sms' ); ?></span>
+                                <span class="dpt-strip-val" id="stat_evaluated">0 / <?php echo count( $students ); ?></span>
+                            </div>
+                            <div class="dpt-strip-card">
+                                <span class="dpt-strip-title"><?php esc_html_e( 'Class Average', 'ifsedu-sms' ); ?></span>
+                                <span class="dpt-strip-val" id="stat_avg" style="color:#2563eb;">0.00</span>
+                            </div>
+                            <div class="dpt-strip-card">
+                                <span class="dpt-strip-title"><?php esc_html_e( 'Passed Students', 'ifsedu-sms' ); ?></span>
+                                <span class="dpt-strip-val" id="stat_pass" style="color:#059669;">0</span>
+                            </div>
+                            <div class="dpt-strip-card">
+                                <span class="dpt-strip-title"><?php esc_html_e( 'Failed (F)', 'ifsedu-sms' ); ?></span>
+                                <span class="dpt-strip-val" id="stat_fail" style="color:#dc2626;">0</span>
+                            </div>
+                        </div>
+
+                        <!-- Evaluation Table -->
                         <div class="dpt-table-responsive">
                             <table class="dpt-marks-table">
                                 <thead>
                                     <tr>
-                                        <th style="width: 8%;"><?php esc_html_e( 'Roll', 'ifsedu-sms' ); ?></th>
-                                        <th style="width: 15%;"><?php esc_html_e( 'Student ID', 'ifsedu-sms' ); ?></th>
-                                        <th><?php esc_html_e( 'Student Name', 'ifsedu-sms' ); ?></th>
+                                        <th style="width: 8%; text-align:center;"><?php esc_html_e( 'Roll', 'ifsedu-sms' ); ?></th>
+                                        <th style="width: 16%;"><?php esc_html_e( 'Student ID', 'ifsedu-sms' ); ?></th>
+                                        <th><?php esc_html_e( 'Student Full Name', 'ifsedu-sms' ); ?></th>
                                         <th style="width: 12%;"><?php esc_html_e( 'Section', 'ifsedu-sms' ); ?></th>
-                                        <th style="width: 18%; text-align: center;"><?php esc_html_e( 'Obtained Marks', 'ifsedu-sms' ); ?></th>
-                                        <th style="width: 14%; text-align: center;"><?php esc_html_e( 'Calculated Grade', 'ifsedu-sms' ); ?></th>
-                                        <th style="width: 10%; text-align: center;"><?php esc_html_e( 'GPA', 'ifsedu-sms' ); ?></th>
+                                        <th style="width: 20%; text-align: center;"><?php esc_html_e( 'Obtained Marks', 'ifsedu-sms' ); ?></th>
+                                        <th style="width: 14%; text-align: center;"><?php esc_html_e( 'Grade', 'ifsedu-sms' ); ?></th>
+                                        <th style="width: 12%; text-align: center;"><?php esc_html_e( 'GPA', 'ifsedu-sms' ); ?></th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -529,32 +637,33 @@ function educore_exams_marks_view() {
                                     foreach ( $students as $s ) : 
                                         $student_internal_id = intval( $s->id );
                                         $existing_marks      = isset( $loaded_results_states[ $student_internal_id ] ) ? $loaded_results_states[ $student_internal_id ]->obtained_marks : '';
-                                        $full_subject_marks  = isset( $loaded_results_states[ $student_internal_id ] ) ? floatval( $loaded_results_states[ $student_internal_id ]->total_marks ) : 100;
-
-                                        list( $initial_grade, $initial_gpa ) = ( $existing_marks !== '' && $existing_marks !== null ) ? educore_calculate_grade( floatval( $existing_marks ), $full_subject_marks ) : array( '-', '-' );
+                                        
+                                        list( $initial_grade, $initial_gpa ) = ( $existing_marks !== '' && $existing_marks !== null ) ? educore_calculate_grade( floatval( $existing_marks ), $default_total ) : array( '—', '—' );
                                         
                                         $badge_class = 'afdp-badge-neutral';
-                                        if ( $initial_grade === 'A+' ) {
-                                            $badge_class = 'afdp-badge-success';
-                                        } elseif ( $initial_grade === 'F' ) {
-                                            $badge_class = 'afdp-badge-danger';
-                                        } elseif ( $initial_grade !== '-' ) {
-                                            $badge_class = 'afdp-badge-primary';
-                                        }
+                                        if ( $initial_grade === 'A+' ) $badge_class = 'afdp-badge-success';
+                                        elseif ( $initial_grade === 'F' ) $badge_class = 'afdp-badge-danger';
+                                        elseif ( $initial_grade !== '—' ) $badge_class = 'afdp-badge-primary';
                                     ?>
                                     <tr>
-                                        <td><strong><?php echo esc_html( $s->roll_no ); ?></strong></td>
-                                        <td><code><?php echo esc_html( $s->student_id ); ?></code></td>
-                                        <td><strong><?php echo esc_html( $s->full_name ); ?></strong></td>
-                                        <td><span class="afdp-badge afdp-badge-neutral"><?php echo esc_html( $s->section_name ? $s->section_name : __( 'N/A', 'ifsedu-sms' ) ); ?></span></td>
+                                        <td style="text-align:center;">
+                                            <span style="font-weight:800; color:#0f172a;">#<?php echo esc_html( $s->roll_no ); ?></span>
+                                        </td>
+                                        <td><code class="dpt-ref-code"><?php echo esc_html( $s->student_id ); ?></code></td>
+                                        <td><strong style="color:#0f172a;"><?php echo esc_html( $s->full_name ); ?></strong></td>
+                                        <td><span class="afdp-badge afdp-badge-neutral"><?php echo esc_html( $s->section_name ? $s->section_name : 'N/A' ); ?></span></td>
                                         <td style="text-align: center;">
-                                            <input type="number" step="0.01" name="marks[<?php echo $student_internal_id; ?>]" class="dpt-input-field afdp-mark-input mark-input" value="<?php echo esc_attr( $existing_marks ); ?>" placeholder="0.00" min="0" data-student="<?php echo $student_internal_id; ?>">
+                                            <input type="number" step="0.01" name="marks[<?php echo $student_internal_id; ?>]" class="afdp-mark-input mark-input" value="<?php echo esc_attr( $existing_marks ); ?>" placeholder="0.00" min="0" data-student="<?php echo $student_internal_id; ?>">
                                         </td>
                                         <td style="text-align: center;">
-                                            <span class="afdp-badge grade-badge <?php echo esc_attr( $badge_class ); ?>" id="grade_<?php echo $student_internal_id; ?>"><?php echo esc_html( $initial_grade ); ?></span>
+                                            <span class="afdp-badge grade-badge <?php echo esc_attr( $badge_class ); ?>" id="grade_<?php echo $student_internal_id; ?>">
+                                                <?php echo esc_html( $initial_grade ); ?>
+                                            </span>
                                         </td>
                                         <td style="text-align: center;">
-                                            <strong class="gpa-text" id="gpa_<?php echo $student_internal_id; ?>"><?php echo esc_html( $initial_gpa ); ?></strong>
+                                            <strong class="gpa-text" id="gpa_<?php echo $student_internal_id; ?>" style="color:#0f172a; font-size:14px;">
+                                                <?php echo esc_html( $initial_gpa ); ?>
+                                            </strong>
                                         </td>
                                     </tr>
                                     <?php endforeach; ?>
@@ -562,19 +671,23 @@ function educore_exams_marks_view() {
                             </table>
                         </div>
 
-                        <div style="margin-top: 24px; text-align: right;">
-                            <button type="submit" name="save_marks" class="dpt-btn-submit-trigger" style="width: auto; padding: 0 32px;">
-                                <?php esc_html_e( 'Submit Marks Matrix', 'ifsedu-sms' ); ?>
+                        <div style="margin-top: 24px; display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-size:12px; color:#64748b; font-weight:600;">
+                                <?php esc_html_e( 'Tip: Use Up/Down Arrow or Enter keys to quickly move between mark inputs.', 'ifsedu-sms' ); ?>
+                            </span>
+                            <button type="submit" name="save_marks" class="dpt-btn-submit-trigger" style="width:auto; padding:0 36px; height:44px;">
+                                <span class="dashicons dashicons-saved"></span>
+                                <?php esc_html_e( 'Save All Exam Marks', 'ifsedu-sms' ); ?>
                             </button>
                         </div>
                     </form>
                 </div>
 
-                <!-- Auto-Grading Script -->
+                <!-- Real-time Grading & Matrix Keyboard Navigation Engine -->
                 <script type="text/javascript">
                 jQuery(document).ready(function($) {
                     function calcGrade(obtained, total) {
-                        if (isNaN(obtained) || obtained === '' || obtained < 0 || total <= 0) return { grade: '-', gpa: '-' };
+                        if (isNaN(obtained) || obtained === '' || obtained < 0 || total <= 0) return { grade: '—', gpa: '—' };
                         
                         var pct = (obtained / total) * 100;
                         if (pct > 100) pct = 100;
@@ -588,11 +701,49 @@ function educore_exams_marks_view() {
                         return { grade: 'F', gpa: '0.00' };
                     }
 
+                    function updateLiveStats() {
+                        var totalMarks = parseFloat($('#educore_total_marks').val()) || 100;
+                        var totalEvaluated = 0;
+                        var sumMarks = 0;
+                        var passed = 0;
+                        var failed = 0;
+
+                        $('.mark-input').each(function() {
+                            var val = $(this).val();
+                            if (val !== '') {
+                                var num = parseFloat(val);
+                                totalEvaluated++;
+                                sumMarks += num;
+                                var res = calcGrade(num, totalMarks);
+                                if (res.grade === 'F') {
+                                    failed++;
+                                } else if (res.grade !== '—') {
+                                    passed++;
+                                }
+                            }
+                        });
+
+                        $('#stat_evaluated').text(totalEvaluated + ' / ' + $('.mark-input').length);
+                        var avg = totalEvaluated > 0 ? (sumMarks / totalEvaluated).toFixed(2) : '0.00';
+                        $('#stat_avg').text(avg);
+                        $('#stat_pass').text(passed);
+                        $('#stat_fail').text(failed);
+                    }
+
                     $('.mark-input').on('input', function() {
                         var studentId = $(this).data('student');
-                        var obtained  = parseFloat($(this).val());
+                        var val       = $(this).val();
                         var total     = parseFloat($('#educore_total_marks').val()) || 100;
                         
+                        if (val === '') {
+                            $('#grade_' + studentId).text('—').removeClass('afdp-badge-success afdp-badge-danger afdp-badge-primary').addClass('afdp-badge-neutral');
+                            $('#gpa_' + studentId).text('—');
+                            $(this).removeClass('error');
+                            updateLiveStats();
+                            return;
+                        }
+
+                        var obtained = parseFloat(val);
                         if (obtained > total) {
                             $(this).addClass('error');
                         } else {
@@ -608,31 +759,48 @@ function educore_exams_marks_view() {
                             $badge.addClass('afdp-badge-danger');
                         } else if (res.grade === 'A+') {
                             $badge.addClass('afdp-badge-success');
-                        } else if (res.grade === '-') {
+                        } else if (res.grade === '—') {
                             $badge.addClass('afdp-badge-neutral');
                         } else {
                             $badge.addClass('afdp-badge-primary');
                         }
 
                         $('#gpa_' + studentId).text(res.gpa);
+                        updateLiveStats();
+                    });
+
+                    // Keyboard navigation between cells
+                    $('.mark-input').on('keydown', function(e) {
+                        var inputs = $('.mark-input');
+                        var idx = inputs.index(this);
+
+                        if (e.which === 13 || e.which === 40) { // Enter or Down Arrow
+                            e.preventDefault();
+                            if (idx < inputs.length - 1) {
+                                inputs.eq(idx + 1).focus().select();
+                            }
+                        } else if (e.which === 38) { // Up Arrow
+                            e.preventDefault();
+                            if (idx > 0) {
+                                inputs.eq(idx - 1).focus().select();
+                            }
+                        }
                     });
 
                     $('#educore_total_marks').on('input', function() {
                         $('.mark-input').trigger('input');
                     });
+
+                    // Run on initial load
+                    updateLiveStats();
                 });
                 </script>
                 <?php
             } else {
                 $section_label = ! empty( $filter_section ) ? ' (' . esc_html( $filter_section ) . ')' : '';
-                $empty_notice  = sprintf(
-                    esc_html__( 'No active students found in Class %s%s.', 'ifsedu-sms' ),
-                    '<strong>' . esc_html( $filter_class ) . '</strong>',
-                    '<strong>' . esc_html( $section_label ) . '</strong>'
-                );
                 ?>
-                <div class="afdp-status-banner" style="background: #fffbe0; border-color: #fef3c7; color: #b45309; justify-content: center;">
-                    <?php echo wp_kses_post( $empty_notice ); ?>
+                <div class="afdp-status-banner" style="background:#fffbe0; border-color:#fde68a; color:#b45309; justify-content:center;">
+                    <?php printf( esc_html__( 'No active students found in Class %1$s%2$s.', 'ifsedu-sms' ), '<strong>' . esc_html( $filter_class ) . '</strong>', '<strong>' . esc_html( $section_label ) . '</strong>' ); ?>
                 </div>
                 <?php
             }
@@ -640,21 +808,59 @@ function educore_exams_marks_view() {
         ?>
     </div>
 
-    <!-- DYNAMIC JS ENGINE: Class -> Section & Subject Chaining -->
+    <!-- DYNAMIC SELECTOR CHAINING ENGINE: Exam -> Related Classes -> Sections -> Subjects -->
     <script type="text/javascript">
     document.addEventListener('DOMContentLoaded', function() {
-        const unitsMap    = <?php echo wp_json_encode( ! empty( $all_units ) ? $all_units : array() ); ?>;
-        const subjectsMap = <?php echo wp_json_encode( ! empty( $all_subjects ) ? $all_subjects : array() ); ?>;
+        const examClassMap = <?php echo wp_json_encode( ! empty( $exam_class_map ) ? $exam_class_map : array() ); ?>;
+        const allGlobalClasses = <?php echo wp_json_encode( ! empty( $all_classes_raw ) ? $all_classes_raw : array() ); ?>;
+        const unitsMap     = <?php echo wp_json_encode( ! empty( $all_units ) ? $all_units : array() ); ?>;
+        const subjectsMap  = <?php echo wp_json_encode( ! empty( $all_subjects ) ? $all_subjects : array() ); ?>;
 
+        const currentExam    = "<?php echo esc_js( $filter_exam ); ?>";
         const currentClass   = "<?php echo esc_js( $filter_class ); ?>";
         const currentSection = "<?php echo esc_js( $filter_section ); ?>";
         const currentSubject = "<?php echo esc_js( $subject_name ); ?>";
 
+        const examSelect    = document.getElementById('educore_marks_exam_select');
         const classSelect   = document.getElementById('educore_marks_class_select');
         const sectionSelect = document.getElementById('educore_marks_section_select');
         const subjectSelect = document.getElementById('educore_marks_subject_select');
 
-        // 1. Populate Sections based on selected Class
+        // 1. Populate Classes that are strictly related to the selected Exam
+        function populateExamClasses(selectedExamId, selectedClassName = '') {
+            if (!classSelect) return;
+            classSelect.innerHTML = '<option value=""><?php esc_html_e( '-- Select Class --', 'ifsedu-sms' ); ?></option>';
+
+            if (!selectedExamId) {
+                classSelect.innerHTML = '<option value=""><?php esc_html_e( '-- Select Exam First --', 'ifsedu-sms' ); ?></option>';
+                populateSections('');
+                populateSubjects('');
+                return;
+            }
+
+            let classesToLoad = [];
+            if (examClassMap[selectedExamId] && examClassMap[selectedExamId].length > 0) {
+                classesToLoad = examClassMap[selectedExamId];
+            } else {
+                // If exam was created globally for all classes, load all classes
+                classesToLoad = allGlobalClasses;
+            }
+
+            classesToLoad.forEach(cls => {
+                const opt = document.createElement('option');
+                opt.value = cls;
+                opt.textContent = cls;
+                if (cls == selectedClassName) {
+                    opt.selected = true;
+                }
+                classSelect.appendChild(opt);
+            });
+
+            populateSections(classSelect.value, currentSection);
+            populateSubjects(classSelect.value, sectionSelect.value, currentSubject);
+        }
+
+        // 2. Populate Sections based on selected Class
         function populateSections(selectedClass, selectedSecName = '') {
             if (!sectionSelect) return;
             sectionSelect.innerHTML = '<option value=""><?php esc_html_e( '-- All Sections --', 'ifsedu-sms' ); ?></option>';
@@ -674,7 +880,7 @@ function educore_exams_marks_view() {
             });
         }
 
-        // 2. Populate Subjects based on selected Class and Section
+        // 3. Populate Subjects based on selected Class and Section
         function populateSubjects(selectedClass, selectedSecName = '', selectedSubName = '') {
             if (!subjectSelect) return;
             subjectSelect.innerHTML = '<option value=""><?php esc_html_e( '-- Select Subject --', 'ifsedu-sms' ); ?></option>';
@@ -683,14 +889,12 @@ function educore_exams_marks_view() {
             let filteredSubjects = subjectsMap.filter(item => item.class_name == selectedClass);
 
             if (selectedSecName) {
-                // If section chosen, check if subjects exist specifically for that section unit
                 const sectionSpecific = filteredSubjects.filter(item => item.section_name == selectedSecName);
                 if (sectionSpecific.length > 0) {
                     filteredSubjects = sectionSpecific;
                 }
             }
 
-            // Extract unique subject names
             const uniqueSubjects = [...new Set(filteredSubjects.map(item => item.subject_name).filter(Boolean))];
 
             uniqueSubjects.forEach(subName => {
@@ -704,10 +908,13 @@ function educore_exams_marks_view() {
             });
         }
 
-        if (classSelect && sectionSelect && subjectSelect) {
-            // Initial load (Preserve existing selections on page refresh)
-            populateSections(classSelect.value, currentSection);
-            populateSubjects(classSelect.value, currentSection, currentSubject);
+        // Initial execution on load (preserves existing selected state)
+        if (examSelect && classSelect) {
+            populateExamClasses(examSelect.value, currentClass);
+
+            examSelect.addEventListener('change', function() {
+                populateExamClasses(this.value, '');
+            });
 
             classSelect.addEventListener('change', function() {
                 populateSections(this.value);

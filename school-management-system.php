@@ -248,31 +248,36 @@ dbDelta( $sql_staff );
     ) $charset_collate;";
     dbDelta( $sql_attendance );
 
-    // Schema Model 4: Accountancy Ledger Fees
-    $table_fees = $wpdb->prefix . 'sms_fees';
-    $sql_fees = "CREATE TABLE $table_fees (
-        id bigint(20) NOT NULL AUTO_INCREMENT,
-        invoice_id varchar(50) NOT NULL,
-        student_id bigint(20) NOT NULL,
-        fee_month varchar(20) NOT NULL,
-        fee_year varchar(10) NOT NULL,
-        fee_type varchar(50) DEFAULT 'Tuition Fee' NOT NULL,
-        amount decimal(10,2) DEFAULT '0.00' NOT NULL,
-        late_fine decimal(10,2) DEFAULT '0.00' NOT NULL,
-        discount decimal(10,2) DEFAULT '0.00' NOT NULL,
-        net_payable decimal(10,2) DEFAULT '0.00' NOT NULL,
-        paid_amount decimal(10,2) DEFAULT '0.00' NOT NULL,
-        due_amount decimal(10,2) DEFAULT '0.00' NOT NULL,
-        payment_status varchar(20) DEFAULT 'Unpaid' NOT NULL,
-        payment_method varchar(30) DEFAULT 'Cash' NOT NULL,
-        transaction_id varchar(100) DEFAULT '' NOT NULL,
-        remarks text NOT NULL,
-        payment_date datetime DEFAULT '1970-01-01 00:00:00' NOT NULL,
-        collected_by bigint(20) NOT NULL,
-        PRIMARY KEY  (id),
-        UNIQUE KEY invoice_id (invoice_id)
-    ) $charset_collate;";
-    dbDelta( $sql_fees );
+    // Schema Model: Accountancy Ledger Fees
+$table_fees = $wpdb->prefix . 'sms_fees';
+$sql_fees = "CREATE TABLE $table_fees (
+    id bigint(20) NOT NULL AUTO_INCREMENT,
+    invoice_id varchar(50) NOT NULL,
+    student_id bigint(20) NOT NULL,
+    fee_month varchar(20) NOT NULL,
+    fee_year varchar(10) NOT NULL,
+    fee_type varchar(50) DEFAULT 'Tuition Fee' NOT NULL,
+    amount decimal(10,2) DEFAULT '0.00' NOT NULL,
+    late_fine decimal(10,2) DEFAULT '0.00' NOT NULL,
+    discount decimal(10,2) DEFAULT '0.00' NOT NULL,
+    net_payable decimal(10,2) DEFAULT '0.00' NOT NULL,
+    paid_amount decimal(10,2) DEFAULT '0.00' NOT NULL,
+    due_amount decimal(10,2) DEFAULT '0.00' NOT NULL,
+    payment_status varchar(20) DEFAULT 'Unpaid' NOT NULL,
+    payment_method varchar(30) DEFAULT 'Cash' NOT NULL,
+    transaction_id varchar(100) DEFAULT '' NOT NULL,
+    remarks text,
+    payment_date datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    collected_by bigint(20) NOT NULL,
+    PRIMARY KEY  (id),
+    UNIQUE KEY invoice_id (invoice_id),
+    KEY student_id (student_id),
+    KEY payment_status (payment_status),
+    KEY payment_date (payment_date)
+) $charset_collate;";
+
+require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+dbDelta( $sql_fees );
 
     // Schema Model 5: Examination Setup Scheme
     $table_exams = $wpdb->prefix . 'sms_exams';

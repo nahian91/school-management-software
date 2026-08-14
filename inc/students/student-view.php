@@ -80,11 +80,9 @@ function educore_student_profile_view() {
     $edit_url  = admin_url( 'admin.php?page=school_management_system&tab=students&sub=edit&id=' . absint( $student->id ) );
 
     $first_letter = mb_substr( $student->full_name ?? 'S', 0, 1, 'utf-8' );
-    $is_active    = strtolower( trim( $student->status ?? '' ) ) === 'active';
     ?>
 
     <style>
-        /* Modern Neo-Bento Layout Structure */
         .dpt-profile-wrapper {
             margin: 20px 20px 24px 0;
             font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -305,7 +303,7 @@ function educore_student_profile_view() {
             background: #f8fafc;
             color: #64748b;
             font-weight: 700;
-            width: 35%;
+            width: 38%;
             font-size: 12px;
             text-transform: uppercase;
             border-right: 1px solid #e2e8f0;
@@ -350,7 +348,7 @@ function educore_student_profile_view() {
         .dpt-status-partial { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; }
         .dpt-status-unpaid { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
 
-        /* Enhanced Results CSS */
+        /* Exam Results Cards */
         .dpt-exam-card {
             border: 1px solid #e2e8f0;
             border-radius: 12px;
@@ -402,6 +400,7 @@ function educore_student_profile_view() {
         @media print {
             .no-print, .dpt-action-bar, .dnt-profile-tabs { display: none !important; }
             .dpt-profile-header-card { background: #006a4e !important; color: #ffffff !important; box-shadow: none !important; }
+            .dpt-tab-content-block { display: block !important; margin-bottom: 30px; }
         }
     </style>
 
@@ -469,7 +468,6 @@ function educore_student_profile_view() {
                 <div>
                     <div style="font-size:11.5px; color:#64748b; font-weight:800; text-transform:uppercase;"><?php esc_html_e( 'Exams Evaluated', 'ifsedu-sms' ); ?></div>
                     <div style="font-size:22px; font-weight:800; color:#0f172a;"><?php 
-                        // Count unique exams from results
                         $unique_exams = array_unique(array_column((array)$exam_results, 'exam_id'));
                         echo count($unique_exams); 
                     ?></div>
@@ -507,8 +505,16 @@ function educore_student_profile_view() {
                 <span class="dashicons dashicons-admin-users"></span>
                 <?php esc_html_e( 'Personal & Academic Info', 'ifsedu-sms' ); ?>
             </button>
-            <button class="nav-link" onclick="educoreSwitchProfileTab(event, 'dpt-results-tab')">
+            <button class="nav-link" onclick="educoreSwitchProfileTab(event, 'dpt-parents-tab')">
+                <span class="dashicons dashicons-groups"></span>
+                <?php esc_html_e( 'Parents & Guardian', 'ifsedu-sms' ); ?>
+            </button>
+            <button class="nav-link" onclick="educoreSwitchProfileTab(event, 'dpt-history-tab')">
                 <span class="dashicons dashicons-welcome-learn-more"></span>
+                <?php esc_html_e( 'Previous History & Misc', 'ifsedu-sms' ); ?>
+            </button>
+            <button class="nav-link" onclick="educoreSwitchProfileTab(event, 'dpt-results-tab')">
+                <span class="dashicons dashicons-awards"></span>
                 <?php esc_html_e( 'Academic Results', 'ifsedu-sms' ); ?>
             </button>
             <button class="nav-link" onclick="educoreSwitchProfileTab(event, 'dpt-payments-tab')">
@@ -524,44 +530,136 @@ function educore_student_profile_view() {
         <!-- Tab Workspace -->
         <div class="dpt-tab-workspace">
             
-            <!-- 1. Details Tab -->
+            <!-- 1. Personal & Academic Info Tab -->
             <div id="dpt-details-tab" class="dpt-tab-content-block">
                 <div class="dpt-grid-2col">
                     <div>
-                        <div class="dpt-section-title"><?php esc_html_e( 'Academic Profile', 'ifsedu-sms' ); ?></div>
+                        <div class="dpt-section-title"><span class="dashicons dashicons-welcome-learn-more"></span> <?php esc_html_e( 'Academic Information', 'ifsedu-sms' ); ?></div>
                         <table class="dpt-profile-table">
+                            <tr><td class="dpt-label-bg">Student Unique ID</td><td style="font-weight:700; color:#0f172a;"><?php echo esc_html( $student->student_id ); ?></td></tr>
                             <tr><td class="dpt-label-bg">Academic Class</td><td style="font-weight:700; color:#006a4e;"><?php echo esc_html( $student->class_name ); ?></td></tr>
-                            <tr><td class="dpt-label-bg">Section</td><td><?php echo $student->section_name ? esc_html( $student->section_name ) : '—'; ?></td></tr>
+                            <tr><td class="dpt-label-bg">Section / Group</td><td><?php echo ! empty( $student->section_name ) ? esc_html( $student->section_name ) : '—'; ?></td></tr>
                             <tr><td class="dpt-label-bg">Roll Number</td><td style="font-weight:700;">#<?php echo esc_html( $student->roll_no ); ?></td></tr>
                             <tr><td class="dpt-label-bg">Admission Date</td><td><?php echo ( ! empty( $student->admission_date ) && $student->admission_date !== '0000-00-00' ) ? esc_html( date_i18n( 'd M Y', strtotime( $student->admission_date ) ) ) : '—'; ?></td></tr>
+                            <tr><td class="dpt-label-bg">Residential Status</td><td><?php echo ! empty( $student->residential_status ) ? esc_html( $student->residential_status ) : 'Non-Residential'; ?></td></tr>
+                            <tr><td class="dpt-label-bg">Status</td><td><span style="font-weight:700; color:<?php echo ( strtolower($student->status) === 'active' ) ? '#059669' : '#dc2626'; ?>;"><?php echo esc_html( ucfirst( $student->status ) ); ?></span></td></tr>
                         </table>
                     </div>
 
                     <div>
-                        <div class="dpt-section-title"><?php esc_html_e( 'Personal & Guardian Details', 'ifsedu-sms' ); ?></div>
+                        <div class="dpt-section-title"><span class="dashicons dashicons-id-alt"></span> <?php esc_html_e( 'Basic Identity Profile', 'ifsedu-sms' ); ?></div>
                         <table class="dpt-profile-table">
+                            <tr><td class="dpt-label-bg">Full Name (English)</td><td style="font-weight:700;"><?php echo esc_html( $student->full_name ); ?></td></tr>
+                            <tr><td class="dpt-label-bg">শিক্ষার্থীর নাম (বাংলায়)</td><td><?php echo ! empty( $student->name_bn ) ? esc_html( $student->name_bn ) : '—'; ?></td></tr>
+                            <tr><td class="dpt-label-bg">Birth Reg. Number</td><td><?php echo ! empty( $student->birth_reg_no ) ? esc_html( $student->birth_reg_no ) : '—'; ?></td></tr>
                             <tr><td class="dpt-label-bg">Date of Birth</td><td><?php echo ( ! empty( $student->dob ) && $student->dob !== '0000-00-00' ) ? esc_html( date_i18n( 'd M Y', strtotime( $student->dob ) ) ) : '—'; ?></td></tr>
-                            <tr><td class="dpt-label-bg">Gender / Blood</td><td><?php echo esc_html( ucfirst( $student->gender ) . ' | Blood: ' . ( $student->blood_group ? $student->blood_group : 'N/A' ) ); ?></td></tr>
-                            <tr><td class="dpt-label-bg">Guardian Name</td><td style="font-weight:700;"><?php echo esc_html( $student->guardian_name ? $student->guardian_name : $student->father_name ); ?></td></tr>
-                            <tr><td class="dpt-label-bg">Guardian Phone</td><td style="font-weight:700; color:#2563eb;"><?php echo esc_html( $student->guardian_phone ); ?></td></tr>
+                            <tr><td class="dpt-label-bg">Birth District</td><td><?php echo ! empty( $student->birth_place ) ? esc_html( $student->birth_place ) : '—'; ?></td></tr>
+                            <tr><td class="dpt-label-bg">Gender</td><td><?php echo esc_html( ucfirst( $student->gender ) ); ?></td></tr>
+                            <tr><td class="dpt-label-bg">Blood Group</td><td><strong style="color:#dc2626;"><?php echo ! empty( $student->blood_group ) ? esc_html( $student->blood_group ) : '—'; ?></strong></td></tr>
+                            <tr><td class="dpt-label-bg">Religion</td><td><?php echo esc_html( $student->religion ); ?></td></tr>
+                            <tr><td class="dpt-label-bg">Nationality</td><td><?php echo esc_html( $student->nationality ); ?></td></tr>
+                            <tr><td class="dpt-label-bg">Quota Category</td><td><?php echo esc_html( $student->quota ); ?></td></tr>
+                            <tr><td class="dpt-label-bg">Student Mobile</td><td><?php echo ! empty( $student->student_phone ) ? esc_html( $student->student_phone ) : '—'; ?></td></tr>
+                            <tr><td class="dpt-label-bg">Student Email</td><td><?php echo ! empty( $student->student_email ) ? esc_html( $student->student_email ) : '—'; ?></td></tr>
                         </table>
                     </div>
                 </div>
 
-                <div>
-                    <div class="dpt-section-title"><?php esc_html_e( 'Address & Contact Records', 'ifsedu-sms' ); ?></div>
-                    <div style="padding:16px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; color:#334155; font-size:14px; line-height:1.6;">
-                        <?php echo ! empty( $student->address ) ? nl2br( esc_html( $student->address ) ) : esc_html__( 'No registered residential address found.', 'ifsedu-sms' ); ?>
+                <div class="dpt-grid-2col" style="margin-bottom: 0;">
+                    <div>
+                        <div class="dpt-section-title"><span class="dashicons dashicons-location"></span> <?php esc_html_e( 'Present Address (বর্তমান ঠিকানা)', 'ifsedu-sms' ); ?></div>
+                        <div style="padding:16px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; color:#334155; font-size:13.5px; line-height:1.6; min-height:60px;">
+                            <?php echo ! empty( $student->address ) ? nl2br( esc_html( $student->address ) ) : esc_html__( 'No registered present address found.', 'ifsedu-sms' ); ?>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="dpt-section-title"><span class="dashicons dashicons-admin-home"></span> <?php esc_html_e( 'Permanent Address (স্থায়ী ঠিকানা)', 'ifsedu-sms' ); ?></div>
+                        <div style="padding:16px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; color:#334155; font-size:13.5px; line-height:1.6; min-height:60px;">
+                            <?php echo ! empty( $student->permanent_address ) ? nl2br( esc_html( $student->permanent_address ) ) : esc_html__( 'Same as present address or not provided.', 'ifsedu-sms' ); ?>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- 2. Results Tab (Enhanced) -->
+            <!-- 2. Parents & Guardian Tab -->
+            <div id="dpt-parents-tab" class="dpt-tab-content-block" style="display:none;">
+                <div class="dpt-grid-2col">
+                    <!-- Father Information -->
+                    <div>
+                        <div class="dpt-section-title"><span class="dashicons dashicons-businessman"></span> <?php esc_html_e( 'Father Information', 'ifsedu-sms' ); ?></div>
+                        <table class="dpt-profile-table">
+                            <tr><td class="dpt-label-bg">Father Name (English)</td><td style="font-weight:700;"><?php echo ! empty( $student->father_name ) ? esc_html( $student->father_name ) : '—'; ?></td></tr>
+                            <tr><td class="dpt-label-bg">পিতার নাম (বাংলায়)</td><td><?php echo ! empty( $student->father_name_bn ) ? esc_html( $student->father_name_bn ) : '—'; ?></td></tr>
+                            <tr><td class="dpt-label-bg">Father NID</td><td><?php echo ! empty( $student->father_nid ) ? esc_html( $student->father_nid ) : '—'; ?></td></tr>
+                            <tr><td class="dpt-label-bg">Father Phone</td><td><?php echo ! empty( $student->father_phone ) ? esc_html( $student->father_phone ) : '—'; ?></td></tr>
+                            <tr><td class="dpt-label-bg">Father Profession</td><td><?php echo ! empty( $student->father_profession ) ? esc_html( $student->father_profession ) : '—'; ?></td></tr>
+                        </table>
+                    </div>
+
+                    <!-- Mother Information -->
+                    <div>
+                        <div class="dpt-section-title"><span class="dashicons dashicons-businesswoman"></span> <?php esc_html_e( 'Mother Information', 'ifsedu-sms' ); ?></div>
+                        <table class="dpt-profile-table">
+                            <tr><td class="dpt-label-bg">Mother Name (English)</td><td style="font-weight:700;"><?php echo ! empty( $student->mother_name ) ? esc_html( $student->mother_name ) : '—'; ?></td></tr>
+                            <tr><td class="dpt-label-bg">মাতার নাম (বাংলায়)</td><td><?php echo ! empty( $student->mother_name_bn ) ? esc_html( $student->mother_name_bn ) : '—'; ?></td></tr>
+                            <tr><td class="dpt-label-bg">Mother NID</td><td><?php echo ! empty( $student->mother_nid ) ? esc_html( $student->mother_nid ) : '—'; ?></td></tr>
+                            <tr><td class="dpt-label-bg">Mother Phone</td><td><?php echo ! empty( $student->mother_phone ) ? esc_html( $student->mother_phone ) : '—'; ?></td></tr>
+                            <tr><td class="dpt-label-bg">Mother Profession</td><td><?php echo ! empty( $student->mother_profession ) ? esc_html( $student->mother_profession ) : '—'; ?></td></tr>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Legal Guardian Details -->
+                <div style="margin-top: 10px;">
+                    <div class="dpt-section-title"><span class="dashicons dashicons-shield"></span> <?php esc_html_e( 'Legal Guardian Details (SMS Notifications Contact)', 'ifsedu-sms' ); ?></div>
+                    <table class="dpt-profile-table">
+                        <tr><td class="dpt-label-bg">Guardian Name</td><td style="font-weight:700; color:#0f172a;"><?php echo ! empty( $student->guardian_name ) ? esc_html( $student->guardian_name ) : esc_html( $student->father_name ); ?></td></tr>
+                        <tr><td class="dpt-label-bg">Guardian Phone (SMS)</td><td style="font-weight:700; color:#006a4e;"><?php echo ! empty( $student->guardian_phone ) ? esc_html( $student->guardian_phone ) : '—'; ?></td></tr>
+                        <tr><td class="dpt-label-bg">Relation with Student</td><td><?php echo ! empty( $student->guardian_relation ) ? esc_html( $student->guardian_relation ) : 'Father'; ?></td></tr>
+                        <tr><td class="dpt-label-bg">Guardian NID / Annual Income</td><td><?php echo ! empty( $student->guardian_nid ) ? esc_html( $student->guardian_nid ) : ( ! empty( $student->guardian_income ) ? esc_html( $student->guardian_income ) : '—' ); ?></td></tr>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 3. Previous History & Misc Tab -->
+            <div id="dpt-history-tab" class="dpt-tab-content-block" style="display:none;">
+                <div class="dpt-grid-2col">
+                    <div>
+                        <div class="dpt-section-title"><span class="dashicons dashicons-building"></span> <?php esc_html_e( 'Previous Academic Background', 'ifsedu-sms' ); ?></div>
+                        <table class="dpt-profile-table">
+                            <tr><td class="dpt-label-bg">Previous School Name</td><td style="font-weight:700;"><?php echo ! empty( $student->prev_school_name ) ? esc_html( $student->prev_school_name ) : '—'; ?></td></tr>
+                            <tr><td class="dpt-label-bg">Previous Institute EIIN</td><td><?php echo ! empty( $student->prev_eiin ) ? esc_html( $student->prev_eiin ) : '—'; ?></td></tr>
+                            <tr><td class="dpt-label-bg">Last Passed Class</td><td><?php echo ! empty( $student->prev_class ) ? esc_html( $student->prev_class ) : '—'; ?></td></tr>
+                            <tr><td class="dpt-label-bg">Obtained GPA / Marks</td><td style="font-weight:700; color:#006a4e;"><?php echo ! empty( $student->prev_gpa ) ? esc_html( $student->prev_gpa ) : '—'; ?></td></tr>
+                        </table>
+                    </div>
+
+                    <div>
+                        <div class="dpt-section-title"><span class="dashicons dashicons-art"></span> <?php esc_html_e( 'Co-Curricular & Extracurricular Activities', 'ifsedu-sms' ); ?></div>
+                        <div style="padding:20px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;">
+                            <?php if ( ! empty( $student->co_curricular ) ) : 
+                                $activities = explode( ',', $student->co_curricular );
+                            ?>
+                                <div style="display:flex; flex-wrap:wrap; gap:8px;">
+                                    <?php foreach ( $activities as $act ) : ?>
+                                        <span style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; font-weight:700; padding:6px 14px; border-radius:20px; font-size:12.5px;">
+                                            <span class="dashicons dashicons-yes" style="font-size:14px; width:14px; height:14px; vertical-align:middle;"></span> <?php echo esc_html( trim( $act ) ); ?>
+                                        </span>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php else : ?>
+                                <p style="color:#94a3b8; margin:0;"><?php esc_html_e( 'No co-curricular activities selected.', 'ifsedu-sms' ); ?></p>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4. Results Tab -->
             <div id="dpt-results-tab" class="dpt-tab-content-block" style="display:none;">
                 <div class="dpt-section-title"><?php esc_html_e( 'Academic Marks Matrix', 'ifsedu-sms' ); ?></div>
                 
                 <?php 
-                // Group results by exam_name
                 $grouped_results = array();
                 if ( ! empty( $exam_results ) ) {
                     foreach ( $exam_results as $res ) {
@@ -655,7 +753,7 @@ function educore_student_profile_view() {
                 <?php endif; ?>
             </div>
 
-            <!-- 3. Payments Tab -->
+            <!-- 5. Payments Tab -->
             <div id="dpt-payments-tab" class="dpt-tab-content-block" style="display:none;">
                 <div class="dpt-section-title"><?php esc_html_e( 'Fee Payment History & Invoices', 'ifsedu-sms' ); ?></div>
                 <div style="overflow-x:auto;">
@@ -693,7 +791,7 @@ function educore_student_profile_view() {
                 </div>
             </div>
 
-            <!-- 4. Attendance Tab -->
+            <!-- 6. Attendance Tab -->
             <div id="dpt-attendance-tab" class="dpt-tab-content-block" style="display:none;">
                 <div class="dpt-section-title"><?php esc_html_e( 'Daily Attendance Audit Logs (Recent 30 Days)', 'ifsedu-sms' ); ?></div>
                 <div style="overflow-x:auto;">

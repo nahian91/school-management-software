@@ -21,9 +21,9 @@ function educore_students_list_view() {
     wp_enqueue_style( 'datatables-cdn', 'https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css', array(), '1.13.6' );
     wp_enqueue_script( 'datatables-cdn-js', 'https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js', array( 'jquery' ), '1.13.6', true );
 
-    // 2. Fetch Active Student Records
+    // 2. Fetch Active Student Records (Latest Added/Edited First: ORDER BY id DESC)
     $students_records = $wpdb->get_results( 
-        "SELECT * FROM {$table_students} WHERE status = 'Active' ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC, CAST(roll_no AS UNSIGNED) ASC, roll_no ASC" 
+        "SELECT * FROM {$table_students} WHERE status = 'Active' ORDER BY id DESC" 
     );
 
     // 3. Fetch Classes from Academic Units Table with Natural Numeric Sorting
@@ -259,45 +259,24 @@ function educore_students_list_view() {
             color: #ffffff !important;
             border-color: #006a4e !important;
         }
-
-        /* Quick Drawer Panel */
-        .educore-drawer-overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(15, 23, 42, 0.4);
-            backdrop-filter: blur(2px);
-            z-index: 99998;
-            display: none;
-        }
-
-        .educore-drawer {
-            position: fixed;
-            top: 0;
-            right: -420px;
-            width: 400px;
-            height: 100vh;
-            background: #ffffff;
-            box-shadow: -4px 0 25px rgba(0,0,0,0.15);
-            z-index: 99999;
-            transition: all 0.3s ease;
-            padding: 24px;
-            box-sizing: border-box;
-            overflow-y: auto;
-        }
-
-        .educore-drawer.open { right: 0; }
-
-        .educore-drawer-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid #f1f5f9;
-            padding-bottom: 16px;
-            margin-bottom: 20px;
-        }
     </style>
 
     <div class="educore-dt-container">
+
+        <!-- Dynamic Success / Update Notice Alerts -->
+        <?php if ( isset( $_GET['msg'] ) || isset( $_GET['status'] ) ) : 
+            $status_msg = isset( $_GET['msg'] ) ? sanitize_text_field( $_GET['msg'] ) : sanitize_text_field( $_GET['status'] );
+        ?>
+            <?php if ( $status_msg === 'success' ) : ?>
+                <div class="notice notice-success is-dismissible" style="padding: 12px 16px; margin: 0 0 20px 0; background: #ecfdf5; border-left: 4px solid #006a4e; color: #065f46; border-radius: 8px; font-weight: 600;">
+                    <p style="margin: 0;"><span class="dashicons dashicons-yes-alt" style="color: #006a4e; vertical-align: middle; margin-right: 5px;"></span> <?php esc_html_e( 'শিক্ষার্থীর তথ্য সফলভাবে সংরক্ষণ করা হয়েছে।', 'ifsedu-sms' ); ?></p>
+                </div>
+            <?php elseif ( $status_msg === 'updated' ) : ?>
+                <div class="notice notice-success is-dismissible" style="padding: 12px 16px; margin: 0 0 20px 0; background: #eff6ff; border-left: 4px solid #2563eb; color: #1e40af; border-radius: 8px; font-weight: 600;">
+                    <p style="margin: 0;"><span class="dashicons dashicons-saved" style="color: #2563eb; vertical-align: middle; margin-right: 5px;"></span> <?php esc_html_e( 'শিক্ষার্থীর প্রোফাইল সফলভাবে হালনাগাদ (Update) করা হয়েছে।', 'ifsedu-sms' ); ?></p>
+                </div>
+            <?php endif; ?>
+        <?php endif; ?>
         
         <!-- Filter & Search Toolbar -->
         <div class="educore-dt-toolbar">
@@ -350,7 +329,7 @@ function educore_students_list_view() {
                     $phone_display= ! empty( $student->student_phone ) ? $student->student_phone : $student->guardian_phone;
                     $first_letter = mb_substr( $student->full_name, 0, 1 );
                 ?>
-                    <tr data-class="<?php echo esc_attr( trim( $student->class_name ) ); ?>" data-section="<?php echo esc_attr( trim( $student->section_name ) ); ?>">
+                    <tr data-class="<?php echo esc_attr( trim( $student->class_name ) ); ?>" data-section="<?php echo esc_attr( trim( $student->section_name ) ); ?>" data-id="<?php echo esc_attr( $student->id ); ?>">
                         <td><code style="background:#f1f5f9; padding:2px 6px; border-radius:4px; border:1px solid #cbd5e1; font-weight:700; color:#0f172a;"><?php echo esc_html( $student->student_id ); ?></code></td>
                         <td>
                             <div class="educore-avatar-cell">
@@ -419,9 +398,9 @@ function educore_students_list_view() {
                 function(settings, data, dataIndex) {
                     if (settings.nTable.id !== 'educoreStudentsMainTable') return true;
 
-                    var rowNode        = settings.aoData[dataIndex].nTr;
-                    var rowClass       = $.trim($(rowNode).attr('data-class') || '');
-                    var rowSection     = $.trim($(rowNode).attr('data-section') || '');
+                    var rowNode         = settings.aoData[dataIndex].nTr;
+                    var rowClass        = $.trim($(rowNode).attr('data-class') || '');
+                    var rowSection      = $.trim($(rowNode).attr('data-section') || '');
                     var selectedClass   = $.trim($('#educoreClassCustomFilter').val() || '');
                     var selectedSection = $.trim($('#educoreSectionCustomFilter').val() || '');
 
@@ -431,12 +410,12 @@ function educore_students_list_view() {
                 }
             );
 
-            // Instantiate DataTable
+            // Instantiate DataTable (order: [] preserves the HTML table ORDER BY id DESC)
             var tableInstance = $('#educoreStudentsMainTable').DataTable({
                 "pageLength": 20,
                 "lengthMenu": [10, 20, 50, 100],
                 "ordering": true,
-                "order": [[2, "asc"], [3, "asc"]],
+                "order": [], // Preserves the exact server-side ORDER BY id DESC
                 "responsive": true,
                 "dom": 'f t <"educore-dt-footer-internal"lip>',
                 "language": {

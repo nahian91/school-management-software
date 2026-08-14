@@ -183,6 +183,28 @@ function educore_fees_list_view() {
             gap: 20px;
         }
 
+        /* Notice Alert Banner */
+        .dpt-notice-banner {
+            padding: 14px 18px;
+            margin-bottom: 5px;
+            background: #ecfdf5;
+            border-left: 4px solid #006a4e;
+            color: #065f46;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 13.5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+        }
+
+        .dpt-notice-banner.updated {
+            background: #eff6ff;
+            border-left-color: #2563eb;
+            color: #1e40af;
+        }
+
         /* Top Metric Bento Grid */
         .afdp-metrics-bento {
             display: grid;
@@ -628,6 +650,23 @@ function educore_fees_list_view() {
 
     <div class="dpt-fees-list-container">
 
+        <!-- Flash Notice Feedback Banner -->
+        <?php if ( isset( $_GET['msg'] ) ) : 
+            $msg_type = sanitize_text_field( wp_unslash( $_GET['msg'] ) );
+        ?>
+            <?php if ( $msg_type === 'collected' || $msg_type === 'success' ) : ?>
+                <div class="dpt-notice-banner">
+                    <span class="dashicons dashicons-yes-alt" style="font-size:20px; width:20px; height:20px;"></span>
+                    <span><?php esc_html_e( 'ফি সফলভাবে গ্রহণ করা হয়েছে এবং রেকর্ড সংরক্ষিত হয়েছে।', 'ifsedu-sms' ); ?></span>
+                </div>
+            <?php elseif ( $msg_type === 'updated' ) : ?>
+                <div class="dpt-notice-banner updated">
+                    <span class="dashicons dashicons-saved" style="font-size:20px; width:20px; height:20px;"></span>
+                    <span><?php esc_html_e( 'ফি ইনভয়েস রেকর্ড সফলভাবে আপডেট করা হয়েছে।', 'ifsedu-sms' ); ?></span>
+                </div>
+            <?php endif; ?>
+        <?php endif; ?>
+
         <!-- Financial Ledger Overview Metrics Bento Box -->
         <div class="afdp-metrics-bento">
             <div class="dpt-metric-card invoiced">
@@ -1030,7 +1069,10 @@ function educore_fees_list_view() {
 
                     if (data && data.success) {
                         hideModal();
-                        window.location.reload();
+                        // Reload with updated query flag to show the updated notice
+                        const url = new URL(window.location.href);
+                        url.searchParams.set('msg', 'updated');
+                        window.location.href = url.toString();
                     } else {
                         alert((data && data.data && data.data.message) || 'Error occurred while updating fee invoice.');
                     }

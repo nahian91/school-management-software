@@ -4,43 +4,115 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Record Income / Expense Transaction View
+ * Enterprise Accounting & General Ledger Transaction Module
  * File: accounting-add-edit.php
  */
 function educore_accounting_add_edit_view() {
+    if ( ! current_user_can( 'manage_options' ) ) {
+        wp_die( esc_html__( 'You do not have sufficient administrative permissions to manage accounting records.', 'ifsedu-sms' ) );
+    }
+
     global $wpdb;
-
     $table_accounting = $wpdb->prefix . 'sms_accounting';
-    $notice_message   = '';
 
-    // Handle Form Submission
+    // --------------------------------------------------------------------------
+    // 0. AUTO-SCHEMA CHECK (Ensures missing columns are added automatically)
+    // --------------------------------------------------------------------------
+    $check_party = $wpdb->get_results( "SHOW COLUMNS FROM `{$table_accounting}` LIKE 'party_name'" );
+    if ( empty( $check_party ) ) {
+        $wpdb->query( "ALTER TABLE `{$table_accounting}` ADD `party_name` varchar(150) DEFAULT '' NOT NULL AFTER `title`" );
+    }
+
+    $check_attach = $wpdb->get_results( "SHOW COLUMNS FROM `{$table_accounting}` LIKE 'attachment_url'" );
+    if ( empty( $check_attach ) ) {
+        $wpdb->query( "ALTER TABLE `{$table_accounting}` ADD `attachment_url` text AFTER `note`" );
+    }
+
+    $is_edit  = isset( $_GET['sub_mode'] ) && $_GET['sub_mode'] === 'edit' || ( isset( $_GET['sub'] ) && $_GET['sub'] === 'edit' );
+    $entry_id = isset( $_GET['id'] ) ? absint( $_GET['id'] ) : 0;
+    $db_error = '';
+
+    $entry = null;
+    if ( $is_edit && $entry_id > 0 ) {
+        $entry = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table_accounting} WHERE id = %d", $entry_id ) );
+        if ( ! $entry ) {
+            $is_edit = false;
+        }
+    }
+
+    $back_url = admin_url( 'admin.php?page=school_management_system&tab=accounting&sub=list' );
+
+    // --------------------------------------------------------------------------
+    // 1. FORM SUBMISSION ENGINE
+    // --------------------------------------------------------------------------
     if ( isset( $_POST['educore_save_accounting_entry'] ) && isset( $_POST['educore_acct_nonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['educore_acct_nonce'] ) ), 'save_acct_action' ) ) {
+        
         $entry_type     = isset( $_POST['entry_type'] ) ? sanitize_text_field( wp_unslash( $_POST['entry_type'] ) ) : 'Income';
         $category_name  = isset( $_POST['category_name'] ) ? sanitize_text_field( wp_unslash( $_POST['category_name'] ) ) : '';
         $title          = isset( $_POST['title'] ) ? sanitize_text_field( wp_unslash( $_POST['title'] ) ) : '';
+        $party_name     = isset( $_POST['party_name'] ) ? sanitize_text_field( wp_unslash( $_POST['party_name'] ) ) : '';
         $amount         = isset( $_POST['amount'] ) ? max( 0, floatval( $_POST['amount'] ) ) : 0;
         $entry_date     = isset( $_POST['entry_date'] ) ? sanitize_text_field( wp_unslash( $_POST['entry_date'] ) ) : current_time( 'Y-m-d' );
         $payment_method = isset( $_POST['payment_method'] ) ? sanitize_text_field( wp_unslash( $_POST['payment_method'] ) ) : 'Cash';
-        $voucher_no     = isset( $_POST['voucher_no'] ) ? sanitize_text_field( wp_unslash( $_POST['voucher_no'] ) ) : 'VOU-' . wp_rand( 10000, 99999 );
-        $note           = isset( $_POST['note'] ) ? sanitize_text_field( wp_unslash( $_POST['note'] ) ) : '';
+        $voucher_no     = ! empty( $_POST['voucher_no'] ) ? sanitize_text_field( wp_unslash( $_POST['voucher_no'] ) ) : 'VOU-' . wp_rand( 10000, 99999 );
+        $note           = isset( $_POST['note'] ) ? sanitize_textarea_field( wp_unslash( $_POST['note'] ) ) : '';
+        
+        $attachment_url = $entry && ! empty( $entry->attachment_url ) ? $entry->attachment_url : '';
+
+        // Handle Voucher / Receipt File Upload
+        if ( ! empty( $_FILES['voucher_attachment']['name'] ) ) {
+            require_once ABSPATH . 'wp-admin/includes/file.php';
+            $uploaded_file = wp_handle_upload( $_FILES['voucher_attachment'], array( 'test_form' => false ) );
+            if ( ! isset( $uploaded_file['error'] ) && isset( $uploaded_file['url'] ) ) {
+                $attachment_url = esc_url_raw( $uploaded_file['url'] );
+            }
+        }
 
         if ( ! empty( $title ) && $amount > 0 ) {
-            $wpdb->insert(
-                $table_accounting,
-                array(
-                    'voucher_no'     => $voucher_no,
-                    'entry_type'     => $entry_type,
-                    'category_name'  => $category_name,
-                    'title'          => $title,
-                    'amount'         => $amount,
-                    'payment_method' => $payment_method,
-                    'entry_date'     => $entry_date,
-                    'note'           => $note,
-                    'created_by'     => get_current_user_id()
-                ),
-                array( '%s', '%s', '%s', '%s', '%f', '%s', '%s', '%s', '%d' )
+            $data = array(
+                'voucher_no'     => $voucher_no,
+                'entry_type'     => $entry_type,
+                'category_name'  => $category_name,
+                'title'          => $title,
+                'party_name'     => $party_name,
+                'amount'         => $amount,
+                'payment_method' => $payment_method,
+                'entry_date'     => $entry_date,
+                'note'           => $note,
+                'attachment_url' => $attachment_url,
+                'created_by'     => get_current_user_id()
             );
-            $notice_message = esc_html__( 'Transaction entry recorded successfully.', 'ifsedu-sms' );
+
+            if ( $is_edit && $entry_id > 0 ) {
+                $result = $wpdb->update( $table_accounting, $data, array( 'id' => $entry_id ) );
+                $status_flag = 'updated';
+            } else {
+                $result = $wpdb->insert( $table_accounting, $data );
+                $status_flag = 'success';
+            }
+
+            if ( false !== $result ) {
+                if ( class_exists( 'IFSEdu_School_Management_System' ) ) {
+                    IFSEdu_School_Management_System::log_activity( sprintf( "Processed Accounting Entry: (%s) %s - Amount: %.2f", $voucher_no, $title, $amount ) );
+                }
+
+                $redirect_url = add_query_arg(
+                    array(
+                        'page' => 'school_management_system',
+                        'tab'  => 'accounting',
+                        'sub'  => 'list',
+                        'msg'  => $status_flag
+                    ),
+                    admin_url( 'admin.php' )
+                );
+
+                echo '<script type="text/javascript">window.location.href="' . esc_url_raw( $redirect_url ) . '";</script>';
+                exit;
+            } else {
+                $db_error = $wpdb->last_error ? $wpdb->last_error : __( 'Database query execution failed.', 'ifsedu-sms' );
+            }
+        } else {
+            $db_error = __( 'Please enter a valid title and an amount greater than 0.00', 'ifsedu-sms' );
         }
     }
     ?>
@@ -49,8 +121,38 @@ function educore_accounting_add_edit_view() {
         .dpt-add-acct-container {
             font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             color: #0f172a;
-            max-width: 800px;
-            margin: 0 auto;
+            max-width: 880px;
+            margin: 20px auto;
+        }
+
+        .dpt-header-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .dpt-back-btn {
+            height: 38px;
+            padding: 0 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 700;
+            color: #475569;
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s ease;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+
+        .dpt-back-btn:hover {
+            background: #f8fafc;
+            color: #0f172a;
+            border-color: #94a3b8;
         }
 
         .dpt-bento-card {
@@ -71,7 +173,7 @@ function educore_accounting_add_edit_view() {
         }
 
         .afdp-card-title {
-            font-size: 18px;
+            font-size: 19px;
             font-weight: 800;
             color: #0f172a;
             margin: 0;
@@ -80,7 +182,6 @@ function educore_accounting_add_edit_view() {
             gap: 10px;
         }
 
-        /* 2-Column Grid Layout */
         .dpt-form-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
@@ -92,12 +193,8 @@ function educore_accounting_add_edit_view() {
         }
 
         @media (max-width: 640px) {
-            .dpt-form-grid {
-                grid-template-columns: 1fr;
-            }
-            .dpt-form-group.full-width {
-                grid-column: span 1;
-            }
+            .dpt-form-grid { grid-template-columns: 1fr; }
+            .dpt-form-group.full-width { grid-column: span 1; }
         }
 
         .dpt-form-group {
@@ -114,6 +211,8 @@ function educore_accounting_add_edit_view() {
             display: flex;
             align-items: center;
             gap: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
         }
 
         .dpt-input-field, .dpt-select-field, .dpt-textarea-field {
@@ -134,18 +233,17 @@ function educore_accounting_add_edit_view() {
 
         .dpt-textarea-field {
             padding: 10px 14px;
-            height: 80px;
+            height: 75px;
             resize: vertical;
         }
 
         .dpt-input-field:focus, .dpt-select-field:focus, .dpt-textarea-field:focus {
             border-color: #006a4e;
             background-color: #ffffff;
-            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12);
+            box-shadow: 0 0 0 3px rgba(0, 106, 78, 0.12);
             outline: none;
         }
 
-        /* Dynamic Indicator Colors for Flow Type */
         .dpt-select-field.type-income-active {
             border-color: #006a4e;
             background-color: #ecfdf5;
@@ -158,13 +256,21 @@ function educore_accounting_add_edit_view() {
             color: #991b1b;
         }
 
+        .dpt-amount-words {
+            font-size: 11.5px;
+            font-weight: 700;
+            color: #059669;
+            margin-top: 4px;
+            font-style: italic;
+        }
+
         .dpt-btn-submit {
             height: 46px;
             background: #006a4e;
             border: none;
             color: #ffffff;
             font-weight: 700;
-            font-size: 14px;
+            font-size: 14.5px;
             border-radius: 10px;
             cursor: pointer;
             width: 100%;
@@ -173,36 +279,49 @@ function educore_accounting_add_edit_view() {
             align-items: center;
             justify-content: center;
             gap: 8px;
-            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+            box-shadow: 0 4px 12px rgba(0, 106, 78, 0.2);
             margin-top: 10px;
         }
 
         .dpt-btn-submit:hover {
-            background: #059669;
-            box-shadow: 0 6px 16px rgba(16, 185, 129, 0.3);
+            background: #00523c;
+            box-shadow: 0 6px 16px rgba(0, 106, 78, 0.3);
         }
 
-        .afdp-status-banner {
-            background: #ecfdf5;
-            border: 1px solid #a7f3d0;
-            border-radius: 12px;
-            padding: 14px 20px;
-            color: #065f46;
-            font-weight: 600;
-            font-size: 14px;
-            margin-bottom: 24px;
+        .afdp-alert-error {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #991b1b;
+            padding: 14px 18px;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 13.5px;
             display: flex;
             align-items: center;
             gap: 10px;
+            margin-bottom: 20px;
         }
     </style>
 
     <div class="dpt-add-acct-container">
 
-        <?php if ( ! empty( $notice_message ) ) : ?>
-            <div class="afdp-status-banner">
-                <span class="dashicons dashicons-yes-alt" style="font-size: 20px; width:20px; height:20px; color:#006a4e;"></span>
-                <?php echo esc_html( $notice_message ); ?>
+        <!-- Top Navigation Bar -->
+        <div class="dpt-header-bar">
+            <a href="<?php echo esc_url( $back_url ); ?>" class="dpt-back-btn">
+                <span class="dashicons dashicons-arrow-left-alt" style="font-size:14px; width:14px; height:14px;"></span>
+                <?php esc_html_e( 'Back to Accounts List', 'ifsedu-sms' ); ?>
+            </a>
+            <?php if ( $is_edit && $entry ) : ?>
+                <span style="font-weight:800; font-size:13px; color:#006a4e; background:#ecfdf5; padding:6px 12px; border-radius:20px; border:1px solid #a7f3d0;">
+                    <?php echo esc_html( 'Editing Entry #' . $entry->id ); ?>
+                </span>
+            <?php endif; ?>
+        </div>
+
+        <?php if ( ! empty( $db_error ) ) : ?>
+            <div class="afdp-alert-error">
+                <span class="dashicons dashicons-warning" style="font-size:18px; width:18px; height:18px;"></span>
+                <span><?php echo esc_html( $db_error ); ?></span>
             </div>
         <?php endif; ?>
 
@@ -210,13 +329,13 @@ function educore_accounting_add_edit_view() {
             
             <div class="afdp-card-title-group">
                 <h4 class="afdp-card-title">
-                    <span class="dashicons dashicons-plus-alt2" style="color: #006a4e;"></span>
-                    <?php esc_html_e( 'Record Financial Entry', 'ifsedu-sms' ); ?>
+                    <span class="dashicons dashicons-money-alt" style="color: #006a4e;"></span>
+                    <?php echo $is_edit ? esc_html__( 'Edit Financial Ledger Record', 'ifsedu-sms' ) : esc_html__( 'Record New Financial Entry', 'ifsedu-sms' ); ?>
                 </h4>
-                <span style="font-size: 12px; color: #64748b; font-weight: 600;"><?php esc_html_e( 'General Ledger', 'ifsedu-sms' ); ?></span>
+                <span style="font-size: 12px; color: #64748b; font-weight: 600;"><?php esc_html_e( 'General Cash & Bank Ledger', 'ifsedu-sms' ); ?></span>
             </div>
 
-            <form method="POST" action="">
+            <form method="POST" action="" enctype="multipart/form-data">
                 <?php wp_nonce_field( 'save_acct_action', 'educore_acct_nonce' ); ?>
                 
                 <div class="dpt-form-grid">
@@ -225,21 +344,22 @@ function educore_accounting_add_edit_view() {
                     <div class="dpt-form-group">
                         <label class="dpt-form-label"><?php esc_html_e( 'Flow Type', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
                         <select name="entry_type" id="educore_entry_type" class="dpt-select-field type-income-active" style="font-weight:700;" required>
-                            <option value="Income"><?php esc_html_e( 'Income (+ Credit)', 'ifsedu-sms' ); ?></option>
-                            <option value="Expense"><?php esc_html_e( 'Expense (- Debit)', 'ifsedu-sms' ); ?></option>
+                            <option value="Income" <?php selected( $entry ? $entry->entry_type : '', 'Income' ); ?>><?php esc_html_e( 'Income (+ Credit)', 'ifsedu-sms' ); ?></option>
+                            <option value="Expense" <?php selected( $entry ? $entry->entry_type : '', 'Expense' ); ?>><?php esc_html_e( 'Expense (- Debit)', 'ifsedu-sms' ); ?></option>
                         </select>
                     </div>
 
                     <!-- Amount -->
                     <div class="dpt-form-group">
                         <label class="dpt-form-label"><?php esc_html_e( 'Amount (৳)', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
-                        <input type="number" step="0.01" name="amount" class="dpt-input-field" style="font-weight:800; font-size:15px;" placeholder="0.00" min="0.01" required>
+                        <input type="number" step="0.01" name="amount" id="educore_amount_input" class="dpt-input-field" style="font-weight:800; font-size:15px;" placeholder="0.00" min="0.01" value="<?php echo $entry ? esc_attr( $entry->amount ) : ''; ?>" required>
+                        <div id="educore_words_preview" class="dpt-amount-words"></div>
                     </div>
 
                     <!-- Title -->
-                    <div class="dpt-form-group full-width">
+                    <div class="dpt-form-group">
                         <label class="dpt-form-label"><?php esc_html_e( 'Transaction Purpose / Title', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
-                        <input type="text" name="title" class="dpt-input-field" placeholder="e.g. Electrical Repair Bill / Government Grant" required>
+                        <input type="text" name="title" class="dpt-input-field" placeholder="e.g. Electricity Bill Payment / Sports Sponsorship" value="<?php echo $entry ? esc_attr( $entry->title ) : ''; ?>" required>
                     </div>
 
                     <!-- Category -->
@@ -250,40 +370,60 @@ function educore_accounting_add_edit_view() {
                         </select>
                     </div>
 
+                    <!-- Payer / Payee Identity -->
+                    <div class="dpt-form-group">
+                        <label class="dpt-form-label" id="educore_party_label"><?php esc_html_e( 'Received From (Payer)', 'ifsedu-sms' ); ?></label>
+                        <input type="text" name="party_name" class="dpt-input-field" placeholder="e.g. Bangladesh Education Board / Vendor Name" value="<?php echo ( $entry && isset( $entry->party_name ) ) ? esc_attr( $entry->party_name ) : ''; ?>">
+                    </div>
+
                     <!-- Payment Method -->
                     <div class="dpt-form-group">
                         <label class="dpt-form-label"><?php esc_html_e( 'Payment Method', 'ifsedu-sms' ); ?></label>
                         <select name="payment_method" class="dpt-select-field">
-                            <option value="Cash"><?php esc_html_e( 'Cash In Hand', 'ifsedu-sms' ); ?></option>
-                            <option value="Bank Transfer"><?php esc_html_e( 'Bank Transfer', 'ifsedu-sms' ); ?></option>
-                            <option value="bKash / Mobile"><?php esc_html_e( 'bKash / Mobile Wallet', 'ifsedu-sms' ); ?></option>
-                            <option value="Cheque"><?php esc_html_e( 'Cheque', 'ifsedu-sms' ); ?></option>
+                            <option value="Cash" <?php selected( $entry ? $entry->payment_method : '', 'Cash' ); ?>><?php esc_html_e( 'Cash In Hand', 'ifsedu-sms' ); ?></option>
+                            <option value="Bank Transfer" <?php selected( $entry ? $entry->payment_method : '', 'Bank Transfer' ); ?>><?php esc_html_e( 'Bank Wire / Cheque Deposit', 'ifsedu-sms' ); ?></option>
+                            <option value="bKash" <?php selected( $entry ? $entry->payment_method : '', 'bKash' ); ?>><?php esc_html_e( 'bKash Mobile Banking', 'ifsedu-sms' ); ?></option>
+                            <option value="Nagad" <?php selected( $entry ? $entry->payment_method : '', 'Nagad' ); ?>><?php esc_html_e( 'Nagad Mobile Banking', 'ifsedu-sms' ); ?></option>
+                            <option value="Cheque" <?php selected( $entry ? $entry->payment_method : '', 'Cheque' ); ?>><?php esc_html_e( 'Cheque Payment', 'ifsedu-sms' ); ?></option>
                         </select>
                     </div>
 
                     <!-- Voucher No -->
                     <div class="dpt-form-group">
                         <label class="dpt-form-label"><?php esc_html_e( 'Voucher / Ref No.', 'ifsedu-sms' ); ?></label>
-                        <input type="text" name="voucher_no" class="dpt-input-field" value="<?php echo esc_attr( 'VOU-' . wp_rand( 10000, 99999 ) ); ?>">
+                        <input type="text" name="voucher_no" class="dpt-input-field" value="<?php echo $entry ? esc_attr( $entry->voucher_no ) : esc_attr( 'VOU-' . wp_rand( 10000, 99999 ) ); ?>">
                     </div>
 
                     <!-- Transaction Date -->
                     <div class="dpt-form-group">
                         <label class="dpt-form-label"><?php esc_html_e( 'Transaction Date', 'ifsedu-sms' ); ?></label>
-                        <input type="date" name="entry_date" class="dpt-input-field" value="<?php echo esc_attr( current_time('Y-m-d') ); ?>" required>
+                        <input type="date" name="entry_date" class="dpt-input-field" value="<?php echo $entry ? esc_attr( $entry->entry_date ) : esc_attr( current_time('Y-m-d') ); ?>" required>
+                    </div>
+
+                    <!-- Attachment Upload -->
+                    <div class="dpt-form-group full-width">
+                        <label class="dpt-form-label"><?php esc_html_e( 'Attach Receipt / Physical Slip (PDF, PNG, JPG)', 'ifsedu-sms' ); ?></label>
+                        <div style="display:flex; gap:12px; align-items:center;">
+                            <input type="file" name="voucher_attachment" accept="image/*,application/pdf" class="dpt-input-field" style="padding-top:8px;">
+                            <?php if ( $entry && ! empty( $entry->attachment_url ) ) : ?>
+                                <a href="<?php echo esc_url( $entry->attachment_url ); ?>" target="_blank" class="dpt-back-btn" style="height:42px; white-space:nowrap;">
+                                    <span class="dashicons dashicons-media-document"></span> View Current Slip
+                                </a>
+                            <?php endif; ?>
+                        </div>
                     </div>
 
                     <!-- Notes -->
                     <div class="dpt-form-group full-width">
                         <label class="dpt-form-label"><?php esc_html_e( 'Notes / Description', 'ifsedu-sms' ); ?></label>
-                        <textarea name="note" class="dpt-textarea-field" placeholder="Additional details or remarks..."></textarea>
+                        <textarea name="note" class="dpt-textarea-field" placeholder="Enter detailed transaction summary..."><?php echo $entry ? esc_textarea( $entry->note ) : ''; ?></textarea>
                     </div>
 
                     <!-- Submit Button -->
                     <div class="dpt-form-group full-width">
                         <button type="submit" name="educore_save_accounting_entry" class="dpt-btn-submit">
                             <span class="dashicons dashicons-saved"></span>
-                            <?php esc_html_e( 'Record Transaction', 'ifsedu-sms' ); ?>
+                            <?php echo $is_edit ? esc_html__( 'Update Transaction Record', 'ifsedu-sms' ) : esc_html__( 'Record Transaction & Save', 'ifsedu-sms' ); ?>
                         </button>
                     </div>
 
@@ -293,26 +433,34 @@ function educore_accounting_add_edit_view() {
 
     </div>
 
-    <!-- Inline Script for Smart Dynamic Categories -->
+    <!-- Smart Dynamic Categories & In-Words Engine Script -->
     <script type="text/javascript">
     document.addEventListener('DOMContentLoaded', function() {
-        const typeSelect = document.getElementById('educore_entry_type');
+        const typeSelect     = document.getElementById('educore_entry_type');
         const categorySelect = document.getElementById('educore_category_select');
+        const partyLabel     = document.getElementById('educore_party_label');
+        const amountInput    = document.getElementById('educore_amount_input');
+        const wordsPreview   = document.getElementById('educore_words_preview');
+        const savedCategory  = "<?php echo $entry ? esc_js( $entry->category_name ) : ''; ?>";
 
         const incomeCategories = [
-            'General Income',
+            'Tuition / Academic Fees',
             'Government Grant',
-            'Donation / Sponsorship',
-            'Facility Rental',
+            'Donation & Sponsorship',
+            'Asset / Facility Rental',
+            'Exam Sheet & Form Sale',
+            'Bank Interest & Profit',
             'Other Income'
         ];
 
         const expenseCategories = [
-            'Utility Bills',
-            'Maintenance & Repair',
-            'Office & Supplies',
-            'Staff Refreshment',
-            'Property Rent',
+            'Staff Salary & Remuneration',
+            'Utility Bills (Electricity/Gas/Water)',
+            'Maintenance & Infrastructure Repair',
+            'Office & Stationery Supplies',
+            'Property / Campus Lease',
+            'Student Welfare & Sports Event',
+            'Software & IT Hosting',
             'Other Expenses'
         ];
 
@@ -326,20 +474,56 @@ function educore_accounting_add_edit_view() {
                 let opt = document.createElement('option');
                 opt.value = cat;
                 opt.textContent = cat;
+                if (savedCategory && savedCategory === cat) {
+                    opt.selected = true;
+                }
                 categorySelect.appendChild(opt);
             });
 
             if (selectedType === 'Income') {
                 typeSelect.classList.add('type-income-active');
                 typeSelect.classList.remove('type-expense-active');
+                partyLabel.textContent = "<?php echo esc_js( __( 'Received From (Payer)', 'ifsedu-sms' ) ); ?>";
             } else {
                 typeSelect.classList.add('type-expense-active');
                 typeSelect.classList.remove('type-income-active');
+                partyLabel.textContent = "<?php echo esc_js( __( 'Paid To / Vendor Name', 'ifsedu-sms' ) ); ?>";
             }
         }
 
         typeSelect.addEventListener('change', updateCategories);
-        updateCategories(); // Initial load trigger
+        updateCategories();
+
+        // Amount to Words Converter
+        function inWords(num) {
+            const a = ['','One ','Two ','Three ','Four ', 'Five ','Six ','Seven ','Eight ','Nine ','Ten ','Eleven ','Twelve ','Thirteen ','Fourteen ','Fifteen ','Sixteen ','Seventeen ','Eighteen ','Nineteen '];
+            const b = ['', '', 'Twenty','Thirty','Forty','Fifty', 'Sixty','Seventy','Eighty','Ninety'];
+            if ((num = num.toString()).length > 9) return 'overflow';
+            let n = ('000000000' + num).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
+            if (!n) return ''; 
+            let str = '';
+            str += (n[1] != 0) ? (a[Number(n[1])] || b[n[1][0]] + ' ' + a[n[1][1]]) + 'Crore ' : '';
+            str += (n[2] != 0) ? (a[Number(n[2])] || b[n[2][0]] + ' ' + a[n[2][1]]) + 'Lakh ' : '';
+            str += (n[3] != 0) ? (a[Number(n[3])] || b[n[3][0]] + ' ' + a[n[3][1]]) + 'Thousand ' : '';
+            str += (n[4] != 0) ? (a[Number(n[4])] || b[n[4][0]] + ' ' + a[n[4][1]]) + 'Hundred ' : '';
+            str += (n[5] != 0) ? ((str != '') ? 'and ' : '') + (a[Number(n[5])] || b[n[5][0]] + ' ' + a[n[5][1]]) : '';
+            return str ? str.trim() + ' Taka Only' : '';
+        }
+
+        if (amountInput && wordsPreview) {
+            amountInput.addEventListener('input', function() {
+                const val = Math.floor(parseFloat(this.value) || 0);
+                if (val > 0) {
+                    wordsPreview.textContent = inWords(val);
+                } else {
+                    wordsPreview.textContent = '';
+                }
+            });
+            if (amountInput.value) {
+                const val = Math.floor(parseFloat(amountInput.value) || 0);
+                if (val > 0) wordsPreview.textContent = inWords(val);
+            }
+        }
     });
     </script>
     <?php

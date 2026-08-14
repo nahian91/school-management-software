@@ -14,14 +14,18 @@ function educore_staff_add_edit_view() {
 
     $is_edit  = isset( $_GET['sub'] ) && $_GET['sub'] === 'edit';
     $staff_id = isset( $_GET['id'] ) ? absint( $_GET['id'] ) : 0;
+    $db_error = '';
 
     $staff = null;
     if ( $is_edit && $staff_id > 0 ) {
         $staff = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table_staff} WHERE id = %d", $staff_id ) );
+        if ( ! $staff ) {
+            $is_edit = false;
+        }
     }
 
     // 2. Handle Form Submission
-    if ( isset( $_POST['educore_save_staff'] ) && wp_verify_nonce( $_POST['educore_staff_nonce'], 'save_staff_action' ) ) {
+    if ( isset( $_POST['educore_save_staff'] ) && isset( $_POST['educore_staff_nonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['educore_staff_nonce'] ) ), 'save_staff_action' ) ) {
 
         $profile_image = $staff ? $staff->profile_image : '';
 
@@ -29,68 +33,74 @@ function educore_staff_add_edit_view() {
         if ( ! empty( $_FILES['staff_photo']['name'] ) ) {
             require_once ABSPATH . 'wp-admin/includes/file.php';
             $uploaded_file = wp_handle_upload( $_FILES['staff_photo'], array( 'test_form' => false ) );
-            if ( ! isset( $uploaded_file['error'] ) ) {
-                $profile_image = $uploaded_file['url'];
-            } else {
-                echo '<div class="alert alert-danger">' . esc_html__( 'Image Upload Error: ', 'educore' ) . esc_html( $uploaded_file['error'] ) . '</div>';
+            if ( ! isset( $uploaded_file['error'] ) && isset( $uploaded_file['url'] ) ) {
+                $profile_image = esc_url_raw( $uploaded_file['url'] );
             }
         }
 
         $data = array(
             'order_number'       => isset( $_POST['order_number'] ) ? absint( $_POST['order_number'] ) : 0,
-            'full_name'          => isset( $_POST['full_name'] ) ? sanitize_text_field( $_POST['full_name'] ) : '',
-            'name_bn'            => isset( $_POST['name_bn'] ) ? sanitize_text_field( $_POST['name_bn'] ) : '',
-            'father_name'        => isset( $_POST['father_name'] ) ? sanitize_text_field( $_POST['father_name'] ) : '',
-            'mother_name'        => isset( $_POST['mother_name'] ) ? sanitize_text_field( $_POST['mother_name'] ) : '',
-            'designation'        => isset( $_POST['designation'] ) ? sanitize_text_field( $_POST['designation'] ) : '',
-            'staff_type'         => isset( $_POST['staff_type'] ) ? sanitize_text_field( $_POST['staff_type'] ) : '',
-            'pay_grade'          => isset( $_POST['pay_grade'] ) ? sanitize_text_field( $_POST['pay_grade'] ) : '',
-            'index_no'           => isset( $_POST['index_no'] ) ? sanitize_text_field( $_POST['index_no'] ) : '',
-            'nid_no'             => isset( $_POST['nid_no'] ) ? sanitize_text_field( $_POST['nid_no'] ) : '',
-            'dob'                => isset( $_POST['dob'] ) ? sanitize_text_field( $_POST['dob'] ) : '1970-01-01',
-            'gender'             => isset( $_POST['gender'] ) ? sanitize_text_field( $_POST['gender'] ) : 'Male',
-            'phone'              => isset( $_POST['phone'] ) ? sanitize_text_field( $_POST['phone'] ) : '',
-            'whatsapp_no'        => isset( $_POST['whatsapp_no'] ) ? sanitize_text_field( $_POST['whatsapp_no'] ) : '',
-            'email'              => isset( $_POST['email'] ) ? sanitize_email( $_POST['email'] ) : '',
-            'blood_group'        => isset( $_POST['blood_group'] ) ? sanitize_text_field( $_POST['blood_group'] ) : '',
-            'quota_type'         => isset( $_POST['quota_type'] ) ? sanitize_text_field( $_POST['quota_type'] ) : 'General',
-            'joining_date'       => isset( $_POST['joining_date'] ) ? sanitize_text_field( $_POST['joining_date'] ) : '1970-01-01',
+            'full_name'          => isset( $_POST['full_name'] ) ? sanitize_text_field( wp_unslash( $_POST['full_name'] ) ) : '',
+            'name_bn'            => isset( $_POST['name_bn'] ) ? sanitize_text_field( wp_unslash( $_POST['name_bn'] ) ) : '',
+            'father_name'        => isset( $_POST['father_name'] ) ? sanitize_text_field( wp_unslash( $_POST['father_name'] ) ) : '',
+            'mother_name'        => isset( $_POST['mother_name'] ) ? sanitize_text_field( wp_unslash( $_POST['mother_name'] ) ) : '',
+            'designation'        => isset( $_POST['designation'] ) ? sanitize_text_field( wp_unslash( $_POST['designation'] ) ) : '',
+            'staff_type'         => isset( $_POST['staff_type'] ) ? sanitize_text_field( wp_unslash( $_POST['staff_type'] ) ) : '',
+            'pay_grade'          => isset( $_POST['pay_grade'] ) ? sanitize_text_field( wp_unslash( $_POST['pay_grade'] ) ) : '',
+            'index_no'           => isset( $_POST['index_no'] ) ? sanitize_text_field( wp_unslash( $_POST['index_no'] ) ) : '',
+            'nid_no'             => isset( $_POST['nid_no'] ) ? sanitize_text_field( wp_unslash( $_POST['nid_no'] ) ) : '',
+            'dob'                => ! empty( $_POST['dob'] ) ? sanitize_text_field( wp_unslash( $_POST['dob'] ) ) : '1970-01-01',
+            'gender'             => isset( $_POST['gender'] ) ? sanitize_text_field( wp_unslash( $_POST['gender'] ) ) : 'Male',
+            'phone'              => isset( $_POST['phone'] ) ? sanitize_text_field( wp_unslash( $_POST['phone'] ) ) : '',
+            'whatsapp_no'        => isset( $_POST['whatsapp_no'] ) ? sanitize_text_field( wp_unslash( $_POST['whatsapp_no'] ) ) : '',
+            'email'              => isset( $_POST['email'] ) ? sanitize_email( wp_unslash( $_POST['email'] ) ) : '',
+            'blood_group'        => isset( $_POST['blood_group'] ) ? sanitize_text_field( wp_unslash( $_POST['blood_group'] ) ) : '',
+            'quota_type'         => isset( $_POST['quota_type'] ) ? sanitize_text_field( wp_unslash( $_POST['quota_type'] ) ) : 'General',
+            'joining_date'       => ! empty( $_POST['joining_date'] ) ? sanitize_text_field( wp_unslash( $_POST['joining_date'] ) ) : current_time( 'Y-m-d' ),
             'salary'             => isset( $_POST['salary'] ) ? floatval( $_POST['salary'] ) : 0.00,
-            'subject_expert'     => isset( $_POST['subject_expert'] ) ? sanitize_text_field( $_POST['subject_expert'] ) : '',
-            'highest_degree'     => isset( $_POST['highest_degree'] ) ? sanitize_text_field( $_POST['highest_degree'] ) : '',
+            'subject_expert'     => isset( $_POST['subject_expert'] ) ? sanitize_text_field( wp_unslash( $_POST['subject_expert'] ) ) : '',
+            'highest_degree'     => isset( $_POST['highest_degree'] ) ? sanitize_text_field( wp_unslash( $_POST['highest_degree'] ) ) : '',
 
-            'emergency_name'     => isset( $_POST['emergency_name'] ) ? sanitize_text_field( $_POST['emergency_name'] ) : '',
-            'emergency_phone'    => isset( $_POST['emergency_phone'] ) ? sanitize_text_field( $_POST['emergency_phone'] ) : '',
-            'emergency_relation' => isset( $_POST['emergency_relation'] ) ? sanitize_text_field( $_POST['emergency_relation'] ) : '',
+            'emergency_name'     => isset( $_POST['emergency_name'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_name'] ) ) : '',
+            'emergency_phone'    => isset( $_POST['emergency_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_phone'] ) ) : '',
+            'emergency_relation' => isset( $_POST['emergency_relation'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_relation'] ) ) : '',
 
-            'bank_name'          => isset( $_POST['bank_name'] ) ? sanitize_text_field( $_POST['bank_name'] ) : '',
-            'bank_acc_no'        => isset( $_POST['bank_acc_no'] ) ? sanitize_text_field( $_POST['bank_acc_no'] ) : '',
-            'bank_routing'       => isset( $_POST['bank_routing'] ) ? sanitize_text_field( $_POST['bank_routing'] ) : '',
+            'bank_name'          => isset( $_POST['bank_name'] ) ? sanitize_text_field( wp_unslash( $_POST['bank_name'] ) ) : '',
+            'bank_acc_no'        => isset( $_POST['bank_acc_no'] ) ? sanitize_text_field( wp_unslash( $_POST['bank_acc_no'] ) ) : '',
+            'bank_routing'       => isset( $_POST['bank_routing'] ) ? sanitize_text_field( wp_unslash( $_POST['bank_routing'] ) ) : '',
 
-            'address'            => isset( $_POST['address'] ) ? sanitize_textarea_field( $_POST['address'] ) : '',
-            'permanent_address'  => isset( $_POST['permanent_address'] ) ? sanitize_textarea_field( $_POST['permanent_address'] ) : '',
+            'address'            => isset( $_POST['address'] ) ? sanitize_textarea_field( wp_unslash( $_POST['address'] ) ) : '',
+            'permanent_address'  => isset( $_POST['permanent_address'] ) ? sanitize_textarea_field( wp_unslash( $_POST['permanent_address'] ) ) : '',
 
-            'linkedin_url'       => isset( $_POST['linkedin_url'] ) ? sanitize_url( $_POST['linkedin_url'] ) : '',
-            'facebook_url'       => isset( $_POST['facebook_url'] ) ? sanitize_url( $_POST['facebook_url'] ) : '',
-            'website_url'        => isset( $_POST['website_url'] ) ? sanitize_url( $_POST['website_url'] ) : '',
+            'linkedin_url'       => isset( $_POST['linkedin_url'] ) ? sanitize_url( wp_unslash( $_POST['linkedin_url'] ) ) : '',
+            'facebook_url'       => isset( $_POST['facebook_url'] ) ? sanitize_url( wp_unslash( $_POST['facebook_url'] ) ) : '',
+            'website_url'        => isset( $_POST['website_url'] ) ? sanitize_url( wp_unslash( $_POST['website_url'] ) ) : '',
 
             'profile_image'      => $profile_image,
-            'status'             => isset( $_POST['status'] ) ? sanitize_text_field( $_POST['status'] ) : 'Active'
+            'status'             => isset( $_POST['status'] ) ? sanitize_text_field( wp_unslash( $_POST['status'] ) ) : 'Active'
         );
 
         if ( $is_edit && $staff_id > 0 ) {
-            $wpdb->update( $table_staff, $data, array( 'id' => $staff_id ) );
-            echo '<div class="alert alert-success">' . esc_html__( 'Staff profile updated successfully.', 'educore' ) . '</div>';
-            $staff = (object) array_merge( (array) $staff, $data );
+            $updated = $wpdb->update( $table_staff, $data, array( 'id' => $staff_id ) );
+            if ( false !== $updated ) {
+                $redirect_url = admin_url( 'admin.php?page=school_management_system&tab=staff&sub=list&msg=updated' );
+                echo '<script type="text/javascript">window.location.href="' . esc_url_raw( $redirect_url ) . '";</script>';
+                exit;
+            } else {
+                $db_error = $wpdb->last_error ? $wpdb->last_error : __( 'Failed to update database record.', 'educore' );
+            }
         } else {
-            $wpdb->insert( $table_staff, $data );
-            echo '<div class="alert alert-success">' . esc_html__( 'New staff member added successfully.', 'educore' ) . '</div>';
-            $_POST = array();
-            $profile_image = '';
-        }
-
-        if ( class_exists( 'IFSEdu_School_Management_System' ) ) {
-            IFSEdu_School_Management_System::log_activity( "Saved staff record: " . $data['full_name'] );
+            $inserted = $wpdb->insert( $table_staff, $data );
+            if ( false !== $inserted ) {
+                if ( class_exists( 'IFSEdu_School_Management_System' ) ) {
+                    IFSEdu_School_Management_System::log_activity( "Added new staff record: " . $data['full_name'] );
+                }
+                $redirect_url = admin_url( 'admin.php?page=school_management_system&tab=staff&sub=list&msg=success' );
+                echo '<script type="text/javascript">window.location.href="' . esc_url_raw( $redirect_url ) . '";</script>';
+                exit;
+            } else {
+                $db_error = $wpdb->last_error ? $wpdb->last_error : __( 'Failed to insert staff record to database.', 'educore' );
+            }
         }
     }
 
@@ -100,7 +110,7 @@ function educore_staff_add_edit_view() {
     <style>
         .educore-step-content { display: none; }
         .educore-step-content.active { display: block; }
-        .nav-tabs .nav-link { color: #495057; font-weight: 600; border: 1px solid #dee2e6; margin-right: 5px; border-radius: 5px 5px 0 0; background-color: #f8f9fa; }
+        .nav-tabs .nav-link { color: #495057; font-weight: 600; border: 1px solid #dee2e6; margin-right: 5px; border-radius: 5px 5px 0 0; background-color: #f8f9fa; cursor: pointer; }
         .nav-tabs .nav-link.active { color: #fff !important; background-color: #006a4e !important; border-color: #006a4e !important; }
         .nav-tabs .nav-link.completed { background-color: #e2fbf0; color: #047857; border-color: #a7f3d0; }
         .form-step-actions { border-top: 1px solid #dee2e6; padding-top: 20px; margin-top: 30px; }
@@ -109,6 +119,12 @@ function educore_staff_add_edit_view() {
     <div class="mb-3">
         <a href="<?php echo esc_url( $back_url ); ?>" class="btn btn-secondary btn-sm">&larr; <?php esc_html_e( 'Back to Directory', 'educore' ); ?></a>
     </div>
+
+    <?php if ( ! empty( $db_error ) ) : ?>
+        <div class="alert alert-danger mb-3 font-weight-bold">
+            <?php echo esc_html( $db_error ); ?>
+        </div>
+    <?php endif; ?>
 
     <div class="bg-white p-4 rounded shadow-sm border">
         <h3 class="pb-2 mb-4 text-success fw-bold border-bottom">
@@ -131,7 +147,8 @@ function educore_staff_add_edit_view() {
             </li>
         </ul>
 
-        <form method="POST" action="" enctype="multipart/form-data" id="educoreStaffForm">
+        <!-- Added novalidate to prevent hidden fields from blocking multi-step submission -->
+        <form method="POST" action="" enctype="multipart/form-data" id="educoreStaffForm" novalidate>
             <?php wp_nonce_field( 'save_staff_action', 'educore_staff_nonce' ); ?>
             
             <!-- STEP 1: Personal Identification -->
@@ -150,7 +167,7 @@ function educore_staff_add_edit_view() {
                         <input type="number" name="order_number" class="form-control" placeholder="e.g., 1" value="<?php echo $staff ? esc_attr( $staff->order_number ) : '0'; ?>" min="0">
                     </div>
                     <div class="col-md-3 mb-3">
-                        <label class="form-label fw-bold"><?php esc_html_e( 'Full Name (English)', 'educore' ); ?></label>
+                        <label class="form-label fw-bold"><?php esc_html_e( 'Full Name (English)', 'educore' ); ?> <span class="text-danger">*</span></label>
                         <input type="text" name="full_name" class="form-control" value="<?php echo $staff ? esc_attr( $staff->full_name ) : ''; ?>" required>
                     </div>
                     <div class="col-md-3 mb-3">
@@ -158,7 +175,7 @@ function educore_staff_add_edit_view() {
                         <input type="text" name="name_bn" class="form-control" value="<?php echo $staff ? esc_attr( $staff->name_bn ) : ''; ?>">
                     </div>
                     <div class="col-md-3 mb-3">
-                        <label class="form-label fw-bold"><?php esc_html_e( 'National ID / NID No', 'educore' ); ?></label>
+                        <label class="form-label fw-bold"><?php esc_html_e( 'National ID / NID No', 'educore' ); ?> <span class="text-danger">*</span></label>
                         <input type="text" name="nid_no" class="form-control" maxlength="17" value="<?php echo $staff ? esc_attr( $staff->nid_no ) : ''; ?>" required>
                     </div>
                 </div>
@@ -176,11 +193,11 @@ function educore_staff_add_edit_view() {
 
                 <div class="row">
                     <div class="col-md-3 mb-3">
-                        <label class="form-label fw-bold"><?php esc_html_e( 'Date of Birth', 'educore' ); ?></label>
+                        <label class="form-label fw-bold"><?php esc_html_e( 'Date of Birth', 'educore' ); ?> <span class="text-danger">*</span></label>
                         <input type="date" name="dob" class="form-control" value="<?php echo $staff ? esc_attr( $staff->dob ) : ''; ?>" required>
                     </div>
                     <div class="col-md-3 mb-3">
-                        <label class="form-label fw-bold"><?php esc_html_e( 'Gender', 'educore' ); ?></label>
+                        <label class="form-label fw-bold"><?php esc_html_e( 'Gender', 'educore' ); ?> <span class="text-danger">*</span></label>
                         <select name="gender" class="form-control" required>
                             <option value="Male" <?php selected( $staff ? $staff->gender : '', 'Male' ); ?>><?php esc_html_e( 'Male', 'educore' ); ?></option>
                             <option value="Female" <?php selected( $staff ? $staff->gender : '', 'Female' ); ?>><?php esc_html_e( 'Female', 'educore' ); ?></option>
@@ -188,7 +205,7 @@ function educore_staff_add_edit_view() {
                         </select>
                     </div>
                     <div class="col-md-3 mb-3">
-                        <label class="form-label fw-bold"><?php esc_html_e( 'Mobile Number', 'educore' ); ?></label>
+                        <label class="form-label fw-bold"><?php esc_html_e( 'Mobile Number', 'educore' ); ?> <span class="text-danger">*</span></label>
                         <input type="text" name="phone" class="form-control" value="<?php echo $staff ? esc_attr( $staff->phone ) : ''; ?>" required>
                     </div>
                     <div class="col-md-3 mb-3">
@@ -222,11 +239,11 @@ function educore_staff_add_edit_view() {
                 <h5 class="mb-3 text-success border-bottom pb-2"><?php esc_html_e( 'Employment & Academic Setup', 'educore' ); ?></h5>
                 <div class="row">
                     <div class="col-md-3 mb-3">
-                        <label class="form-label fw-bold"><?php esc_html_e( 'Designation (Official Role)', 'educore' ); ?></label>
+                        <label class="form-label fw-bold"><?php esc_html_e( 'Designation (Official Role)', 'educore' ); ?> <span class="text-danger">*</span></label>
                         <input type="text" name="designation" class="form-control" placeholder="e.g., Assistant Teacher, Lecturer" value="<?php echo $staff ? esc_attr( $staff->designation ) : ''; ?>" required>
                     </div>
                     <div class="col-md-3 mb-3">
-                        <label class="form-label fw-bold"><?php esc_html_e( 'Employment Type', 'educore' ); ?></label>
+                        <label class="form-label fw-bold"><?php esc_html_e( 'Employment Type', 'educore' ); ?> <span class="text-danger">*</span></label>
                         <select name="staff_type" class="form-control" required>
                             <option value=""><?php esc_html_e( '-- Select Type --', 'educore' ); ?></option>
                             <option value="Teacher (School)" <?php selected( $staff ? $staff->staff_type : '', 'Teacher (School)' ); ?>><?php esc_html_e( 'Teacher (School)', 'educore' ); ?></option>
@@ -275,11 +292,11 @@ function educore_staff_add_edit_view() {
 
                 <div class="row">
                     <div class="col-md-6 mb-3">
-                        <label class="form-label fw-bold"><?php esc_html_e( 'Joining Date', 'educore' ); ?></label>
+                        <label class="form-label fw-bold"><?php esc_html_e( 'Joining Date', 'educore' ); ?> <span class="text-danger">*</span></label>
                         <input type="date" name="joining_date" class="form-control" value="<?php echo $staff ? esc_attr( $staff->joining_date ) : esc_attr( date( 'Y-m-d' ) ); ?>" required>
                     </div>
                     <div class="col-md-6 mb-3">
-                        <label class="form-label fw-bold"><?php esc_html_e( 'Gross / Basic Salary (৳)', 'educore' ); ?></label>
+                        <label class="form-label fw-bold"><?php esc_html_e( 'Gross / Basic Salary (৳)', 'educore' ); ?> <span class="text-danger">*</span></label>
                         <input type="number" step="0.01" name="salary" class="form-control" value="<?php echo $staff ? esc_attr( $staff->salary ) : '0.00'; ?>" required>
                     </div>
                 </div>
@@ -409,20 +426,33 @@ function educore_staff_add_edit_view() {
                 }
             }
 
-            // Step Forward Mechanics with Validation Check
-            $('#educoreNextBtn').on('click', function() {
-                var currentStepFields = $('#educore-step-' + currentStep).find('input[required], select[required], textarea[required]');
+            function validateStep(stepNum) {
+                var currentStepFields = $('#educore-step-' + stepNum).find('input[required], select[required], textarea[required]');
                 var isValid = true;
 
                 currentStepFields.each(function() {
-                    if (!this.checkValidity()) {
+                    if (!this.value.trim()) {
                         isValid = false;
-                        this.reportValidity();
-                        return false; 
+                        $(this).addClass('is-invalid');
+                        $(this).on('input change', function tmp() {
+                            if (this.value.trim()) {
+                                $(this).removeClass('is-invalid');
+                                $(this).off('input change', tmp);
+                            }
+                        });
                     }
                 });
 
-                if (isValid) {
+                if (!isValid) {
+                    alert('<?php echo esc_js( __( 'Please fill in all required (*) fields in this step before proceeding.', 'educore' ) ); ?>');
+                }
+
+                return isValid;
+            }
+
+            // Step Forward Mechanics with Validation Check
+            $('#educoreNextBtn').on('click', function() {
+                if (validateStep(currentStep)) {
                     $('#step-' + currentStep + '-tab').addClass('completed');
                     if (currentStep < totalSteps) {
                         currentStep++;
@@ -442,12 +472,20 @@ function educore_staff_add_edit_view() {
             // Direct Tab Click Navigation
             $('#educoreStaffTabs .nav-link').on('click', function() {
                 var targetStep = parseInt($(this).data('step'));
-                if (targetStep < currentStep) {
+                if (targetStep < currentStep || validateStep(currentStep)) {
                     currentStep = targetStep;
                     updateStepVisibility();
-                } else if (targetStep > currentStep) {
-                    for (var i = currentStep; i < targetStep; i++) {
-                        $('#educoreNextBtn').trigger('click');
+                }
+            });
+
+            // Final Form Submit Validation
+            $('#educoreStaffForm').on('submit', function(e) {
+                for (var i = 1; i <= totalSteps; i++) {
+                    if (!validateStep(i)) {
+                        e.preventDefault();
+                        currentStep = i;
+                        updateStepVisibility();
+                        return false;
                     }
                 }
             });
@@ -455,4 +493,3 @@ function educore_staff_add_edit_view() {
     </script>
     <?php
 }
-?>

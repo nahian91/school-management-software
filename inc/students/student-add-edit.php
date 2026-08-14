@@ -54,73 +54,71 @@ function educore_student_add_edit_view() {
         if ( ! empty( $_FILES['student_photo']['name'] ) ) {
             require_once ABSPATH . 'wp-admin/includes/file.php';
             $uploaded_file = wp_handle_upload( $_FILES['student_photo'], array( 'test_form' => false ) );
-            if ( isset( $uploaded_file['error'] ) ) {
-                echo '<div class="afdp-status-banner warning"><span class="dashicons dashicons-warning"></span> ' . sprintf( esc_html__( 'Photo Upload Error: %s', 'ifsedu-sms' ), esc_html( $uploaded_file['error'] ) ) . '</div>';
-            } else {
+            if ( ! isset( $uploaded_file['error'] ) && isset( $uploaded_file['url'] ) ) {
                 $photo_url = esc_url_raw( $uploaded_file['url'] );
             }
         }
 
         $data = array(
-            'student_id'         => sanitize_text_field( wp_unslash( $_POST['student_id'] ) ),
-            'full_name'          => sanitize_text_field( wp_unslash( $_POST['full_name'] ) ),
-            'name_bn'            => sanitize_text_field( wp_unslash( $_POST['name_bn'] ) ),
-            'class_name'         => sanitize_text_field( wp_unslash( $_POST['class_name'] ) ),
-            'section_name'       => sanitize_text_field( wp_unslash( $_POST['section_name'] ) ),
-            'roll_no'            => intval( $_POST['roll_no'] ),
-            'admission_date'     => sanitize_text_field( wp_unslash( $_POST['admission_date'] ) ),
-            'birth_reg_no'       => sanitize_text_field( wp_unslash( $_POST['birth_reg_no'] ) ),
-            'dob'                => sanitize_text_field( wp_unslash( $_POST['dob'] ) ),
-            'birth_place'        => sanitize_text_field( wp_unslash( $_POST['birth_place'] ) ),
-            'gender'             => sanitize_text_field( wp_unslash( $_POST['gender'] ) ),
-            'blood_group'        => sanitize_text_field( wp_unslash( $_POST['blood_group'] ) ),
-            'religion'           => sanitize_text_field( wp_unslash( $_POST['religion'] ) ),
-            'nationality'        => sanitize_text_field( wp_unslash( $_POST['nationality'] ) ),
-            'student_email'      => sanitize_email( wp_unslash( $_POST['student_email'] ) ),
-            'student_phone'      => sanitize_text_field( wp_unslash( $_POST['student_phone'] ) ),
-            'quota'              => sanitize_text_field( wp_unslash( $_POST['quota'] ) ),
+            'student_id'         => isset( $_POST['student_id'] ) ? sanitize_text_field( wp_unslash( $_POST['student_id'] ) ) : '',
+            'full_name'          => isset( $_POST['full_name'] ) ? sanitize_text_field( wp_unslash( $_POST['full_name'] ) ) : '',
+            'name_bn'            => isset( $_POST['name_bn'] ) ? sanitize_text_field( wp_unslash( $_POST['name_bn'] ) ) : '',
+            'class_name'         => isset( $_POST['class_name'] ) ? sanitize_text_field( wp_unslash( $_POST['class_name'] ) ) : '',
+            'section_name'       => isset( $_POST['section_name'] ) ? sanitize_text_field( wp_unslash( $_POST['section_name'] ) ) : '',
+            'roll_no'            => isset( $_POST['roll_no'] ) ? intval( $_POST['roll_no'] ) : 0,
+            'admission_date'     => isset( $_POST['admission_date'] ) ? sanitize_text_field( wp_unslash( $_POST['admission_date'] ) ) : '',
+            'birth_reg_no'       => isset( $_POST['birth_reg_no'] ) ? sanitize_text_field( wp_unslash( $_POST['birth_reg_no'] ) ) : '',
+            'dob'                => isset( $_POST['dob'] ) ? sanitize_text_field( wp_unslash( $_POST['dob'] ) ) : '',
+            'birth_place'        => isset( $_POST['birth_place'] ) ? sanitize_text_field( wp_unslash( $_POST['birth_place'] ) ) : '',
+            'gender'             => isset( $_POST['gender'] ) ? sanitize_text_field( wp_unslash( $_POST['gender'] ) ) : 'Male',
+            'blood_group'        => isset( $_POST['blood_group'] ) ? sanitize_text_field( wp_unslash( $_POST['blood_group'] ) ) : '',
+            'religion'           => isset( $_POST['religion'] ) ? sanitize_text_field( wp_unslash( $_POST['religion'] ) ) : 'Islam',
+            'nationality'        => isset( $_POST['nationality'] ) ? sanitize_text_field( wp_unslash( $_POST['nationality'] ) ) : 'Bangladeshi',
+            'student_email'      => isset( $_POST['student_email'] ) ? sanitize_email( wp_unslash( $_POST['student_email'] ) ) : '',
+            'student_phone'      => isset( $_POST['student_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['student_phone'] ) ) : '',
+            'quota'              => isset( $_POST['quota'] ) ? sanitize_text_field( wp_unslash( $_POST['quota'] ) ) : 'General',
             
-            'father_name'        => sanitize_text_field( wp_unslash( $_POST['father_name'] ) ),
-            'father_name_bn'     => sanitize_text_field( wp_unslash( $_POST['father_name_bn'] ) ),
-            'father_nid'         => sanitize_text_field( wp_unslash( $_POST['father_nid'] ) ),
-            'father_phone'       => sanitize_text_field( wp_unslash( $_POST['father_phone'] ) ),
-            'father_profession'  => sanitize_text_field( wp_unslash( $_POST['father_profession'] ) ),
+            'father_name'        => isset( $_POST['father_name'] ) ? sanitize_text_field( wp_unslash( $_POST['father_name'] ) ) : '',
+            'father_name_bn'     => isset( $_POST['father_name_bn'] ) ? sanitize_text_field( wp_unslash( $_POST['father_name_bn'] ) ) : '',
+            'father_nid'         => isset( $_POST['father_nid'] ) ? sanitize_text_field( wp_unslash( $_POST['father_nid'] ) ) : '',
+            'father_phone'       => isset( $_POST['father_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['father_phone'] ) ) : '',
+            'father_profession'  => isset( $_POST['father_profession'] ) ? sanitize_text_field( wp_unslash( $_POST['father_profession'] ) ) : '',
             
-            'mother_name'        => sanitize_text_field( wp_unslash( $_POST['mother_name'] ) ),
-            'mother_name_bn'     => sanitize_text_field( wp_unslash( $_POST['mother_name_bn'] ) ),
-            'mother_nid'         => sanitize_text_field( wp_unslash( $_POST['mother_nid'] ) ),
-            'mother_phone'       => sanitize_text_field( wp_unslash( $_POST['mother_phone'] ) ),
-            'mother_profession'  => sanitize_text_field( wp_unslash( $_POST['mother_profession'] ) ),
+            'mother_name'        => isset( $_POST['mother_name'] ) ? sanitize_text_field( wp_unslash( $_POST['mother_name'] ) ) : '',
+            'mother_name_bn'     => isset( $_POST['mother_name_bn'] ) ? sanitize_text_field( wp_unslash( $_POST['mother_name_bn'] ) ) : '',
+            'mother_nid'         => isset( $_POST['mother_nid'] ) ? sanitize_text_field( wp_unslash( $_POST['mother_nid'] ) ) : '',
+            'mother_phone'       => isset( $_POST['mother_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['mother_phone'] ) ) : '',
+            'mother_profession'  => isset( $_POST['mother_profession'] ) ? sanitize_text_field( wp_unslash( $_POST['mother_profession'] ) ) : '',
             
-            'guardian_name'      => sanitize_text_field( wp_unslash( $_POST['guardian_name'] ) ),
-            'guardian_phone'     => sanitize_text_field( wp_unslash( $_POST['guardian_phone'] ) ),
-            'guardian_relation'  => sanitize_text_field( wp_unslash( $_POST['guardian_relation'] ) ),
-            'guardian_nid'        => sanitize_text_field( wp_unslash( $_POST['guardian_nid'] ) ),
-            'guardian_income'    => sanitize_text_field( wp_unslash( $_POST['guardian_income'] ) ),
+            'guardian_name'      => isset( $_POST['guardian_name'] ) ? sanitize_text_field( wp_unslash( $_POST['guardian_name'] ) ) : '',
+            'guardian_phone'     => isset( $_POST['guardian_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['guardian_phone'] ) ) : '',
+            'guardian_relation'  => isset( $_POST['guardian_relation'] ) ? sanitize_text_field( wp_unslash( $_POST['guardian_relation'] ) ) : '',
+            'guardian_nid'       => isset( $_POST['guardian_nid'] ) ? sanitize_text_field( wp_unslash( $_POST['guardian_nid'] ) ) : '',
+            'guardian_income'    => isset( $_POST['guardian_income'] ) ? sanitize_text_field( wp_unslash( $_POST['guardian_income'] ) ) : '',
             
-            'prev_school_name'   => sanitize_text_field( wp_unslash( $_POST['prev_school_name'] ) ),
-            'prev_eiin'          => sanitize_text_field( wp_unslash( $_POST['prev_eiin'] ) ),
-            'prev_class'         => sanitize_text_field( wp_unslash( $_POST['prev_class'] ) ),
-            'prev_gpa'           => sanitize_text_field( wp_unslash( $_POST['prev_gpa'] ) ),
+            'prev_school_name'   => isset( $_POST['prev_school_name'] ) ? sanitize_text_field( wp_unslash( $_POST['prev_school_name'] ) ) : '',
+            'prev_eiin'          => isset( $_POST['prev_eiin'] ) ? sanitize_text_field( wp_unslash( $_POST['prev_eiin'] ) ) : '',
+            'prev_class'         => isset( $_POST['prev_class'] ) ? sanitize_text_field( wp_unslash( $_POST['prev_class'] ) ) : '',
+            'prev_gpa'           => isset( $_POST['prev_gpa'] ) ? sanitize_text_field( wp_unslash( $_POST['prev_gpa'] ) ) : '',
             
-            'address'            => sanitize_textarea_field( wp_unslash( $_POST['address'] ) ),
-            'permanent_address'  => sanitize_textarea_field( wp_unslash( $_POST['permanent_address'] ) ),
-            'residential_status' => sanitize_text_field( wp_unslash( $_POST['residential_status'] ) ),
+            'address'            => isset( $_POST['address'] ) ? sanitize_textarea_field( wp_unslash( $_POST['address'] ) ) : '',
+            'permanent_address'  => isset( $_POST['permanent_address'] ) ? sanitize_textarea_field( wp_unslash( $_POST['permanent_address'] ) ) : '',
+            'residential_status' => isset( $_POST['residential_status'] ) ? sanitize_text_field( wp_unslash( $_POST['residential_status'] ) ) : 'Non-Residential',
             'co_curricular'      => isset( $_POST['co_curricular'] ) ? implode( ', ', array_map( 'sanitize_text_field', wp_unslash( $_POST['co_curricular'] ) ) ) : '',
             
             'photo_url'          => $photo_url,
-            'status'             => sanitize_text_field( wp_unslash( $_POST['status'] ) )
+            'status'             => isset( $_POST['status'] ) ? sanitize_text_field( wp_unslash( $_POST['status'] ) ) : 'Active'
         );
 
         if ( $is_edit ) {
             $wpdb->update( $table_students, $data, array( 'id' => $student_id ) );
-            $redirect_url = admin_url( 'admin.php?page=school_management_system&tab=students&sub=list&status=updated' );
+            $redirect_url = admin_url( 'admin.php?page=school_management_system&tab=students&sub=list&msg=updated' );
         } else {
             $wpdb->insert( $table_students, $data );
-            $redirect_url = admin_url( 'admin.php?page=school_management_system&tab=students&sub=list&status=success' );
+            $redirect_url = admin_url( 'admin.php?page=school_management_system&tab=students&sub=list&msg=success' );
         }
 
-        echo '<script type="text/javascript">window.location.href="' . esc_url( $redirect_url ) . '";</script>';
+        echo '<script type="text/javascript">window.location.href="' . esc_url_raw( $redirect_url ) . '";</script>';
         exit;
     }
 
@@ -453,7 +451,7 @@ function educore_student_add_edit_view() {
             </div>
 
             <!-- Form Workspace -->
-            <form method="POST" action="" enctype="multipart/form-data" id="educoreStudentForm">
+            <form method="POST" action="" enctype="multipart/form-data" id="educoreStudentForm" novalidate>
                 <?php wp_nonce_field( 'save_student_action', 'educore_student_nonce' ); ?>
 
                 <!-- STEP 1: Academic & Basic Personal Profile -->
@@ -887,8 +885,8 @@ function educore_student_add_edit_view() {
         }
 
         // 5. Validation Check
-        function validateStep() {
-            const activePanel = document.getElementById('educore-step-' + currentStep);
+        function validateStep(stepNumber) {
+            const activePanel = document.getElementById('educore-step-' + stepNumber);
             const requiredFields = activePanel.querySelectorAll('[required]');
             let valid = true;
 
@@ -906,13 +904,13 @@ function educore_student_add_edit_view() {
             });
 
             if (!valid) {
-                alert('<?php echo esc_js( __( 'Please complete all required (*) fields before proceeding.', 'ifsedu-sms' ) ); ?>');
+                alert('<?php echo esc_js( __( 'Please complete all required (*) fields in this step before proceeding.', 'ifsedu-sms' ) ); ?>');
             }
             return valid;
         }
 
         btnNext.addEventListener('click', function() {
-            if (validateStep() && currentStep < totalSteps) {
+            if (validateStep(currentStep) && currentStep < totalSteps) {
                 currentStep++;
                 renderStep();
             }
@@ -928,11 +926,23 @@ function educore_student_add_edit_view() {
         stepNodes.forEach(node => {
             node.addEventListener('click', function() {
                 const target = parseInt(this.getAttribute('data-step'));
-                if (target < currentStep || validateStep()) {
+                if (target < currentStep || validateStep(currentStep)) {
                     currentStep = target;
                     renderStep();
                 }
             });
+        });
+
+        // 6. Form Submission Validation
+        form.addEventListener('submit', function(e) {
+            for (let i = 1; i <= totalSteps; i++) {
+                if (!validateStep(i)) {
+                    e.preventDefault();
+                    currentStep = i;
+                    renderStep();
+                    return false;
+                }
+            }
         });
     });
     </script>
