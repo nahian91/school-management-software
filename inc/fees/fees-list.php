@@ -4,8 +4,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Fees Directory & Financial Ledger View Engine
- * File: fees-list.php
+ * Fees Directory & Financial Ledger View Engine (Role-Filtered for Accountant & Admin)
+ * File: inc/fees/fees-list.php
  * Theme Aesthetic: Elite Neo-Bento UI
  * Custom Prefixes Applied: dpt-, afdp-
  */
@@ -15,7 +15,12 @@ add_action( 'wp_ajax_dpt_update_fee_invoice', 'dpt_handle_update_fee_invoice_aja
 function dpt_handle_update_fee_invoice_ajax() {
     check_ajax_referer( 'dpt_edit_fee_nonce', 'security' );
 
-    if ( ! current_user_can( 'manage_options' ) ) {
+    $current_user  = wp_get_current_user();
+    $roles         = (array) $current_user->roles;
+    $is_admin      = current_user_can( 'manage_options' );
+    $is_accountant = in_array( 'accountant', $roles, true ) || current_user_can( 'edit_posts' );
+
+    if ( ! $is_admin && ! $is_accountant ) {
         wp_send_json_error( array( 'message' => __( 'Unauthorized access.', 'ifsedu-sms' ) ) );
     }
 
@@ -69,15 +74,21 @@ function dpt_handle_update_fee_invoice_ajax() {
 
 function educore_fees_list_view() {
     global $wpdb;
+    $current_user = wp_get_current_user();
+    $roles        = (array) $current_user->roles;
+
+    // 1. Multi-Role Capability Security Matrix (Admins & Accountants)
+    $is_admin      = current_user_can( 'manage_options' );
+    $is_accountant = in_array( 'accountant', $roles, true ) || current_user_can( 'edit_posts' );
+
+    if ( ! $is_admin && ! $is_accountant ) {
+        wp_die( esc_html__( 'You do not have sufficient permissions to view financial ledger records.', 'ifsedu-sms' ) );
+    }
+
     $table_fees     = $wpdb->prefix . 'sms_fees';
     $table_students = $wpdb->prefix . 'sms_students';
     $table_units    = $wpdb->prefix . 'sms_academic_units';
     $table_staff    = $wpdb->prefix . 'sms_staff';
-
-    // 1. Capability Security Check
-    if ( ! current_user_can( 'manage_options' ) ) {
-        wp_die( esc_html__( 'You do not have sufficient permissions to view financial ledger records.', 'ifsedu-sms' ) );
-    }
 
     // 2. Sanitize and Extract Filter Request Inputs
     $filter_class     = isset( $_GET['filter_class'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_class'] ) ) : '';

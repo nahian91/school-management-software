@@ -107,7 +107,7 @@ function educore_staff_id_cards_view() {
     $ajax_nonce  = wp_create_nonce( 'educore_staff_id_nonce' );
     ?>
 
-    <style>
+ <style>
         /* Container UI */
         .afdp-id-controls-card {
             background: #ffffff;
@@ -236,7 +236,7 @@ function educore_staff_id_cards_view() {
         }
 
         /* ==========================================================================
-           PREMIUM CR80 ID CARD DESIGN ARCHITECTURE
+           PREMIUM CR80 ID CARD DESIGN ARCHITECTURE (Full Name Visibility Fix)
            ========================================================================== */
         .dpt-id-card-unit {
             width: 85.6mm;
@@ -260,24 +260,24 @@ function educore_staff_id_cards_view() {
         .dpt-card-header {
             background: linear-gradient(135deg, #006a4e 0%, #004d38 100%);
             color: #ffffff;
-            padding: 5px 10px;
+            padding: 4px 8px;
             text-align: center;
             position: relative;
             border-bottom: 2.5px solid #f59e0b;
         }
         .dpt-card-header .dpt-inst-name {
-            font-size: 10pt;
+            font-size: 8.5pt;
             font-weight: 800;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.3px;
             line-height: 1.1;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
         .dpt-card-header .dpt-card-title {
-            font-size: 5pt;
-            letter-spacing: 1.2px;
+            font-size: 4.5pt;
+            letter-spacing: 1px;
             text-transform: uppercase;
             opacity: 0.85;
             font-weight: 600;
@@ -286,17 +286,17 @@ function educore_staff_id_cards_view() {
 
         /* Card Body */
         .dpt-card-body {
-            padding: 6px 10px;
+            padding: 5px 8px;
             display: flex;
-            gap: 10px;
+            gap: 8px;
             align-items: center;
             flex: 1;
         }
 
         /* Photo Box */
         .dpt-photo-box {
-            width: 21mm;
-            height: 25mm;
+            width: 19mm;
+            height: 23mm;
             border-radius: 2mm;
             border: 1.5px solid #006a4e;
             overflow: hidden;
@@ -313,9 +313,9 @@ function educore_staff_id_cards_view() {
             object-fit: cover;
         }
         .dpt-photo-box .dashicons {
-            font-size: 32px;
-            width: 32px;
-            height: 32px;
+            font-size: 26px;
+            width: 26px;
+            height: 26px;
             color: #cbd5e1;
         }
 
@@ -323,34 +323,46 @@ function educore_staff_id_cards_view() {
         .dpt-info-box {
             flex: 1;
             overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
         }
+        /* Full Name Display Fix: Scales down slightly and wraps nicely up to 2 lines */
         .dpt-info-name {
-            font-size: 9.5pt;
+            font-size: 7.8pt;
             font-weight: 800;
             color: #0f172a;
-            line-height: 1.1;
-            margin-bottom: 2px;
-            white-space: nowrap;
+            line-height: 1.15;
+            margin-bottom: 1.5px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
             overflow: hidden;
             text-overflow: ellipsis;
+            word-break: break-word;
         }
         .dpt-info-designation {
-            font-size: 6.2pt;
+            font-size: 5.5pt;
             font-weight: 700;
             color: #006a4e;
             text-transform: uppercase;
-            margin-bottom: 5px;
-            line-height: 1;
+            margin-bottom: 3.5px;
+            line-height: 1.1;
             letter-spacing: 0.2px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .dpt-info-table {
             width: 100%;
             border-collapse: collapse;
         }
         .dpt-info-table td {
-            font-size: 5.6pt;
-            padding: 0.8px 0;
-            line-height: 1.15;
+            font-size: 5.2pt;
+            padding: 0.5px 0;
+            line-height: 1.1;
             vertical-align: top;
         }
         .dpt-info-table td.lbl {
@@ -367,29 +379,29 @@ function educore_staff_id_cards_view() {
         .dpt-card-footer {
             background: #f8fafc;
             border-top: 1px solid #f1f5f9;
-            padding: 2px 10px 4px 10px;
+            padding: 2px 8px 3px 8px;
             display: flex;
             align-items: flex-end;
             justify-content: space-between;
-            height: 9mm;
+            height: 8.5mm;
         }
         .dpt-barcode-sim {
             font-family: 'Courier New', Courier, monospace;
-            font-size: 5.8pt;
+            font-size: 5.2pt;
             font-weight: 900;
-            letter-spacing: 1.5px;
+            letter-spacing: 1.2px;
             color: #1e293b;
         }
         .dpt-sign-block {
             text-align: center;
         }
         .dpt-sign-line {
-            width: 18mm;
+            width: 16mm;
             border-top: 1px dashed #94a3b8;
             margin-bottom: 1px;
         }
         .dpt-sign-text {
-            font-size: 4.2pt;
+            font-size: 4pt;
             font-weight: 700;
             color: #64748b;
             text-transform: uppercase;

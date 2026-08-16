@@ -4,12 +4,23 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * High-End Academic Financial Fees Sub-Navigation Engine & Router Matrix
+ * High-End Academic Financial Fees Sub-Navigation Engine & Router Matrix (Role-Filtered for Accountant & Admin)
  * File: fees-tab.php
  * Custom Prefixes Applied: dpt-, afdp-
  * Architecture: Bento Layout Viewports with Integrated Hardware Print Lockdown
  */
 function educore_fees_tab() {
+    $current_user = wp_get_current_user();
+    $roles        = (array) $current_user->roles;
+
+    // 1. Multi-Role Capability Security Matrix (Admins & Accountants)
+    $is_admin     = current_user_can( 'manage_options' );
+    $is_accountant = in_array( 'accountant', $roles, true ) || current_user_can( 'edit_posts' );
+
+    if ( ! $is_admin && ! $is_accountant ) {
+        wp_die( esc_html__( 'You do not have sufficient permissions to access the financial fees module.', 'ifsedu-sms' ) );
+    }
+
     $sub_tab = isset( $_GET['sub'] ) ? sanitize_text_field( wp_unslash( $_GET['sub'] ) ) : 'list';
 
     // Construct URLs for top submenu links
@@ -174,11 +185,14 @@ function educore_fees_tab() {
                     <?php esc_html_e( '+ Collect Student Fee', 'ifsedu-sms' ); ?>
                 </a>
 
-                <a href="<?php echo esc_url( $settings_url ); ?>" 
-                   class="dpt-nav-link <?php echo ( $sub_tab === 'settings' ) ? 'dpt-nav-link-active' : 'dpt-nav-link-inactive'; ?>">
-                    <span class="dashicons dashicons-admin-settings"></span>
-                    <?php esc_html_e( 'Fee Settings', 'ifsedu-sms' ); ?>
-                </a>
+                <!-- Fee Settings Accessible to Admin Only -->
+                <?php if ( $is_admin ) : ?>
+                    <a href="<?php echo esc_url( $settings_url ); ?>" 
+                       class="dpt-nav-link <?php echo ( $sub_tab === 'settings' ) ? 'dpt-nav-link-active' : 'dpt-nav-link-inactive'; ?>">
+                        <span class="dashicons dashicons-admin-settings"></span>
+                        <?php esc_html_e( 'Fee Settings', 'ifsedu-sms' ); ?>
+                    </a>
+                <?php endif; ?>
             </div>
 
             <?php if ( $sub_tab === 'print' ) : ?>
@@ -204,10 +218,14 @@ function educore_fees_tab() {
                     break;
 
                 case 'settings':
-                    if ( function_exists( 'educore_fees_settings_view' ) ) {
-                        educore_fees_settings_view();
+                    if ( $is_admin ) {
+                        if ( function_exists( 'educore_fees_settings_view' ) ) {
+                            educore_fees_settings_view();
+                        } else {
+                            echo '<div class="afdp-notice-card"><span class="dashicons dashicons-info" style="vertical-align:middle; margin-right:6px;"></span> ' . esc_html__( 'Fee Settings module is initializing. Define educore_fees_settings_view().', 'ifsedu-sms' ) . '</div>';
+                        }
                     } else {
-                        echo '<div class="afdp-notice-card"><span class="dashicons dashicons-info" style="vertical-align:middle; margin-right:6px;"></span> ' . esc_html__( 'Fee Settings module is initializing. Define educore_fees_settings_view().', 'ifsedu-sms' ) . '</div>';
+                        echo '<div class="afdp-notice-card" style="background:#fef2f2; border-left-color:#dc2626; color:#991b1b;"><span class="dashicons dashicons-lock" style="vertical-align:middle; margin-right:6px;"></span> ' . esc_html__( 'Restricted: Fee Settings configuration is restricted to administrators.', 'ifsedu-sms' ) . '</div>';
                     }
                     break;
 

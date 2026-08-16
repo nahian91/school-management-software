@@ -208,7 +208,7 @@ function educore_staff_list_view() {
     </style>
 
     <!-- Header Title & Action CTA -->
-    <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex justify-content-between align-items: center mb-3" style="margin: 20px 20px 24px 0;">
         <h2>
             <span class="dashicons dashicons-groups text-success me-1"></span> 
             <?php esc_html_e( 'Teachers & Staff Directory', 'educore' ); ?>
@@ -219,7 +219,7 @@ function educore_staff_list_view() {
     </div>
 
     <!-- Category Tabs Navigation (4 Tabs) -->
-    <div class="educore-tabs-wrapper">
+    <div class="educore-tabs-wrapper" style="margin-right: 20px;">
         <a href="<?php echo esc_url( $school_url ); ?>" class="educore-tab-item <?php echo ( $active_tab === 'school_teacher' ) ? 'active' : ''; ?>">
             <span class="dashicons dashicons-welcome-learn-more"></span>
             <?php esc_html_e( 'School Teacher', 'educore' ); ?>
@@ -241,11 +241,12 @@ function educore_staff_list_view() {
         </a>
     </div>
 
-    <div class="bg-white p-4 rounded shadow-sm border">
+    <div class="bg-white p-4 rounded shadow-sm border" style="margin-right: 20px; margin-bottom: 30px;">
         <table class="table table-striped table-hover align-middle educore-datatable w-100">
             <thead class="table-light">
                 <tr>
                     <th style="width: 70px; text-align: center;"><?php esc_html_e( 'Order', 'educore' ); ?></th>
+                    <th style="width: 130px;"><?php esc_html_e( 'Staff ID', 'educore' ); ?></th>
                     <th><?php esc_html_e( 'Name', 'educore' ); ?></th>
                     <th><?php esc_html_e( 'Designation', 'educore' ); ?></th>
                     <th style="width: 180px;"><?php esc_html_e( 'Employment Type', 'educore' ); ?></th>
@@ -266,8 +267,11 @@ function educore_staff_list_view() {
                         // Order value direct from DB
                         $order_no = isset( $staff->db_order_number ) ? absint( $staff->db_order_number ) : 0;
 
-                        // Primary Name Resolution with Fallback
-                        $full_name = ! empty( $staff->name_bn ) ? $staff->name_bn : ( ! empty( $staff->full_name ) ? $staff->full_name : ( ! empty( $staff->name ) ? $staff->name : '' ) );
+                        // Primary Name Resolution (Using full_name exclusively as name_bn was dropped)
+                        $full_name = ! empty( $staff->full_name ) ? $staff->full_name : ( ! empty( $staff->name ) ? $staff->name : '' );
+
+                        // Staff ID fallback
+                        $display_staff_id = ! empty( $staff->staff_id ) ? strtoupper( $staff->staff_id ) : '—';
 
                         // Employment Type display value stored directly in staff_type
                         $emp_type_label = ! empty( $staff->staff_type ) ? $staff->staff_type : $db_staff_type;
@@ -276,6 +280,11 @@ function educore_staff_list_view() {
                         <!-- Order Number Column (from DB) -->
                         <td class="text-center">
                             <span class="educore-order-badge"><?php echo esc_html( $order_no ); ?></span>
+                        </td>
+
+                        <!-- Staff ID Column -->
+                        <td>
+                            <code><?php echo esc_html( $display_staff_id ); ?></code>
                         </td>
 
                         <!-- Name & WP User Link -->
@@ -332,7 +341,7 @@ function educore_staff_list_view() {
                     <?php endforeach; ?>
                 <?php else : ?>
                     <tr>
-                        <td colspan="5" class="text-center py-4 text-muted">
+                        <td colspan="6" class="text-center py-4 text-muted">
                             <?php esc_html_e( 'No records found for this category.', 'educore' ); ?>
                         </td>
                     </tr>
@@ -354,7 +363,7 @@ function educore_staff_list_view() {
                 "order": [[0, "asc"]],
                 "responsive": true,
                 "columnDefs": [
-                    { "orderable": false, "targets": [4] }
+                    { "orderable": false, "targets": [5] }
                 ],
                 "language": {
                     "emptyTable": "<?php echo esc_js( __( 'No staff records found.', 'educore' ) ); ?>"

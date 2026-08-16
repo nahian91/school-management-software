@@ -6,6 +6,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * High-End Staff Profile Bento Visualizer
  * Shows 100% full staff record details
+ * File: inc/staff/staff-profile-view.php (or wherever profile view is located)
  */
 function educore_staff_profile_view() {
     global $wpdb;
@@ -26,10 +27,7 @@ function educore_staff_profile_view() {
 
     // Processing variables
     $back_url  = admin_url( 'admin.php?page=school_management_system&tab=staff&sub=list' );
-    $edit_url  = admin_url( 'admin.php?page=school_management_system&tab=staff&sub=add&sub_mode=edit&id=' . $staff_id );
-    if ( empty( $staff_id ) ) {
-        $edit_url = admin_url( 'admin.php?page=school_management_system&tab=staff&sub=add' );
-    }
+    $edit_url  = admin_url( 'admin.php?page=school_management_system&tab=staff&sub=edit&id=' . $staff_id );
     
     $is_active = strtolower( trim( $staff->status ?? '' ) ) === 'active';
 
@@ -37,6 +35,7 @@ function educore_staff_profile_view() {
     $dob          = ( ! empty( $staff->dob ) && $staff->dob !== '1970-01-01' && $staff->dob !== '0000-00-00' ) ? date_i18n( 'd F, Y', strtotime( $staff->dob ) ) : '—';
     $joining_date = ( ! empty( $staff->joining_date ) && $staff->joining_date !== '1970-01-01' && $staff->joining_date !== '0000-00-00' ) ? date_i18n( 'd F, Y', strtotime( $staff->joining_date ) ) : '—';
     $salary       = number_format( (float) ( $staff->salary ?? 0 ), 2 );
+    $staff_id_num = ! empty( $staff->staff_id ) ? strtoupper( $staff->staff_id ) : '—';
     ?>
 
     <style>
@@ -196,7 +195,7 @@ function educore_staff_profile_view() {
     <div class="educore-profile-container my-3">
         
         <!-- Navigation Controls Bar -->
-        <div class="d-flex justify-content-between align-items-center mb-4 no-print">
+        <div class="d-flex justify-content-between align-items: center mb-4 no-print">
             <a href="<?php echo esc_url( $back_url ); ?>" class="btn btn-outline-secondary btn-sm fw-bold px-3 py-2" style="border-radius: 8px;">
                 &larr; <?php esc_html_e( 'Back to Directory', 'educore' ); ?>
             </a>
@@ -230,7 +229,7 @@ function educore_staff_profile_view() {
                 </div>
 
                 <div class="col-md text-center text-md-start">
-                    <div class="d-flex flex-wrap align-items-center justify-content-center justify-content-md-start gap-2 mb-2">
+                    <div class="d-flex flex-wrap align-items: center justify-content: center justify-content-md-start gap-2 mb-2">
                         <h2 class="m-0 fw-bold text-white" style="letter-spacing: -0.5px;"><?php echo esc_html( $staff->full_name ); ?></h2>
                         <span class="badge rounded-pill bg-white text-dark px-3 py-1 fs-6 shadow-sm">
                             <span class="status-indicator-dot <?php echo $is_active ? 'status-dot-active' : 'status-dot-inactive'; ?>"></span>
@@ -238,11 +237,11 @@ function educore_staff_profile_view() {
                         </span>
                     </div>
 
-                    <?php if ( ! empty( $staff->name_bn ) ) : ?>
-                        <h5 class="fw-normal text-white-50 mb-3"><?php echo esc_html( $staff->name_bn ); ?></h5>
-                    <?php endif; ?>
-
-                    <div class="d-flex flex-wrap align-items-center justify-content-center justify-content-md-start gap-2">
+                    <div class="d-flex flex-wrap align-items: center justify-content: center justify-content-md-start gap-2">
+                        <div class="glass-id-badge">
+                            <span class="dashicons dashicons-id text-white"></span>
+                            <span>ID: <strong><?php echo esc_html( $staff_id_num ); ?></strong></span>
+                        </div>
                         <div class="glass-id-badge">
                             <span class="dashicons dashicons-businessperson text-white"></span>
                             <span class="fw-bold text-white"><?php echo esc_html( $staff->designation ); ?></span>
@@ -255,7 +254,7 @@ function educore_staff_profile_view() {
                         <?php endif; ?>
                         <?php if ( ! empty( $staff->index_no ) ) : ?>
                             <div class="glass-id-badge">
-                                <span class="dashicons dashicons-id text-white"></span>
+                                <span class="dashicons dashicons-awards text-white"></span>
                                 <span>Index: <strong><?php echo esc_html( $staff->index_no ); ?></strong></span>
                             </div>
                         <?php endif; ?>
@@ -298,11 +297,11 @@ function educore_staff_profile_view() {
                                     <div class="info-value"><?php echo esc_html( $staff->gender ?: 'Male' ); ?></div>
                                 </div>
                                 <div class="col-md-6">
-                                    <div class="info-label"><?php esc_html_e( "Father's Name (পিতার নাম)", 'educore' ); ?></div>
+                                    <div class="info-label"><?php esc_html_e( "Father's Name", 'educore' ); ?></div>
                                     <div class="info-value"><?php echo esc_html( $staff->father_name ?: '—' ); ?></div>
                                 </div>
                                 <div class="col-md-6">
-                                    <div class="info-label"><?php esc_html_e( "Mother's Name (মাতার নাম)", 'educore' ); ?></div>
+                                    <div class="info-label"><?php esc_html_e( "Mother's Name", 'educore' ); ?></div>
                                     <div class="info-value"><?php echo esc_html( $staff->mother_name ?: '—' ); ?></div>
                                 </div>
                                 <div class="col-md-4">
@@ -366,11 +365,11 @@ function educore_staff_profile_view() {
                             </div>
                             <div class="row g-3">
                                 <div class="col-md-6">
-                                    <div class="info-label"><?php esc_html_e( 'Present Address (বর্তমান ঠিকানা)', 'educore' ); ?></div>
+                                    <div class="info-label"><?php esc_html_e( 'Present Address', 'educore' ); ?></div>
                                     <div class="info-value text-secondary bg-light p-3 rounded-3 border" style="min-height: 80px;"><?php echo nl2br( esc_html( $staff->address ?: '—' ) ); ?></div>
                                 </div>
                                 <div class="col-md-6">
-                                    <div class="info-label"><?php esc_html_e( 'Permanent Address (স্থায়ী ঠিকানা)', 'educore' ); ?></div>
+                                    <div class="info-label"><?php esc_html_e( 'Permanent Address', 'educore' ); ?></div>
                                     <div class="info-value text-secondary bg-light p-3 rounded-3 border" style="min-height: 80px;"><?php echo nl2br( esc_html( $staff->permanent_address ?: '—' ) ); ?></div>
                                 </div>
                             </div>

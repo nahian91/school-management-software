@@ -10,127 +10,76 @@ $table_subjects = $wpdb->prefix . 'sms_subjects';
 // --------------------------------------------------------------------------
 // 0. AUTO-SCHEMA CHECK (Ensures Mark Distribution Columns Exist)
 // --------------------------------------------------------------------------
-$check_total_marks = $wpdb->get_results( "SHOW COLUMNS FROM `{$table_subjects}` LIKE 'total_marks'" );
-if ( empty( $check_total_marks ) ) {
-    $wpdb->query( "ALTER TABLE `{$table_subjects}` ADD `total_marks` decimal(5,2) DEFAULT '100.00' NOT NULL AFTER `subject_code`" );
+$columns_to_check = array(
+    'total_marks'     => "decimal(5,2) DEFAULT '100.00' NOT NULL AFTER `subject_code`",
+    'pass_marks'      => "decimal(5,2) DEFAULT '33.00' NOT NULL AFTER `total_marks`",
+    'cq_marks'        => "decimal(5,2) DEFAULT '70.00' NOT NULL AFTER `pass_marks`",
+    'cq_pass'         => "decimal(5,2) DEFAULT '23.00' NOT NULL AFTER `cq_marks`",
+    'mcq_marks'       => "decimal(5,2) DEFAULT '30.00' NOT NULL AFTER `cq_pass`",
+    'mcq_pass'        => "decimal(5,2) DEFAULT '10.00' NOT NULL AFTER `mcq_marks`",
+    'practical_marks' => "decimal(5,2) DEFAULT '0.00' NOT NULL AFTER `mcq_pass`",
+    'practical_pass'  => "decimal(5,2) DEFAULT '0.00' NOT NULL AFTER `practical_marks`",
+);
+
+foreach ( $columns_to_check as $col => $sql_def ) {
+    $col_exists = $wpdb->get_results( "SHOW COLUMNS FROM `{$table_subjects}` LIKE '{$col}'" );
+    if ( empty( $col_exists ) ) {
+        $wpdb->query( "ALTER TABLE `{$table_subjects}` ADD `{$col}` {$sql_def}" );
+    }
 }
 
-$check_pass_marks = $wpdb->get_results( "SHOW COLUMNS FROM `{$table_subjects}` LIKE 'pass_marks'" );
-if ( empty( $check_pass_marks ) ) {
-    $wpdb->query( "ALTER TABLE `{$table_subjects}` ADD `pass_marks` decimal(5,2) DEFAULT '33.00' NOT NULL AFTER `total_marks`" );
-}
-
-$check_cq_marks = $wpdb->get_results( "SHOW COLUMNS FROM `{$table_subjects}` LIKE 'cq_marks'" );
-if ( empty( $check_cq_marks ) ) {
-    $wpdb->query( "ALTER TABLE `{$table_subjects}` ADD `cq_marks` decimal(5,2) DEFAULT '70.00' NOT NULL AFTER `pass_marks`" );
-}
-
-$check_cq_pass = $wpdb->get_results( "SHOW COLUMNS FROM `{$table_subjects}` LIKE 'cq_pass'" );
-if ( empty( $check_cq_pass ) ) {
-    $wpdb->query( "ALTER TABLE `{$table_subjects}` ADD `cq_pass` decimal(5,2) DEFAULT '23.00' NOT NULL AFTER `cq_marks`" );
-}
-
-$check_mcq_marks = $wpdb->get_results( "SHOW COLUMNS FROM `{$table_subjects}` LIKE 'mcq_marks'" );
-if ( empty( $check_mcq_marks ) ) {
-    $wpdb->query( "ALTER TABLE `{$table_subjects}` ADD `mcq_marks` decimal(5,2) DEFAULT '30.00' NOT NULL AFTER `cq_pass`" );
-}
-
-$check_mcq_pass = $wpdb->get_results( "SHOW COLUMNS FROM `{$table_subjects}` LIKE 'mcq_pass'" );
-if ( empty( $check_mcq_pass ) ) {
-    $wpdb->query( "ALTER TABLE `{$table_subjects}` ADD `mcq_pass` decimal(5,2) DEFAULT '10.00' NOT NULL AFTER `mcq_marks`" );
-}
-
-$check_practical_marks = $wpdb->get_results( "SHOW COLUMNS FROM `{$table_subjects}` LIKE 'practical_marks'" );
-if ( empty( $check_practical_marks ) ) {
-    $wpdb->query( "ALTER TABLE `{$table_subjects}` ADD `practical_marks` decimal(5,2) DEFAULT '0.00' NOT NULL AFTER `mcq_pass`" );
-}
-
-$check_practical_pass = $wpdb->get_results( "SHOW COLUMNS FROM `{$table_subjects}` LIKE 'practical_pass'" );
-if ( empty( $check_practical_pass ) ) {
-    $wpdb->query( "ALTER TABLE `{$table_subjects}` ADD `practical_pass` decimal(5,2) DEFAULT '0.00' NOT NULL AFTER `practical_marks`" );
-}
-
-// Dynamic Base URL preservation from current URI without action state params
+// Dynamic Base URL
 $current_uri = remove_query_arg( array( 'action', 'id', '_wpnonce', 'status', 'count' ), $_SERVER['REQUEST_URI'] );
 $base_url    = esc_url_raw( $current_uri );
 
 // --------------------------------------------------------------------------
-// 1. AJAX HANDLER FOR EDITING SUBJECT & MARKS
+// 1. DIRECT FORM SUBMISSION: SINGLE SUBJECT UPDATE (Fallback & Standard)
 // --------------------------------------------------------------------------
-add_action( 'wp_ajax_dpt_update_subject', 'dpt_handle_update_subject_ajax' );
-add_action( 'wp_ajax_nopriv_dpt_update_subject', 'dpt_handle_update_subject_ajax' );
+if ( $_SERVER['REQUEST_METHOD'] === 'POST' && isset( $_POST['educore_update_single_subject'] ) ) {
+    if ( isset( $_POST['edit_subject_nonce_field'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['edit_subject_nonce_field'] ) ), 'dpt_edit_subject_nonce' ) ) {
+        $sub_id     = isset( $_POST['subject_id'] ) ? absint( $_POST['subject_id'] ) : 0;
+        $class_id   = isset( $_POST['class_id'] ) ? absint( $_POST['class_id'] ) : 0;
+        $sub_name   = isset( $_POST['subject_name'] ) ? sanitize_text_field( wp_unslash( $_POST['subject_name'] ) ) : '';
+        $sub_code   = isset( $_POST['subject_code'] ) ? sanitize_text_field( wp_unslash( $_POST['subject_code'] ) ) : '';
+        $tot_m      = isset( $_POST['total_marks'] ) ? floatval( $_POST['total_marks'] ) : 100.00;
+        $pass_m     = isset( $_POST['pass_marks'] ) ? floatval( $_POST['pass_marks'] ) : 33.00;
+        $cq_m       = isset( $_POST['cq_marks'] ) ? floatval( $_POST['cq_marks'] ) : 0.00;
+        $cq_p       = isset( $_POST['cq_pass'] ) ? floatval( $_POST['cq_pass'] ) : 0.00;
+        $mcq_m      = isset( $_POST['mcq_marks'] ) ? floatval( $_POST['mcq_marks'] ) : 0.00;
+        $mcq_p      = isset( $_POST['mcq_pass'] ) ? floatval( $_POST['mcq_pass'] ) : 0.00;
+        $pr_m       = isset( $_POST['practical_marks'] ) ? floatval( $_POST['practical_marks'] ) : 0.00;
+        $pr_p       = isset( $_POST['practical_pass'] ) ? floatval( $_POST['practical_pass'] ) : 0.00;
 
-function dpt_handle_update_subject_ajax() {
-    check_ajax_referer( 'dpt_edit_subject_nonce', 'security' );
+        if ( $sub_id > 0 && $class_id > 0 && ! empty( $sub_name ) ) {
+            $wpdb->update(
+                $table_subjects,
+                array(
+                    'class_id'        => $class_id,
+                    'subject_name'    => $sub_name,
+                    'subject_code'    => $sub_code,
+                    'total_marks'     => $tot_m,
+                    'pass_marks'      => $pass_m,
+                    'cq_marks'        => $cq_m,
+                    'cq_pass'         => $cq_p,
+                    'mcq_marks'       => $mcq_m,
+                    'mcq_pass'        => $mcq_p,
+                    'practical_marks' => $pr_m,
+                    'practical_pass'  => $pr_p,
+                ),
+                array( 'id' => $sub_id ),
+                array( '%d', '%s', '%s', '%f', '%f', '%f', '%f', '%f', '%f', '%f', '%f' ),
+                array( '%d' )
+            );
 
-    if ( ! current_user_can( 'manage_options' ) ) {
-        wp_send_json_error( array( 'message' => __( 'Unauthorized access.', 'ifsedu-sms' ) ) );
-    }
-
-    global $wpdb;
-    $table_subjects = $wpdb->prefix . 'sms_subjects';
-
-    $subject_id      = isset( $_POST['subject_id'] ) ? absint( $_POST['subject_id'] ) : 0;
-    $class_id        = isset( $_POST['class_id'] ) ? absint( $_POST['class_id'] ) : 0;
-    $subject_name    = isset( $_POST['subject_name'] ) ? sanitize_text_field( wp_unslash( $_POST['subject_name'] ) ) : '';
-    $subject_code    = isset( $_POST['subject_code'] ) ? sanitize_text_field( wp_unslash( $_POST['subject_code'] ) ) : '';
-    $total_marks     = isset( $_POST['total_marks'] ) ? floatval( $_POST['total_marks'] ) : 100.00;
-    $pass_marks      = isset( $_POST['pass_marks'] ) ? floatval( $_POST['pass_marks'] ) : 33.00;
-    $cq_marks        = isset( $_POST['cq_marks'] ) ? floatval( $_POST['cq_marks'] ) : 0.00;
-    $cq_pass         = isset( $_POST['cq_pass'] ) ? floatval( $_POST['cq_pass'] ) : 0.00;
-    $mcq_marks       = isset( $_POST['mcq_marks'] ) ? floatval( $_POST['mcq_marks'] ) : 0.00;
-    $mcq_pass        = isset( $_POST['mcq_pass'] ) ? floatval( $_POST['mcq_pass'] ) : 0.00;
-    $practical_marks = isset( $_POST['practical_marks'] ) ? floatval( $_POST['practical_marks'] ) : 0.00;
-    $practical_pass  = isset( $_POST['practical_pass'] ) ? floatval( $_POST['practical_pass'] ) : 0.00;
-
-    if ( ! $subject_id || ! $class_id || empty( $subject_name ) ) {
-        wp_send_json_error( array( 'message' => __( 'Missing required parameters.', 'ifsedu-sms' ) ) );
-    }
-
-    $updated = $wpdb->update(
-        $table_subjects,
-        array(
-            'class_id'        => $class_id,
-            'subject_name'    => $subject_name,
-            'subject_code'    => $subject_code,
-            'total_marks'     => $total_marks,
-            'pass_marks'      => $pass_marks,
-            'cq_marks'        => $cq_marks,
-            'cq_pass'         => $cq_pass,
-            'mcq_marks'       => $mcq_marks,
-            'mcq_pass'        => $mcq_pass,
-            'practical_marks' => $practical_marks,
-            'practical_pass'  => $practical_pass,
-        ),
-        array( 'id' => $subject_id ),
-        array( '%d', '%s', '%s', '%f', '%f', '%f', '%f', '%f', '%f', '%f', '%f' ),
-        array( '%d' )
-    );
-
-    if ( false !== $updated ) {
-        if ( class_exists( 'IFSEdu_School_Management_System' ) ) {
-            IFSEdu_School_Management_System::log_activity( "Updated subject ID #{$subject_id} ({$subject_name})" );
+            $redirect_target = add_query_arg( array( 'status' => 'updated' ), $base_url );
+            echo '<script type="text/javascript">window.location.href="' . esc_url_raw( $redirect_target ) . '";</script>';
+            exit;
         }
-        wp_send_json_success( array( 
-            'message' => __( 'Subject & BD standard marks breakdown updated successfully.', 'ifsedu-sms' ),
-            'data'    => array(
-                'total_marks'     => $total_marks,
-                'pass_marks'      => $pass_marks,
-                'cq_marks'        => $cq_marks,
-                'cq_pass'         => $cq_pass,
-                'mcq_marks'       => $mcq_marks,
-                'mcq_pass'        => $mcq_pass,
-                'practical_marks' => $practical_marks,
-                'practical_pass'  => $practical_pass,
-            )
-        ) );
-    } else {
-        wp_send_json_error( array( 'message' => __( 'Failed to update subject database record.', 'ifsedu-sms' ) ) );
     }
 }
 
 // --------------------------------------------------------------------------
-// 2. REPEATER SUBMISSION (BULK ASSIGN WITH MARKS CONFIG)
+// 2. REPEATER SUBMISSION (BULK ASSIGN)
 // --------------------------------------------------------------------------
 if ( $_SERVER['REQUEST_METHOD'] === 'POST' && isset( $_POST['save_subjects_repeater'] ) ) {
     if ( isset( $_POST['subject_setup_nonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['subject_setup_nonce'] ) ), 'subject_setup_action' ) ) {
@@ -142,50 +91,49 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' && isset( $_POST['save_subjects_repea
         $cq_marks        = isset( $_POST['cq_marks'] ) && is_array( $_POST['cq_marks'] ) ? array_map( 'floatval', $_POST['cq_marks'] ) : array();
         $cq_pass         = isset( $_POST['cq_pass'] ) && is_array( $_POST['cq_pass'] ) ? array_map( 'floatval', $_POST['cq_pass'] ) : array();
         $mcq_marks       = isset( $_POST['mcq_marks'] ) && is_array( $_POST['mcq_marks'] ) ? array_map( 'floatval', $_POST['mcq_marks'] ) : array();
-        $mcq_pass        = isset( $_POST['mcq_pass'] ) && is_array( $_POST['mcq_pass'] ) ? array_map( 'floatval', $_POST['mcq_pass'] ) : array();
+        $mcq_pass        = isset( $_POST['mcq_pass'] ) ? array_map( 'floatval', $_POST['mcq_pass'] ) : array();
         $practical_marks = isset( $_POST['practical_marks'] ) && is_array( $_POST['practical_marks'] ) ? array_map( 'floatval', $_POST['practical_marks'] ) : array();
         $practical_pass  = isset( $_POST['practical_pass'] ) && is_array( $_POST['practical_pass'] ) ? array_map( 'floatval', $_POST['practical_pass'] ) : array();
 
         if ( $class_id > 0 && ! empty( $subject_name ) ) {
             $inserted_count = 0;
             foreach ( $subject_name as $index => $name ) {
-                $s_name      = sanitize_text_field( $name );
-                $s_code      = isset( $subject_code[$index] ) ? sanitize_text_field( $subject_code[$index] ) : '';
-                $s_total     = isset( $total_marks[$index] ) && floatval( $total_marks[$index] ) > 0 ? floatval( $total_marks[$index] ) : 100.00;
-                $s_pass      = isset( $pass_marks[$index] ) ? floatval( $pass_marks[$index] ) : 33.00;
-                $s_cq        = isset( $cq_marks[$index] ) ? floatval( $cq_marks[$index] ) : 70.00;
-                $s_cq_p      = isset( $cq_pass[$index] ) ? floatval( $cq_pass[$index] ) : 23.00;
-                $s_mcq       = isset( $mcq_marks[$index] ) ? floatval( $mcq_marks[$index] ) : 30.00;
-                $s_mcq_p     = isset( $mcq_pass[$index] ) ? floatval( $mcq_pass[$index] ) : 10.00;
-                $s_practical = isset( $practical_marks[$index] ) ? floatval( $practical_marks[$index] ) : 0.00;
-                $s_pr_p      = isset( $practical_pass[$index] ) ? floatval( $practical_pass[$index] ) : 0.00;
+                $s_name = sanitize_text_field( $name );
+                if ( empty( $s_name ) ) {
+                    continue;
+                }
 
-                if ( ! empty( $s_name ) ) {
-                    $wpdb->insert( 
-                        $table_subjects, 
-                        array( 
-                            'class_id'        => $class_id, 
-                            'subject_name'    => $s_name, 
-                            'subject_code'    => $s_code,
-                            'total_marks'     => $s_total,
-                            'pass_marks'      => $s_pass,
-                            'cq_marks'        => $s_cq,
-                            'cq_pass'         => $s_cq_p,
-                            'mcq_marks'       => $s_mcq,
-                            'mcq_pass'        => $s_mcq_p,
-                            'practical_marks' => $s_practical,
-                            'practical_pass'  => $s_pr_p,
-                        ), 
-                        array( '%d', '%s', '%s', '%f', '%f', '%f', '%f', '%f', '%f', '%f', '%f' ) 
-                    );
-                    $inserted_count++;
-                }
+                $s_code      = isset( $subject_code[ $index ] ) ? sanitize_text_field( $subject_code[ $index ] ) : '';
+                $s_total     = isset( $total_marks[ $index ] ) && floatval( $total_marks[ $index ] ) > 0 ? floatval( $total_marks[ $index ] ) : 100.00;
+                $s_pass      = isset( $pass_marks[ $index ] ) ? floatval( $pass_marks[ $index ] ) : 33.00;
+                $s_cq        = isset( $cq_marks[ $index ] ) ? floatval( $cq_marks[ $index ] ) : 70.00;
+                $s_cq_p      = isset( $cq_pass[ $index ] ) ? floatval( $cq_pass[ $index ] ) : 23.00;
+                $s_mcq       = isset( $mcq_marks[ $index ] ) ? floatval( $mcq_marks[ $index ] ) : 30.00;
+                $s_mcq_p     = isset( $mcq_pass[ $index ] ) ? floatval( $mcq_pass[ $index ] ) : 10.00;
+                $s_practical = isset( $practical_marks[ $index ] ) ? floatval( $practical_marks[ $index ] ) : 0.00;
+                $s_pr_p      = isset( $practical_pass[ $index ] ) ? floatval( $practical_pass[ $index ] ) : 0.00;
+
+                $wpdb->insert( 
+                    $table_subjects, 
+                    array( 
+                        'class_id'        => $class_id, 
+                        'subject_name'    => $s_name, 
+                        'subject_code'    => $s_code, 
+                        'total_marks'     => $s_total, 
+                        'pass_marks'      => $s_pass, 
+                        'cq_marks'        => $s_cq, 
+                        'cq_pass'         => $s_cq_p, 
+                        'mcq_marks'       => $s_mcq, 
+                        'mcq_pass'        => $s_mcq_p, 
+                        'practical_marks' => $s_practical, 
+                        'practical_pass'  => $s_pr_p, 
+                    ), 
+                    array( '%d', '%s', '%s', '%f', '%f', '%f', '%f', '%f', '%f', '%f', '%f' ) 
+                );
+                $inserted_count++;
             }
+
             if ( $inserted_count > 0 ) {
-                if ( class_exists( 'IFSEdu_School_Management_System' ) ) {
-                    IFSEdu_School_Management_System::log_activity( "Bulk assigned {$inserted_count} subjects to class ID #{$class_id}" );
-                }
-                
                 $redirect_target = add_query_arg( array( 'status' => 'subjects_added', 'count' => $inserted_count ), $base_url );
                 echo '<script type="text/javascript">window.location.href="' . esc_url_raw( $redirect_target ) . '";</script>';
                 exit;
@@ -203,11 +151,6 @@ if ( isset( $_GET['action'] ) && $_GET['action'] === 'delete_subject' && isset( 
 
     if ( $delete_id > 0 && wp_verify_nonce( $_nonce, 'delete_subject_action_' . $delete_id ) ) {
         $wpdb->delete( $table_subjects, array( 'id' => $delete_id ), array( '%d' ) );
-        
-        if ( class_exists( 'IFSEdu_School_Management_System' ) ) {
-            IFSEdu_School_Management_System::log_activity( "Deleted academic subject ID #{$delete_id}" );
-        }
-        
         $redirect_target = add_query_arg( array( 'status' => 'deleted' ), $base_url );
         echo '<script type="text/javascript">window.location.href="' . esc_url_raw( $redirect_target ) . '";</script>';
         exit;
@@ -226,10 +169,7 @@ $classes = $wpdb->get_results(
 if ( ! empty( $classes ) ) {
     usort( $classes, function( $a, $b ) {
         $res = strnatcasecmp( $a->class_name, $b->class_name );
-        if ( $res === 0 ) {
-            return strnatcasecmp( $a->section_name, $b->section_name );
-        }
-        return $res;
+        return ( $res === 0 ) ? strnatcasecmp( $a->section_name, $b->section_name ) : $res;
     });
 }
 
@@ -242,18 +182,14 @@ $subjects_list = $wpdb->get_results("
 
 if ( ! empty( $subjects_list ) ) {
     usort( $subjects_list, function( $a, $b ) {
-        $classA = $a->class_name ? $a->class_name : '';
-        $classB = $b->class_name ? $b->class_name : '';
-        
+        $classA = $a->class_name ?: '';
+        $classB = $b->class_name ?: '';
         $res = strnatcasecmp( $classA, $classB );
         if ( $res === 0 ) {
-            $secA = $a->section_name ? $a->section_name : '';
-            $secB = $b->section_name ? $b->section_name : '';
+            $secA = $a->section_name ?: '';
+            $secB = $b->section_name ?: '';
             $secRes = strnatcasecmp( $secA, $secB );
-            if ( $secRes === 0 ) {
-                return strnatcasecmp( $a->subject_name, $b->subject_name );
-            }
-            return $secRes;
+            return ( $secRes === 0 ) ? strnatcasecmp( $a->subject_name, $b->subject_name ) : $secRes;
         }
         return $res;
     });
@@ -262,18 +198,19 @@ if ( ! empty( $subjects_list ) ) {
 
 <style>
     .dpt-subjects-container {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         color: #0f172a;
         display: flex;
         flex-direction: column;
         gap: 24px;
+        margin-top: 15px;
     }
 
     .dpt-bento-card {
         background: #ffffff;
         border: 1px solid #e2e8f0;
         border-radius: 16px;
-        padding: 24px;
+        padding: 24px 28px;
         box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.03);
     }
 
@@ -316,9 +253,9 @@ if ( ! empty( $subjects_list ) ) {
     .dpt-field-input,
     .dpt-field-select {
         width: 100%;
-        height: 38px;
-        padding: 0 10px;
-        background: #ffffff;
+        height: 40px;
+        padding: 0 12px;
+        background: #f8fafc;
         border: 1px solid #cbd5e1;
         border-radius: 8px;
         font-size: 13px;
@@ -331,10 +268,10 @@ if ( ! empty( $subjects_list ) ) {
     .dpt-field-select:focus {
         outline: none;
         border-color: #006a4e;
-        box-shadow: 0 0 0 3px rgba(0, 106, 78, 0.1);
+        background: #ffffff;
+        box-shadow: 0 0 0 3px rgba(0, 106, 78, 0.12);
     }
 
-    /* Repeater Structure */
     .dpt-repeater-canvas {
         display: flex;
         flex-direction: column;
@@ -350,7 +287,6 @@ if ( ! empty( $subjects_list ) ) {
         padding: 16px;
         border: 1px solid #e2e8f0;
         border-radius: 12px;
-        position: relative;
     }
 
     .dpt-repeater-grid-top {
@@ -376,7 +312,7 @@ if ( ! empty( $subjects_list ) ) {
     }
 
     .dpt-btn-remove-row {
-        height: 38px;
+        height: 40px;
         width: 42px;
         border-radius: 8px;
         background: #fef2f2;
@@ -388,6 +324,7 @@ if ( ! empty( $subjects_list ) ) {
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
+        transition: all 0.2s ease;
     }
 
     .dpt-btn-remove-row.is-active {
@@ -428,7 +365,7 @@ if ( ! empty( $subjects_list ) ) {
         align-items: center;
         justify-content: center;
         gap: 8px;
-        padding: 11px 28px;
+        padding: 12px 28px;
         background: #006a4e;
         color: #ffffff;
         font-size: 14px;
@@ -437,13 +374,23 @@ if ( ! empty( $subjects_list ) ) {
         border: none;
         cursor: pointer;
         box-shadow: 0 4px 12px rgba(0, 106, 78, 0.2);
+        transition: all 0.2s ease;
     }
 
     .dpt-btn-submit:hover {
         background: #00523c;
     }
 
-    /* Datatable UI */
+    .dpt-btn-cancel {
+        background: #ffffff;
+        border: 1px solid #cbd5e1;
+        color: #475569;
+        font-weight: 700;
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+    }
+
     .dpt-header-actions {
         display: flex;
         align-items: center;
@@ -470,6 +417,8 @@ if ( ! empty( $subjects_list ) ) {
     .dpt-responsive-datatable {
         width: 100%;
         overflow-x: auto;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
     }
 
     .dpt-architecture-table {
@@ -483,17 +432,21 @@ if ( ! empty( $subjects_list ) ) {
         background: #f8fafc;
         color: #475569;
         font-weight: 700;
-        padding: 12px 14px;
+        padding: 14px 16px;
         border-bottom: 1px solid #e2e8f0;
         text-align: left;
         white-space: nowrap;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
     }
 
     .dpt-architecture-table td {
-        padding: 12px 14px;
+        padding: 14px 16px;
         border-bottom: 1px solid #f1f5f9;
         color: #334155;
         vertical-align: middle;
+        background: #ffffff;
     }
 
     .dpt-architecture-table tbody tr:hover td {
@@ -525,12 +478,13 @@ if ( ! empty( $subjects_list ) ) {
     .dpt-breakdown-chip {
         display: inline-flex;
         gap: 6px;
-        font-size: 11.5px;
+        font-size: 12px;
         color: #475569;
         background: #f8fafc;
         border: 1px solid #e2e8f0;
         padding: 4px 8px;
         border-radius: 6px;
+        font-weight: 500;
     }
 
     .dpt-square-btn {
@@ -543,6 +497,7 @@ if ( ! empty( $subjects_list ) ) {
         text-decoration: none;
         border: 1px solid transparent;
         cursor: pointer;
+        transition: all 0.2s ease;
     }
 
     .dpt-btn-edit { background: #eff6ff; color: #2563eb; border-color: #bfdbfe; }
@@ -554,7 +509,7 @@ if ( ! empty( $subjects_list ) ) {
         background: #ecfdf5;
         border: 1px solid #a7f3d0;
         color: #047857;
-        padding: 12px 16px;
+        padding: 14px 18px;
         border-radius: 10px;
         font-weight: 700;
         font-size: 13.5px;
@@ -563,7 +518,6 @@ if ( ! empty( $subjects_list ) ) {
         gap: 8px;
     }
 
-    /* Modal Backdrop */
     .dpt-modal-backdrop {
         position: fixed;
         top: 0; left: 0; width: 100vw; height: 100vh;
@@ -576,8 +530,8 @@ if ( ! empty( $subjects_list ) ) {
 
     .dpt-modal-backdrop.is-visible { opacity: 1; visibility: visible; }
     .dpt-modal-card {
-        background: #ffffff; width: 100%; max-width: 620px;
-        border-radius: 16px; padding: 24px;
+        background: #ffffff; width: 100%; max-width: 650px;
+        border-radius: 16px; padding: 28px;
         box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
         border: 1px solid #e2e8f0; transform: translateY(20px);
         transition: transform 0.25s ease;
@@ -587,7 +541,7 @@ if ( ! empty( $subjects_list ) ) {
 
 <div class="dpt-subjects-container">
 
-    <!-- Status Feedback Notifications -->
+    <!-- Status Alerts -->
     <?php if ( isset( $_GET['status'] ) && $_GET['status'] === 'subjects_added' ) : ?>
         <div class="afdp-alert-success">
             <span class="dashicons dashicons-yes-alt"></span>
@@ -596,10 +550,15 @@ if ( ! empty( $subjects_list ) ) {
                 printf( esc_html__( 'Successfully assigned %d new subjects to class.', 'ifsedu-sms' ), $count ); 
             ?>
         </div>
+    <?php elseif ( isset( $_GET['status'] ) && $_GET['status'] === 'updated' ) : ?>
+        <div class="afdp-alert-success" style="background:#eff6ff; border-color:#bfdbfe; color:#1e40af;">
+            <span class="dashicons dashicons-yes-alt"></span>
+            <?php esc_html_e( 'Subject evaluation scheme updated successfully.', 'ifsedu-sms' ); ?>
+        </div>
     <?php elseif ( isset( $_GET['status'] ) && $_GET['status'] === 'deleted' ) : ?>
         <div class="afdp-alert-success">
             <span class="dashicons dashicons-yes-alt"></span>
-            <?php esc_html_e( 'Subject deleted successfully.', 'ifsedu-sms' ); ?>
+            <?php esc_html_e( 'Academic subject deleted successfully.', 'ifsedu-sms' ); ?>
         </div>
     <?php endif; ?>
 
@@ -608,7 +567,7 @@ if ( ! empty( $subjects_list ) ) {
         <div class="afdp-card-header">
             <h5 class="afdp-card-title">
                 <span class="dashicons dashicons-book"></span>
-                <?php esc_html_e( 'Assign Subjects & BD Standard Mark Distributions', 'ifsedu-sms' ); ?>
+                <?php esc_html_e( 'Assign Subjects & Mark Distributions', 'ifsedu-sms' ); ?>
             </h5>
         </div>
 
@@ -616,7 +575,7 @@ if ( ! empty( $subjects_list ) ) {
             <?php wp_nonce_field( 'subject_setup_action', 'subject_setup_nonce' ); ?>
             
             <div class="dpt-form-group" style="margin-bottom: 20px; max-width: 400px;">
-                <label class="dpt-form-label"><?php esc_html_e( 'Select Target Class & Section', 'ifsedu-sms' ); ?> <span style="color:#dc2626;">*</span></label>
+                <label class="dpt-form-label"><?php esc_html_e( 'Target Class & Section', 'ifsedu-sms' ); ?> <span style="color:#dc2626;">*</span></label>
                 <select name="class_id" class="dpt-field-select" required>
                     <option value=""><?php esc_html_e( '-- Choose Target Class --', 'ifsedu-sms' ); ?></option>
                     <?php foreach ( $classes as $cls ) : 
@@ -629,18 +588,18 @@ if ( ! empty( $subjects_list ) ) {
 
             <div id="subject-repeater-canvas" class="dpt-repeater-canvas">
                 <div class="dpt-repeater-row">
-                    <!-- Row Top: Name, Code, BD Preset Selector -->
+                    <!-- Row Top -->
                     <div class="dpt-repeater-grid-top">
                         <div class="dpt-form-group">
                             <label class="dpt-form-label"><?php esc_html_e( 'Subject Title', 'ifsedu-sms' ); ?> <span style="color:#dc2626;">*</span></label>
-                            <input type="text" name="subject_name[]" class="dpt-field-input" placeholder="e.g. Physics / Bangla" required>
+                            <input type="text" name="subject_name[]" class="dpt-field-input" placeholder="e.g. Physics / Mathematics" required>
                         </div>
                         <div class="dpt-form-group">
                             <label class="dpt-form-label"><?php esc_html_e( 'Code', 'ifsedu-sms' ); ?></label>
                             <input type="text" name="subject_code[]" class="dpt-field-input" placeholder="e.g. 174">
                         </div>
                         <div class="dpt-form-group">
-                            <label class="dpt-form-label"><?php esc_html_e( 'BD Pattern Preset', 'ifsedu-sms' ); ?></label>
+                            <label class="dpt-form-label"><?php esc_html_e( 'Distribution Preset', 'ifsedu-sms' ); ?></label>
                             <select class="dpt-field-select preset-selector">
                                 <option value="gen_100">General (70/30)</option>
                                 <option value="sci_100">Science (50/25/25)</option>
@@ -655,35 +614,35 @@ if ( ! empty( $subjects_list ) ) {
                         </div>
                     </div>
 
-                    <!-- Row Bottom: BD Standard CQ / MCQ / Practical & Pass Mark Breakdown -->
+                    <!-- Row Marks -->
                     <div class="dpt-repeater-grid-marks">
                         <div class="dpt-form-group">
-                            <label class="dpt-form-label"><?php esc_html_e( 'Full Marks / Pass', 'ifsedu-sms' ); ?></label>
-                            <div style="display:flex; gap:4px;">
+                            <label class="dpt-form-label"><?php esc_html_e( 'Total / Pass', 'ifsedu-sms' ); ?></label>
+                            <div style="display:flex; gap:6px;">
                                 <input type="number" step="0.5" name="total_marks[]" class="dpt-field-input f-total" value="100" placeholder="Total" required>
                                 <input type="number" step="0.5" name="pass_marks[]" class="dpt-field-input f-pass" value="33" placeholder="Pass">
                             </div>
                         </div>
 
                         <div class="dpt-form-group">
-                            <label class="dpt-form-label"><?php esc_html_e( 'CQ Theory (Total/Pass)', 'ifsedu-sms' ); ?></label>
-                            <div style="display:flex; gap:4px;">
+                            <label class="dpt-form-label"><?php esc_html_e( 'CQ (Total / Pass)', 'ifsedu-sms' ); ?></label>
+                            <div style="display:flex; gap:6px;">
                                 <input type="number" step="0.5" name="cq_marks[]" class="dpt-field-input f-cq" value="70">
                                 <input type="number" step="0.5" name="cq_pass[]" class="dpt-field-input f-cq-pass" value="23">
                             </div>
                         </div>
 
                         <div class="dpt-form-group">
-                            <label class="dpt-form-label"><?php esc_html_e( 'MCQ (Total/Pass)', 'ifsedu-sms' ); ?></label>
-                            <div style="display:flex; gap:4px;">
+                            <label class="dpt-form-label"><?php esc_html_e( 'MCQ (Total / Pass)', 'ifsedu-sms' ); ?></label>
+                            <div style="display:flex; gap:6px;">
                                 <input type="number" step="0.5" name="mcq_marks[]" class="dpt-field-input f-mcq" value="30">
                                 <input type="number" step="0.5" name="mcq_pass[]" class="dpt-field-input f-mcq-pass" value="10">
                             </div>
                         </div>
 
                         <div class="dpt-form-group">
-                            <label class="dpt-form-label"><?php esc_html_e( 'Practical (Total/Pass)', 'ifsedu-sms' ); ?></label>
-                            <div style="display:flex; gap:4px;">
+                            <label class="dpt-form-label"><?php esc_html_e( 'Practical (Tot / Pass)', 'ifsedu-sms' ); ?></label>
+                            <div style="display:flex; gap:6px;">
                                 <input type="number" step="0.5" name="practical_marks[]" class="dpt-field-input f-pr" value="0">
                                 <input type="number" step="0.5" name="practical_pass[]" class="dpt-field-input f-pr-pass" value="0">
                             </div>
@@ -709,7 +668,7 @@ if ( ! empty( $subjects_list ) ) {
         <div class="afdp-card-header">
             <h5 class="afdp-card-title">
                 <span class="dashicons dashicons-list-view"></span>
-                <?php esc_html_e( 'Mapped Academic Subjects Directory', 'ifsedu-sms' ); ?>
+                <?php esc_html_e( 'Academic Subjects Directory', 'ifsedu-sms' ); ?>
             </h5>
             
             <div class="dpt-header-actions">
@@ -732,11 +691,11 @@ if ( ! empty( $subjects_list ) ) {
             <table class="dpt-architecture-table" id="dpt-subjects-table">
                 <thead>
                     <tr>
-                        <th style="width: 25%;"><?php esc_html_e( 'Class / Section', 'ifsedu-sms' ); ?></th>
-                        <th style="width: 28%;"><?php esc_html_e( 'Subject Details', 'ifsedu-sms' ); ?></th>
-                        <th style="width: 14%;"><?php esc_html_e( 'Full / Pass', 'ifsedu-sms' ); ?></th>
-                        <th style="width: 23%;"><?php esc_html_e( 'BD Mark Distribution (CQ / MCQ / PR)', 'ifsedu-sms' ); ?></th>
-                        <th style="width: 10%; text-align:right;"><?php esc_html_e( 'Actions', 'ifsedu-sms' ); ?></th>
+                        <th style="width: 22%;"><?php esc_html_e( 'Class / Section', 'ifsedu-sms' ); ?></th>
+                        <th style="width: 25%;"><?php esc_html_e( 'Subject Details', 'ifsedu-sms' ); ?></th>
+                        <th style="width: 15%;"><?php esc_html_e( 'Full / Pass', 'ifsedu-sms' ); ?></th>
+                        <th style="width: 26%;"><?php esc_html_e( 'Mark Distribution (CQ / MCQ / PR)', 'ifsedu-sms' ); ?></th>
+                        <th style="width: 12%; text-align:right;"><?php esc_html_e( 'Actions', 'ifsedu-sms' ); ?></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -784,14 +743,14 @@ if ( ! empty( $subjects_list ) ) {
                                             data-mcq-pass="<?php echo esc_attr( $sub->mcq_pass ?? 0 ); ?>"
                                             data-practical="<?php echo esc_attr( $sub->practical_marks ?? 0 ); ?>"
                                             data-practical-pass="<?php echo esc_attr( $sub->practical_pass ?? 0 ); ?>"
-                                            title="<?php esc_attr_e( 'Edit Subject & Marks', 'ifsedu-sms' ); ?>">
+                                            title="<?php esc_attr_e( 'Edit Subject Scheme', 'ifsedu-sms' ); ?>">
                                         <span class="dashicons dashicons-edit"></span>
                                     </button>
 
                                     <a href="<?php echo esc_url( $delete_url ); ?>" 
                                        class="dpt-square-btn dpt-btn-delete" 
                                        title="<?php esc_attr_e( 'Delete Subject', 'ifsedu-sms' ); ?>" 
-                                       onclick="return confirm('<?php echo esc_js( __( 'Are you sure you want to delete this subject?', 'ifsedu-sms' ) ); ?>');">
+                                       onclick="return confirm('<?php echo esc_js( __( 'Are you sure you want to remove this subject?', 'ifsedu-sms' ) ); ?>');">
                                         <span class="dashicons dashicons-trash"></span>
                                     </a>
                                 </div>
@@ -808,7 +767,6 @@ if ( ! empty( $subjects_list ) ) {
             </table>
         </div>
     </div>
-
 </div>
 
 <!-- Edit Subject Dynamic Modal -->
@@ -819,11 +777,12 @@ if ( ! empty( $subjects_list ) ) {
             <button type="button" id="dpt-close-modal" style="background:none; border:none; font-size:22px; cursor:pointer; color:#64748b;">&times;</button>
         </div>
 
-        <form id="dpt-edit-subject-form">
+        <form id="dpt-edit-subject-form" method="POST" action="<?php echo esc_url( $base_url ); ?>">
             <input type="hidden" id="edit_subject_id" name="subject_id" value="">
+            <input type="hidden" name="educore_update_single_subject" value="1">
             <?php wp_nonce_field( 'dpt_edit_subject_nonce', 'edit_subject_nonce_field' ); ?>
 
-            <div style="display:grid; grid-template-columns: 2fr 1fr; gap:10px; margin-bottom: 12px;">
+            <div style="display:grid; grid-template-columns: 2fr 1fr; gap:12px; margin-bottom: 12px;">
                 <div class="dpt-form-group">
                     <label class="dpt-form-label"><?php esc_html_e( 'Academic Class & Section', 'ifsedu-sms' ); ?> <span style="color:#dc2626;">*</span></label>
                     <select id="edit_class_id" name="class_id" class="dpt-field-select" required>
@@ -835,7 +794,7 @@ if ( ! empty( $subjects_list ) ) {
                     </select>
                 </div>
                 <div class="dpt-form-group">
-                    <label class="dpt-form-label"><?php esc_html_e( 'BD Pattern Preset', 'ifsedu-sms' ); ?></label>
+                    <label class="dpt-form-label"><?php esc_html_e( 'Preset Distribution', 'ifsedu-sms' ); ?></label>
                     <select class="dpt-field-select" id="edit_preset_selector">
                         <option value="gen_100">General (70/30)</option>
                         <option value="sci_100">Science (50/25/25)</option>
@@ -845,7 +804,7 @@ if ( ! empty( $subjects_list ) ) {
                 </div>
             </div>
 
-            <div style="display:grid; grid-template-columns: 2fr 1fr; gap:10px; margin-bottom: 12px;">
+            <div style="display:grid; grid-template-columns: 2fr 1fr; gap:12px; margin-bottom: 12px;">
                 <div class="dpt-form-group">
                     <label class="dpt-form-label"><?php esc_html_e( 'Subject Name', 'ifsedu-sms' ); ?> <span style="color:#dc2626;">*</span></label>
                     <input type="text" id="edit_subject_name" name="subject_name" class="dpt-field-input" required>
@@ -856,7 +815,7 @@ if ( ! empty( $subjects_list ) ) {
                 </div>
             </div>
 
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom: 12px;">
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom: 12px;">
                 <div class="dpt-form-group">
                     <label class="dpt-form-label"><?php esc_html_e( 'Full Marks', 'ifsedu-sms' ); ?> <span style="color:#dc2626;">*</span></label>
                     <input type="number" step="0.5" id="edit_total_marks" name="total_marks" class="dpt-field-input" required>
@@ -867,23 +826,23 @@ if ( ! empty( $subjects_list ) ) {
                 </div>
             </div>
 
-            <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:10px; margin-bottom: 16px; background:#f8fafc; padding:12px; border-radius:8px; border:1px solid #e2e8f0;">
+            <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:10px; margin-bottom: 18px; background:#f8fafc; padding:14px; border-radius:10px; border:1px solid #e2e8f0;">
                 <div class="dpt-form-group">
-                    <label class="dpt-form-label">CQ (Total / Pass)</label>
+                    <label class="dpt-form-label"><?php esc_html_e( 'CQ (Total / Pass)', 'ifsedu-sms' ); ?></label>
                     <div style="display:flex; gap:4px;">
                         <input type="number" step="0.5" id="edit_cq_marks" name="cq_marks" class="dpt-field-input" placeholder="CQ">
                         <input type="number" step="0.5" id="edit_cq_pass" name="cq_pass" class="dpt-field-input" placeholder="Pass">
                     </div>
                 </div>
                 <div class="dpt-form-group">
-                    <label class="dpt-form-label">MCQ (Total / Pass)</label>
+                    <label class="dpt-form-label"><?php esc_html_e( 'MCQ (Total / Pass)', 'ifsedu-sms' ); ?></label>
                     <div style="display:flex; gap:4px;">
                         <input type="number" step="0.5" id="edit_mcq_marks" name="mcq_marks" class="dpt-field-input" placeholder="MCQ">
                         <input type="number" step="0.5" id="edit_mcq_pass" name="mcq_pass" class="dpt-field-input" placeholder="Pass">
                     </div>
                 </div>
                 <div class="dpt-form-group">
-                    <label class="dpt-form-label">Practical (Tot / Pass)</label>
+                    <label class="dpt-form-label"><?php esc_html_e( 'Practical (Tot / Pass)', 'ifsedu-sms' ); ?></label>
                     <div style="display:flex; gap:4px;">
                         <input type="number" step="0.5" id="edit_practical_marks" name="practical_marks" class="dpt-field-input" placeholder="PR">
                         <input type="number" step="0.5" id="edit_practical_pass" name="practical_pass" class="dpt-field-input" placeholder="Pass">
@@ -891,10 +850,10 @@ if ( ! empty( $subjects_list ) ) {
                 </div>
             </div>
 
-            <div style="display:flex; justify-content:flex-end; gap:8px;">
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
                 <button type="button" class="dpt-btn-cancel" id="dpt-cancel-edit"><?php esc_html_e( 'Cancel', 'ifsedu-sms' ); ?></button>
                 <button type="submit" class="dpt-btn-submit" id="dpt-save-edit-btn">
-                    <span class="dashicons dashicons-saved"></span> <?php esc_html_e( 'Update Subject', 'ifsedu-sms' ); ?>
+                    <span class="dashicons dashicons-saved"></span> <?php esc_html_e( 'Update Scheme', 'ifsedu-sms' ); ?>
                 </button>
             </div>
         </form>
@@ -904,6 +863,7 @@ if ( ! empty( $subjects_list ) ) {
 <script type="text/javascript">
 document.addEventListener('DOMContentLoaded', function() {
     function applyPresetValues(totalInp, passInp, cqInp, cqPass, mcqInp, mcqPass, prInp, prPass, presetKey) {
+        if (!totalInp) return;
         if (presetKey === 'gen_100') {
             totalInp.value = 100; passInp.value = 33;
             cqInp.value = 70; cqPass.value = 23;
@@ -1019,7 +979,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
 
-            if (countPill) countPill.textContent = visibleCount + ' Subjects';
+            if (countPill) countPill.textContent = visibleCount + ' <?php echo esc_js( __( 'Subjects', 'ifsedu-sms' ) ); ?>';
         });
     }
 
@@ -1057,17 +1017,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (editForm) {
         editForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-
             const submitBtn    = document.getElementById('dpt-save-edit-btn');
             const originalText = submitBtn.innerHTML;
             submitBtn.disabled = true;
-            submitBtn.innerHTML = '<span class="dashicons dashicons-update spin"></span> Saving...';
+            submitBtn.innerHTML = '<span class="dashicons dashicons-update" style="animation: rotation 2s infinite linear;"></span> <?php echo esc_js( __( 'Saving...', 'ifsedu-sms' ) ); ?>';
 
             const formData = new FormData(editForm);
             formData.append('action', 'dpt_update_subject');
             formData.append('security', document.getElementById('edit_subject_nonce_field').value);
 
+            // Attempt instantaneous AJAX with automatic fallback to standard POST submission
             fetch('<?php echo esc_url( admin_url( "admin-ajax.php" ) ); ?>', {
                 method: 'POST',
                 body: formData
@@ -1077,7 +1036,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = originalText;
 
-                if (data.success) {
+                if (data && data.success) {
                     const subjectId = document.getElementById('edit_subject_id').value;
                     const row = document.querySelector('tr[data-subject-id="' + subjectId + '"]');
 
@@ -1110,29 +1069,32 @@ document.addEventListener('DOMContentLoaded', function() {
                         row.querySelector('.cell-breakdown-marks').innerHTML = breakdownHtml;
 
                         const editBtn = row.querySelector('.btn-trigger-edit');
-                        editBtn.setAttribute('data-class-id', classSelect.value);
-                        editBtn.setAttribute('data-name', newName);
-                        editBtn.setAttribute('data-code', newCode);
-                        editBtn.setAttribute('data-total', newTotal);
-                        editBtn.setAttribute('data-pass', newPass);
-                        editBtn.setAttribute('data-cq', newCQ);
-                        editBtn.setAttribute('data-cq-pass', newCQPass);
-                        editBtn.setAttribute('data-mcq', newMCQ);
-                        editBtn.setAttribute('data-mcq-pass', newMCQPass);
-                        editBtn.setAttribute('data-practical', newPR);
-                        editBtn.setAttribute('data-practical-pass', newPRPass);
+                        if (editBtn) {
+                            editBtn.setAttribute('data-class-id', classSelect.value);
+                            editBtn.setAttribute('data-name', newName);
+                            editBtn.setAttribute('data-code', newCode);
+                            editBtn.setAttribute('data-total', newTotal);
+                            editBtn.setAttribute('data-pass', newPass);
+                            editBtn.setAttribute('data-cq', newCQ);
+                            editBtn.setAttribute('data-cq-pass', newCQPass);
+                            editBtn.setAttribute('data-mcq', newMCQ);
+                            editBtn.setAttribute('data-mcq-pass', newMCQPass);
+                            editBtn.setAttribute('data-practical', newPR);
+                            editBtn.setAttribute('data-practical-pass', newPRPass);
+                        }
                     }
-
                     hideModal();
                 } else {
-                    alert((data.data && data.data.message) || 'Update failed.');
+                    // Fallback to standard POST form submit
+                    editForm.submit();
                 }
             })
             .catch(() => {
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = originalText;
-                alert('Connection error.');
+                // If AJAX endpoint is unreachable from view file, submit standard form
+                editForm.submit();
             });
+
+            e.preventDefault();
         });
     }
 });

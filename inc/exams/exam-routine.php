@@ -6,6 +6,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Examination Timetable & Routine Scheduler View
  * File: inc/exams/exam-routine.php
+ * Updated: Multi-Shift Support (No Shift, Morning Shift, Day Shift)
  */
 function educore_exam_routine_view() {
     global $wpdb;
@@ -19,24 +20,30 @@ function educore_exam_routine_view() {
     $table_subjects     = $wpdb->prefix . 'sms_subjects';
     $table_exam_routine = $wpdb->prefix . 'sms_exam_routine';
 
-    // Auto-create exam routine schema if not present
-    $check_table = $wpdb->get_var( "SHOW TABLES LIKE '{$table_exam_routine}'" );
-    if ( empty( $check_table ) ) {
-        $charset_collate = $wpdb->get_charset_collate();
-        $sql = "CREATE TABLE {$table_exam_routine} (
-            id bigint(20) NOT NULL AUTO_INCREMENT,
-            exam_id bigint(20) NOT NULL,
-            class_id bigint(20) NOT NULL,
-            subject_id bigint(20) NOT NULL,
-            exam_date date NOT NULL,
-            start_time time NOT NULL,
-            end_time time NOT NULL,
-            room_no varchar(50) DEFAULT '' NOT NULL,
-            PRIMARY KEY (id),
-            KEY exam_class_idx (exam_id, class_id)
-        ) {$charset_collate};";
-        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-        dbDelta( $sql );
+    // 0. Auto-create & schema check for exam routine (with shift column support)
+    $charset_collate = $wpdb->get_charset_collate();
+    require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+
+    $sql = "CREATE TABLE {$table_exam_routine} (
+        id bigint(20) NOT NULL AUTO_INCREMENT,
+        exam_id bigint(20) NOT NULL,
+        class_id bigint(20) NOT NULL,
+        subject_id bigint(20) NOT NULL,
+        shift varchar(50) DEFAULT 'No Shift' NOT NULL,
+        exam_date date NOT NULL,
+        start_time time NOT NULL,
+        end_time time NOT NULL,
+        room_no varchar(50) DEFAULT '' NOT NULL,
+        PRIMARY KEY (id),
+        KEY exam_class_idx (exam_id, class_id),
+        KEY shift_idx (shift)
+    ) {$charset_collate};";
+    dbDelta( $sql );
+
+    // Ensure shift column exists if table was previously created without it
+    $column_check = $wpdb->get_results( "SHOW COLUMNS FROM `{$table_exam_routine}` LIKE 'shift'" );
+    if ( empty( $column_check ) ) {
+        $wpdb->query( "ALTER TABLE `{$table_exam_routine}` ADD `shift` varchar(50) DEFAULT 'No Shift' NOT NULL AFTER `subject_id`" );
     }
 
     $base_url   = admin_url( 'admin.php?page=school_management_system&tab=exams&sub=routine' );
@@ -47,6 +54,7 @@ function educore_exam_routine_view() {
         $exam_id    = absint( $_POST['exam_id'] );
         $class_id   = absint( $_POST['class_id'] );
         $subject_id = absint( $_POST['subject_id'] );
+        $shift      = isset( $_POST['shift'] ) ? sanitize_text_field( wp_unslash( $_POST['shift'] ) ) : 'No Shift';
         $exam_date  = sanitize_text_field( wp_unslash( $_POST['exam_date'] ) );
         $start_time = sanitize_text_field( wp_unslash( $_POST['start_time'] ) );
         $end_time   = sanitize_text_field( wp_unslash( $_POST['end_time'] ) );
@@ -59,12 +67,13 @@ function educore_exam_routine_view() {
                     'exam_id'    => $exam_id,
                     'class_id'   => $class_id,
                     'subject_id' => $subject_id,
+                    'shift'      => $shift,
                     'exam_date'  => $exam_date,
                     'start_time' => date( 'H:i:s', strtotime( $start_time ) ),
                     'end_time'   => date( 'H:i:s', strtotime( $end_time ) ),
                     'room_no'    => $room_no,
                 ),
-                array( '%d', '%d', '%d', '%s', '%s', '%s', '%s' )
+                array( '%d', '%d', '%d', '%s', '%s', '%s', '%s', '%s' )
             );
             $notice_msg = __( 'Exam routine slot added successfully.', 'ifsedu-sms' );
         }
@@ -81,6 +90,7 @@ function educore_exam_routine_view() {
     // Filters
     $filter_exam_id  = isset( $_GET['filter_exam'] ) ? absint( $_GET['filter_exam'] ) : 0;
     $filter_class_id = isset( $_GET['filter_class'] ) ? absint( $_GET['filter_class'] ) : 0;
+    $filter_shift    = isset( $_GET['filter_shift'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_shift'] ) ) : '';
 
     $exams    = $wpdb->get_results( "SELECT id, exam_name FROM {$table_exams} ORDER BY id DESC" );
     $classes  = $wpdb->get_results( "SELECT id, class_name, section_name FROM {$table_units} WHERE class_name != '' ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC" );
@@ -93,6 +103,9 @@ function educore_exam_routine_view() {
     }
     if ( $filter_class_id > 0 ) {
         $where_clauses[] = $wpdb->prepare( "er.class_id = %d", $filter_class_id );
+    }
+    if ( ! empty( $filter_shift ) ) {
+        $where_clauses[] = $wpdb->prepare( "er.shift = %s", $filter_shift );
     }
     $where_sql = ! empty( $where_clauses ) ? "WHERE " . implode( " AND ", $where_clauses ) : "";
 
@@ -177,6 +190,18 @@ function educore_exam_routine_view() {
             border-radius: 6px;
             margin-bottom: 6px;
         }
+        .dpt-shift-badge {
+            display: inline-block;
+            font-size: 10.5px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-left: 4px;
+        }
+        .dpt-shift-morning { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+        .dpt-shift-day     { background: #e0e7ff; color: #3730a3; border: 1px solid #c7d2fe; }
+        .dpt-shift-none    { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+
         .dpt-btn-print {
             height: 36px;
             padding: 0 16px;
@@ -243,6 +268,15 @@ function educore_exam_routine_view() {
                         ?>
                             <option value="<?php echo intval( $cl->id ); ?>"><?php echo esc_html( $cl->class_name . $sec ); ?></option>
                         <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="dpt-form-group">
+                    <label class="dpt-label"><?php esc_html_e( 'Academic Shift', 'ifsedu-sms' ); ?></label>
+                    <select name="shift" class="dpt-select">
+                        <option value="No Shift"><?php esc_html_e( 'No Shift', 'ifsedu-sms' ); ?></option>
+                        <option value="Morning Shift"><?php esc_html_e( 'Morning Shift', 'ifsedu-sms' ); ?></option>
+                        <option value="Day Shift"><?php esc_html_e( 'Day Shift', 'ifsedu-sms' ); ?></option>
                     </select>
                 </div>
 
@@ -314,11 +348,18 @@ function educore_exam_routine_view() {
                         <?php endforeach; ?>
                     </select>
 
+                    <select name="filter_shift" style="height:34px; border:1px solid #cbd5e1; border-radius:6px; font-size:12px; font-weight:600;">
+                        <option value=""><?php esc_html_e( '-- All Shifts --', 'ifsedu-sms' ); ?></option>
+                        <option value="No Shift" <?php selected( $filter_shift, 'No Shift' ); ?>><?php esc_html_e( 'No Shift', 'ifsedu-sms' ); ?></option>
+                        <option value="Morning Shift" <?php selected( $filter_shift, 'Morning Shift' ); ?>><?php esc_html_e( 'Morning Shift', 'ifsedu-sms' ); ?></option>
+                        <option value="Day Shift" <?php selected( $filter_shift, 'Day Shift' ); ?>><?php esc_html_e( 'Day Shift', 'ifsedu-sms' ); ?></option>
+                    </select>
+
                     <button type="submit" class="dpt-btn-print" style="height:34px; padding:0 12px; background:#006a4e; color:#ffffff; border-color:#006a4e;">
                         <?php esc_html_e( 'Filter', 'ifsedu-sms' ); ?>
                     </button>
                     
-                    <?php if ( $filter_exam_id > 0 || $filter_class_id > 0 ) : ?>
+                    <?php if ( $filter_exam_id > 0 || $filter_class_id > 0 || ! empty( $filter_shift ) ) : ?>
                         <a href="<?php echo esc_url( $base_url ); ?>" class="dpt-btn-print" style="height:34px; padding:0 10px; text-decoration:none;">
                             <?php esc_html_e( 'Reset', 'ifsedu-sms' ); ?>
                         </a>
@@ -332,7 +373,7 @@ function educore_exam_routine_view() {
                         <tr style="background:#f8fafc;">
                             <th style="padding:10px 12px; text-align:left; border-bottom:2px solid #e2e8f0; font-size:11px; text-transform:uppercase; color:#475569;"><?php esc_html_e( 'Date & Time', 'ifsedu-sms' ); ?></th>
                             <th style="padding:10px 12px; text-align:left; border-bottom:2px solid #e2e8f0; font-size:11px; text-transform:uppercase; color:#475569;"><?php esc_html_e( 'Exam', 'ifsedu-sms' ); ?></th>
-                            <th style="padding:10px 12px; text-align:left; border-bottom:2px solid #e2e8f0; font-size:11px; text-transform:uppercase; color:#475569;"><?php esc_html_e( 'Class', 'ifsedu-sms' ); ?></th>
+                            <th style="padding:10px 12px; text-align:left; border-bottom:2px solid #e2e8f0; font-size:11px; text-transform:uppercase; color:#475569;"><?php esc_html_e( 'Class / Shift', 'ifsedu-sms' ); ?></th>
                             <th style="padding:10px 12px; text-align:left; border-bottom:2px solid #e2e8f0; font-size:11px; text-transform:uppercase; color:#475569;"><?php esc_html_e( 'Subject', 'ifsedu-sms' ); ?></th>
                             <th style="padding:10px 12px; text-align:left; border-bottom:2px solid #e2e8f0; font-size:11px; text-transform:uppercase; color:#475569;"><?php esc_html_e( 'Room', 'ifsedu-sms' ); ?></th>
                             <th style="padding:10px 12px; text-align:right; border-bottom:2px solid #e2e8f0; font-size:11px; text-transform:uppercase; color:#475569;"><?php esc_html_e( 'Action', 'ifsedu-sms' ); ?></th>
@@ -341,6 +382,13 @@ function educore_exam_routine_view() {
                     <tbody>
                         <?php if ( ! empty( $schedules ) ) : foreach ( $schedules as $s ) : 
                             $del_url = wp_nonce_url( add_query_arg( array( 'action' => 'delete_slot', 'slot_id' => $s->id ), $base_url ), 'delete_slot_' . $s->id );
+                            $shift_val = ! empty( $s->shift ) ? $s->shift : 'No Shift';
+                            $shift_badge_class = 'dpt-shift-none';
+                            if ( $shift_val === 'Morning Shift' ) {
+                                $shift_badge_class = 'dpt-shift-morning';
+                            } elseif ( $shift_val === 'Day Shift' ) {
+                                $shift_badge_class = 'dpt-shift-day';
+                            }
                         ?>
                             <tr>
                                 <td style="padding:10px 12px; border-bottom:1px solid #f1f5f9;">
@@ -354,6 +402,11 @@ function educore_exam_routine_view() {
                                     <span style="background:#eff6ff; color:#2563eb; padding:2px 8px; border-radius:10px; font-weight:700; font-size:11.5px;">
                                         <?php echo esc_html( $s->class_name . ( $s->section_name ? ' (' . $s->section_name . ')' : '' ) ); ?>
                                     </span>
+                                    <?php if ( $shift_val !== 'No Shift' ) : ?>
+                                        <span class="dpt-shift-badge <?php echo esc_attr( $shift_badge_class ); ?>">
+                                            <?php echo esc_html( $shift_val ); ?>
+                                        </span>
+                                    <?php endif; ?>
                                 </td>
                                 <td style="padding:10px 12px; border-bottom:1px solid #f1f5f9;">
                                     <strong><?php echo esc_html( $s->subject_name ); ?></strong>
@@ -413,11 +466,26 @@ function educore_exam_routine_view() {
 
                         <!-- Slots under this Date -->
                         <div class="dpt-date-slots-body">
-                            <?php foreach ( $day_slots as $slot_item ) : ?>
+                            <?php foreach ( $day_slots as $slot_item ) : 
+                                $slot_shift = ! empty( $slot_item->shift ) ? $slot_item->shift : 'No Shift';
+                                $slot_badge_class = 'dpt-shift-none';
+                                if ( $slot_shift === 'Morning Shift' ) {
+                                    $slot_badge_class = 'dpt-shift-morning';
+                                } elseif ( $slot_shift === 'Day Shift' ) {
+                                    $slot_badge_class = 'dpt-shift-day';
+                                }
+                            ?>
                                 <div class="dpt-exam-slot-item">
-                                    <div class="dpt-slot-badge-time">
-                                        <span class="dashicons dashicons-clock" style="font-size:12px; width:12px; height:12px;"></span>
-                                        <span><?php echo esc_html( date( 'g:i A', strtotime( $slot_item->start_time ) ) . ' - ' . date( 'g:i A', strtotime( $slot_item->end_time ) ) ); ?></span>
+                                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:4px; margin-bottom:6px;">
+                                        <div class="dpt-slot-badge-time" style="margin-bottom:0;">
+                                            <span class="dashicons dashicons-clock" style="font-size:12px; width:12px; height:12px;"></span>
+                                            <span><?php echo esc_html( date( 'g:i A', strtotime( $slot_item->start_time ) ) . ' - ' . date( 'g:i A', strtotime( $slot_item->end_time ) ) ); ?></span>
+                                        </div>
+                                        <?php if ( $slot_shift !== 'No Shift' ) : ?>
+                                            <span class="dpt-shift-badge <?php echo esc_attr( $slot_badge_class ); ?>">
+                                                <?php echo esc_html( $slot_shift ); ?>
+                                            </span>
+                                        <?php endif; ?>
                                     </div>
 
                                     <div style="font-size:14px; font-weight:800; color:#0f172a; margin-bottom:4px;">

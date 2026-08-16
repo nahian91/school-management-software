@@ -4,8 +4,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Fee Collection Module Engine
- * File: fees-collect.php
+ * Fee Collection Module Engine with Automated Late Fine Rules (Role-Filtered for Accountant & Admin)
+ * File: inc/fees/fees-collect.php
  * Theme Aesthetic: Elite Neo-Bento UI
  * Custom Prefixes Applied: dpt-, afdp-
  */
@@ -15,7 +15,12 @@ add_action( 'wp_ajax_educore_get_sections_by_class_fee', 'educore_get_sections_b
 function educore_get_sections_by_class_fee_handler() {
     check_ajax_referer( 'educore_fee_nonce', 'security' );
 
-    if ( ! current_user_can( 'manage_options' ) ) {
+    $current_user  = wp_get_current_user();
+    $roles         = (array) $current_user->roles;
+    $is_admin      = current_user_can( 'manage_options' );
+    $is_accountant = in_array( 'accountant', $roles, true ) || current_user_can( 'edit_posts' );
+
+    if ( ! $is_admin && ! $is_accountant ) {
         wp_send_json_error( array( 'message' => __( 'Permission denied.', 'ifsedu-sms' ) ) );
     }
 
@@ -40,13 +45,21 @@ add_action( 'wp_ajax_educore_get_fee_types_by_class', 'educore_get_fee_types_by_
 function educore_get_fee_types_by_class_handler() {
     check_ajax_referer( 'educore_fee_nonce', 'security' );
 
-    if ( ! current_user_can( 'manage_options' ) ) {
+    $current_user  = wp_get_current_user();
+    $roles         = (array) $current_user->roles;
+    $is_admin      = current_user_can( 'manage_options' );
+    $is_accountant = in_array( 'accountant', $roles, true ) || current_user_can( 'edit_posts' );
+
+    if ( ! $is_admin && ! $is_accountant ) {
         wp_send_json_error( array( 'message' => __( 'Permission denied.', 'ifsedu-sms' ) ) );
     }
 
     global $wpdb;
     $table_fee_types = $wpdb->prefix . 'sms_fee_types';
+    $table_late_cfg  = $wpdb->prefix . 'sms_late_fee_config';
     $class_name      = isset( $_POST['class_name'] ) ? sanitize_text_field( wp_unslash( $_POST['class_name'] ) ) : '';
+    $billing_month   = isset( $_POST['billing_month'] ) ? sanitize_text_field( wp_unslash( $_POST['billing_month'] ) ) : date( 'F' );
+    $billing_year    = isset( $_POST['billing_year'] ) ? absint( $_POST['billing_year'] ) : date( 'Y' );
 
     $fee_types = array();
     if ( ! empty( $class_name ) ) {
@@ -56,7 +69,51 @@ function educore_get_fee_types_by_class_handler() {
         ) );
     }
 
-    wp_send_json_success( $fee_types );
+    // Calculate Late Fine based on Settings Table Rules
+    $calculated_fine = 0.00;
+    $late_cfg = $wpdb->get_row( "SELECT * FROM {$table_late_cfg} LIMIT 1" );
+
+    if ( $late_cfg && strtolower( $late_cfg->status ) === 'active' ) {
+        $today_timestamp = current_time( 'timestamp' );
+        
+        // Build target due date timestamp (e.g. 12th of the selected billing month & year)
+        $month_num = date( 'm', strtotime( $billing_month . ' 1' ) );
+        $due_date_str = sprintf( '%04d-%02d-%02d', $billing_year, $month_num, absint( $late_cfg->fine_start_date ) );
+        $due_timestamp = strtotime( $due_date_str );
+
+        if ( $today_timestamp > $due_timestamp ) {
+            $overdue_days = floor( ( $today_timestamp - $due_timestamp ) / ( 60 * 60 * 24 ) );
+
+            if ( $overdue_days > absint( $late_cfg->grace_days ) ) {
+                $effective_days = $overdue_days - absint( $late_cfg->grace_days );
+                $fine_type      = $late_cfg->fine_type;
+                $rate_val       = floatval( $late_cfg->fine_amount );
+                $max_cap        = floatval( $late_cfg->max_fine_cap );
+
+                if ( $fine_type === 'Fixed' ) {
+                    $calculated_fine = $rate_val;
+                } elseif ( $fine_type === 'Daily' ) {
+                    $calculated_fine = $rate_val * $effective_days;
+                } elseif ( $fine_type === 'Percentage' ) {
+                    // Applied against base amount dynamically in JS or base fee
+                    $calculated_fine = $rate_val; // Base rate flag for client side computation
+                }
+
+                if ( $max_cap > 0 && $calculated_fine > $max_cap ) {
+                    $calculated_fine = $max_cap;
+                }
+            }
+        }
+    }
+
+    wp_send_json_success( array(
+        'fee_types'     => $fee_types,
+        'late_fine'     => $calculated_fine,
+        'fine_type'     => $late_cfg ? $late_cfg->fine_type : 'Fixed',
+        'fine_amount'   => $late_cfg ? floatval( $late_cfg->fine_amount ) : 0.00,
+        'grace_days'    => $late_cfg ? absint( $late_cfg->grace_days ) : 0,
+        'start_date'    => $late_cfg ? absint( $late_cfg->fine_start_date ) : 12,
+    ) );
 }
 
 // 3. AJAX Handler to dynamically filter student list by Class & Section
@@ -64,7 +121,12 @@ add_action( 'wp_ajax_educore_get_students_for_fee_collect', 'educore_get_student
 function educore_get_students_for_fee_collect_handler() {
     check_ajax_referer( 'educore_fee_nonce', 'security' );
 
-    if ( ! current_user_can( 'manage_options' ) ) {
+    $current_user  = wp_get_current_user();
+    $roles         = (array) $current_user->roles;
+    $is_admin      = current_user_can( 'manage_options' );
+    $is_accountant = in_array( 'accountant', $roles, true ) || current_user_can( 'edit_posts' );
+
+    if ( ! $is_admin && ! $is_accountant ) {
         wp_send_json_error( array( 'message' => __( 'Permission denied.', 'ifsedu-sms' ) ) );
     }
 
@@ -121,7 +183,12 @@ add_action( 'wp_ajax_educore_get_single_student_waiver_info', 'educore_get_singl
 function educore_get_single_student_waiver_info_handler() {
     check_ajax_referer( 'educore_fee_nonce', 'security' );
 
-    if ( ! current_user_can( 'manage_options' ) ) {
+    $current_user  = wp_get_current_user();
+    $roles         = (array) $current_user->roles;
+    $is_admin      = current_user_can( 'manage_options' );
+    $is_accountant = in_array( 'accountant', $roles, true ) || current_user_can( 'edit_posts' );
+
+    if ( ! $is_admin && ! $is_accountant ) {
         wp_send_json_error( array( 'message' => __( 'Permission denied.', 'ifsedu-sms' ) ) );
     }
 
@@ -168,14 +235,22 @@ function educore_get_single_student_waiver_info_handler() {
 
 function educore_fees_collect_view() {
     global $wpdb;
+    $current_user = wp_get_current_user();
+    $roles        = (array) $current_user->roles;
+
+    // 1. Multi-Role Capability Security Matrix (Admins & Accountants)
+    $is_admin      = current_user_can( 'manage_options' );
+    $is_accountant = in_array( 'accountant', $roles, true ) || current_user_can( 'edit_posts' );
+
+    if ( ! $is_admin && ! $is_accountant ) {
+        wp_die( esc_html__( 'You do not have sufficient permissions to collect fees.', 'ifsedu-sms' ) );
+    }
+
     $table_students  = $wpdb->prefix . 'sms_students';
     $table_fees      = $wpdb->prefix . 'sms_fees';
     $table_units     = $wpdb->prefix . 'sms_academic_units';
     $table_fee_types = $wpdb->prefix . 'sms_fee_types';
-
-    if ( ! current_user_can( 'manage_options' ) ) {
-        wp_die( esc_html__( 'You do not have sufficient permissions to collect fees.', 'ifsedu-sms' ) );
-    }
+    $table_late_cfg  = $wpdb->prefix . 'sms_late_fee_config';
 
     $db_error    = '';
     $current_uri = remove_query_arg( array( 'status', 'msg' ), $_SERVER['REQUEST_URI'] );
@@ -282,6 +357,9 @@ function educore_fees_collect_view() {
          FROM {$table_students} WHERE status = 'Active' 
          ORDER BY class_name ASC, CAST(roll_no AS UNSIGNED) ASC, roll_no ASC"
     );
+
+    // Fetch default Late Fine Configuration for initial load
+    $late_config = $wpdb->get_row( "SELECT * FROM {$table_late_cfg} LIMIT 1" );
 
     $months        = array( "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December" );
     $current_month = date( 'F' );
@@ -585,7 +663,7 @@ function educore_fees_collect_view() {
                         <select id="educore_fee_class_filter" class="dpt-field-select" style="font-weight:600;">
                             <option value=""><?php esc_html_e( '-- All Classes --', 'ifsedu-sms' ); ?></option>
                             <?php foreach ( $raw_classes as $cls_obj ) : ?>
-                                <option value="<?php echo esc_attr( $cls_obj->class_name ); ?>"><?php printf( esc_html__( 'Class %s', 'ifsedu-sms' ), esc_html( $cls_obj->class_name ) ); ?></option>
+                                <option value="<?php echo esc_attr( $cls_obj->class_name ); ?>"><?php printf( esc_html__( '%s', 'ifsedu-sms' ), esc_html( $cls_obj->class_name ) ); ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -641,7 +719,7 @@ function educore_fees_collect_view() {
                     </div>
                     <div class="dpt-form-group">
                         <label class="dpt-form-label"><?php esc_html_e( 'Billing Month', 'ifsedu-sms' ); ?></label>
-                        <select name="fee_month" class="dpt-field-select" required>
+                        <select name="fee_month" id="fee_month_select" class="dpt-field-select" required>
                             <?php foreach ( $months as $m ) : ?>
                                 <option value="<?php echo esc_attr( $m ); ?>" <?php selected( $current_month, $m ); ?>>
                                     <?php echo esc_html( $m ); ?>
@@ -651,7 +729,7 @@ function educore_fees_collect_view() {
                     </div>
                     <div class="dpt-form-group">
                         <label class="dpt-form-label"><?php esc_html_e( 'Billing Year', 'ifsedu-sms' ); ?></label>
-                        <input type="number" name="fee_year" class="dpt-field-input" value="<?php echo esc_attr( $current_year ); ?>" required>
+                        <input type="number" name="fee_year" id="fee_year_input" class="dpt-field-input" value="<?php echo esc_attr( $current_year ); ?>" required>
                     </div>
                 </div>
 
@@ -725,7 +803,7 @@ function educore_fees_collect_view() {
 
     </div>
 
-    <!-- Live Calculations, Live ID Search, Dynamic Filtering, Class Fee Mappings & Auto-Waiver Script -->
+    <!-- Live Calculations, Automated Late Fines & Auto-Waiver Script -->
     <script type="text/javascript">
     jQuery(document).ready(function($) {
         var nonce = '<?php echo esc_js( wp_create_nonce( "educore_fee_nonce" ) ); ?>';
@@ -737,9 +815,7 @@ function educore_fees_collect_view() {
             var searchUid = $(this).val().trim();
             clearTimeout(searchDebounceTimer);
 
-            if (searchUid.length < 2) {
-                return;
-            }
+            if (searchUid.length < 2) return;
 
             searchDebounceTimer = setTimeout(function() {
                 $.ajax({
@@ -753,14 +829,11 @@ function educore_fees_collect_view() {
                     success: function(response) {
                         if (response.success && response.data) {
                             var d = response.data;
-                            
-                            // Auto cascade class filter
                             $('#educore_fee_class_filter').val(d.class_name);
-                            loadFeeTypesForClass(d.class_name);
-                            
-                            // Load sections for this class and select section
-                            loadSectionsAndSelect(d.class_name, d.section_name, d.id, function() {
-                                applyStudentDetails(d);
+                            loadFeeTypesAndFine(d.class_name, function() {
+                                loadSectionsAndSelect(d.class_name, d.section_name, d.id, function() {
+                                    applyStudentDetails(d);
+                                });
                             });
                         }
                     }
@@ -772,17 +845,29 @@ function educore_fees_collect_view() {
         $('#educore_fee_class_filter').on('change', function() {
             var selectedClass = $(this).val();
             loadSectionsAndSelect(selectedClass, '', 0);
-            loadFeeTypesForClass(selectedClass);
+            loadFeeTypesAndFine(selectedClass);
         });
 
-        // 3. Dynamic Fee Types Loader strictly from sms_fee_types Settings Table
-        function loadFeeTypesForClass(className) {
+        // Re-calculate fine if month or year changes
+        $('#fee_month_select, #fee_year_input').on('change', function() {
+            var selectedClass = $('#educore_fee_class_filter').val();
+            if (selectedClass) {
+                loadFeeTypesAndFine(selectedClass);
+            }
+        });
+
+        // 3. Dynamic Fee Types & Automated Fine Loader
+        function loadFeeTypesAndFine(className, callback) {
             var $feeTypeSelect = $('#fee_type_select');
+            var billingMonth   = $('#fee_month_select').val();
+            var billingYear    = $('#fee_year_input').val();
             
             if (!className) {
                 $feeTypeSelect.html('<option value=""><?php echo esc_js( __( '-- Select Class or Student First --', 'ifsedu-sms' ) ); ?></option>');
                 $('#fee_amount').val('0.00');
+                $('#fee_fine').val('0.00');
                 applyWaiverDiscount();
+                if (typeof callback === 'function') callback();
                 return;
             }
 
@@ -794,33 +879,49 @@ function educore_fees_collect_view() {
                 data: {
                     action: 'educore_get_fee_types_by_class',
                     security: nonce,
-                    class_name: className
+                    class_name: className,
+                    billing_month: billingMonth,
+                    billing_year: billingYear
                 },
                 success: function(response) {
-                    if (response.success && response.data.length > 0) {
-                        var options = '<option value=""><?php echo esc_js( __( '-- Select Fee Category --', 'ifsedu-sms' ) ); ?></option>';
-                        $.each(response.data, function(i, item) {
-                            options += '<option value="' + item.fee_title + '" data-amount="' + item.amount + '">' + item.fee_title + ' (৳' + parseFloat(item.amount).toFixed(2) + ' - ' + item.period_type + ')</option>';
-                        });
-                        $feeTypeSelect.html(options);
+                    if (response.success && response.data) {
+                        var resData = response.data;
                         
-                        // Auto populate base amount from the first configured fee category
-                        var firstAmount = parseFloat(response.data[0].amount) || 0;
-                        $feeTypeSelect.prop('selectedIndex', 1);
-                        $('#fee_amount').val(firstAmount.toFixed(2));
-                    } else {
-                        $feeTypeSelect.html('<option value=""><?php echo esc_js( __( 'No Fee Settings Configured for this Class', 'ifsedu-sms' ) ); ?></option>');
-                        $('#fee_amount').val('0.00');
+                        // Populate Fee Categories
+                        if (resData.fee_types && resData.fee_types.length > 0) {
+                            var options = '<option value=""><?php echo esc_js( __( '-- Select Fee Category --', 'ifsedu-sms' ) ); ?></option>';
+                            $.each(resData.fee_types, function(i, item) {
+                                options += '<option value="' + item.fee_title + '" data-amount="' + item.amount + '">' + item.fee_title + ' (৳' + parseFloat(item.amount).toFixed(2) + ' - ' + item.period_type + ')</option>';
+                            });
+                            $feeTypeSelect.html(options);
+
+                            var firstAmount = parseFloat(resData.fee_types[0].amount) || 0;
+                            $feeTypeSelect.prop('selectedIndex', 1);
+                            $('#fee_amount').val(firstAmount.toFixed(2));
+                        } else {
+                            $feeTypeSelect.html('<option value=""><?php echo esc_js( __( 'No Fee Settings Configured for this Class', 'ifsedu-sms' ) ); ?></option>');
+                            $('#fee_amount').val('0.00');
+                        }
+
+                        // Apply Automated Late Fine
+                        var calculatedFine = parseFloat(resData.late_fine) || 0;
+                        if (resData.fine_type === 'Percentage') {
+                            var curBase = parseFloat($('#fee_amount').val()) || 0;
+                            calculatedFine = (curBase * parseFloat(resData.fine_amount)) / 100;
+                        }
+                        $('#fee_fine').val(calculatedFine.toFixed(2));
                     }
                     applyWaiverDiscount();
+                    if (typeof callback === 'function') callback();
                 },
                 error: function() {
                     $feeTypeSelect.html('<option value=""><?php echo esc_js( __( '-- Error Loading Fee Categories --', 'ifsedu-sms' ) ); ?></option>');
+                    if (typeof callback === 'function') callback();
                 }
             });
         }
 
-        // When Fee Type Changes, auto-set Base Amount
+        // When Fee Type Changes, auto-set Base Amount & Recalculate Percentage Fines
         $('#fee_type_select').on('change', function() {
             var selectedAmount = $(this).find(':selected').data('amount');
             if (typeof selectedAmount !== 'undefined' && selectedAmount !== '') {
@@ -828,7 +929,7 @@ function educore_fees_collect_view() {
             } else {
                 $('#fee_amount').val('0.00');
             }
-            applyWaiverDiscount();
+            loadFeeTypesAndFine($('#educore_fee_class_filter').val());
         });
 
         // 4. Reload Students when Section Filter Changes
@@ -844,6 +945,7 @@ function educore_fees_collect_view() {
 
             if (!selectedClass) {
                 reloadFeeStudents('', '', 0);
+                if (typeof callback === 'function') callback();
                 return;
             }
 
@@ -901,9 +1003,6 @@ function educore_fees_collect_view() {
                     if (typeof callback === 'function') {
                         callback();
                     }
-                },
-                error: function() {
-                    $studentSelect.html('<option value=""><?php echo esc_js( __( '-- Search & Select Active Student --', 'ifsedu-sms' ) ); ?></option>');
                 }
             });
         }
@@ -930,10 +1029,11 @@ function educore_fees_collect_view() {
                 },
                 success: function(response) {
                     if (response.success && response.data) {
-                        applyStudentDetails(response.data);
-                        if (!$('#educore_fee_class_filter').val() || $('#educore_fee_class_filter').val() !== response.data.class_name) {
-                            $('#educore_fee_class_filter').val(response.data.class_name);
-                            loadFeeTypesForClass(response.data.class_name);
+                        var d = response.data;
+                        applyStudentDetails(d);
+                        if (!$('#educore_fee_class_filter').val() || $('#educore_fee_class_filter').val() !== d.class_name) {
+                            $('#educore_fee_class_filter').val(d.class_name);
+                            loadFeeTypesAndFine(d.class_name);
                         }
                     }
                 }
@@ -960,13 +1060,13 @@ function educore_fees_collect_view() {
         }
 
         // 6. Live Ledger Math Calculations Engine
-        const amtInput   = document.getElementById('fee_amount');
-        const fineInput  = document.getElementById('fee_fine');
-        const discInput  = document.getElementById('fee_discount');
-        const netInput   = document.getElementById('fee_net');
-        const paidInput  = document.getElementById('fee_paid');
-        const dueInput   = document.getElementById('fee_due');
-        const discBtns   = document.querySelectorAll('.discount-btn');
+        const amtInput  = document.getElementById('fee_amount');
+        const fineInput = document.getElementById('fee_fine');
+        const discInput = document.getElementById('fee_discount');
+        const netInput  = document.getElementById('fee_net');
+        const paidInput = document.getElementById('fee_paid');
+        const dueInput  = document.getElementById('fee_due');
+        const discBtns  = document.querySelectorAll('.discount-btn');
 
         function applyWaiverDiscount() {
             let baseAmount = parseFloat(amtInput.value) || 0;

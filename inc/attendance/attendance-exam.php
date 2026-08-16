@@ -7,15 +7,30 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Examination Hall Attendance Roster & Hall Invigilator Log View
  * File: inc/attendance/attendance-exam.php
  * Custom Prefixes Applied: dpt-, afdp-
+ * Teacher Scope: Restricts Class/Section/Subject dropdowns to `sms_teacher_subjects` for logged-in Teachers.
  */
 
 function educore_exam_attendance_view() {
     global $wpdb;
-    $table_students = $wpdb->prefix . 'sms_students';
-    $table_exams    = $wpdb->prefix . 'sms_exams';
-    $table_units    = $wpdb->prefix . 'sms_academic_units';
-    $table_subjects = $wpdb->prefix . 'sms_subjects';
-    $table_exam_att = $wpdb->prefix . 'sms_exam_attendance';
+    $current_user = wp_get_current_user();
+
+    $table_students         = $wpdb->prefix . 'sms_students';
+    $table_exams            = $wpdb->prefix . 'sms_exams';
+    $table_units            = $wpdb->prefix . 'sms_academic_units';
+    $table_subjects         = $wpdb->prefix . 'sms_subjects';
+    $table_exam_att         = $wpdb->prefix . 'sms_exam_attendance';
+    $table_staff            = $wpdb->prefix . 'sms_staff';
+    $table_teacher_subjects = $wpdb->prefix . 'sms_teacher_subjects';
+
+    // Capability Validation
+    $is_admin = current_user_can( 'manage_options' );
+    $is_staff = class_exists( 'IFSEdu_School_Management_System' ) 
+        ? IFSEdu_School_Management_System::has_access( array( 'teacher', 'staff', 'operator', 'instructor' ) ) 
+        : current_user_can( 'edit_posts' );
+
+    if ( ! $is_admin && ! $is_staff ) {
+        wp_die( esc_html__( 'You do not have sufficient permissions to view examination hall attendance.', 'ifsedu-sms' ) );
+    }
 
     // --------------------------------------------------------------------------
     // 0. AUTO-SCHEMA CHECK (Ensures exam attendance table exists)
@@ -46,11 +61,56 @@ function educore_exam_attendance_view() {
 
     $saved_notice = '';
 
+    // Capture GET Request Parameters FIRST so they are available for boundary checks
+    $filter_exam    = isset( $_GET['exam_id'] ) ? absint( $_GET['exam_id'] ) : 0;
+    $filter_class   = isset( $_GET['class_name'] ) ? sanitize_text_field( wp_unslash( $_GET['class_name'] ) ) : '';
+    $filter_section = isset( $_GET['section_name'] ) ? sanitize_text_field( wp_unslash( $_GET['section_name'] ) ) : '';
+    $filter_subject = isset( $_GET['subject_name'] ) ? sanitize_text_field( wp_unslash( $_GET['subject_name'] ) ) : '';
+    $filter_date    = isset( $_GET['attendance_date'] ) ? sanitize_text_field( wp_unslash( $_GET['attendance_date'] ) ) : current_time( 'Y-m-d' );
+
+    // --------------------------------------------------------------------------
+    // RESOLVE TEACHER SUBJECT & CLASS ALLOCATIONS
+    // --------------------------------------------------------------------------
+    $teacher_assigned_classes = array();
+    $teacher_assigned_subs    = array();
+
+    if ( ! $is_admin ) {
+        $teacher_id = $wpdb->get_var( $wpdb->prepare(
+            "SELECT id FROM {$table_staff} WHERE email = %s OR full_name = %s LIMIT 1",
+            $current_user->user_email,
+            $current_user->display_name
+        ) );
+
+        if ( $teacher_id ) {
+            $allocations = $wpdb->get_results( $wpdb->prepare(
+                "SELECT DISTINCT u.class_name, u.section_name, s.subject_name 
+                 FROM {$table_teacher_subjects} ts
+                 INNER JOIN {$table_units} u ON ts.class_id = u.id
+                 INNER JOIN {$table_subjects} s ON ts.subject_id = s.id
+                 WHERE ts.teacher_id = %d",
+                $teacher_id
+            ) );
+
+            foreach ( $allocations as $al ) {
+                if ( ! in_array( $al->class_name, $teacher_assigned_classes, true ) ) {
+                    $teacher_assigned_classes[] = $al->class_name;
+                }
+                $teacher_assigned_subs[ $al->class_name ][] = $al->subject_name;
+            }
+        }
+    }
+
     // --------------------------------------------------------------------------
     // 1. SAVE EXAM ATTENDANCE FORM SUBMISSION
     // --------------------------------------------------------------------------
     if ( $_SERVER['REQUEST_METHOD'] === 'POST' && isset( $_POST['educore_save_exam_attendance'] ) ) {
         if ( isset( $_POST['educore_exam_att_nonce_field'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['educore_exam_att_nonce_field'] ) ), 'save_exam_attendance_action' ) ) {
+            
+            // Boundary check: Non-admin teacher can only submit for their assigned class and subject
+            if ( ! $is_admin && ( ! in_array( $filter_class, $teacher_assigned_classes, true ) || ! in_array( $filter_subject, (array) ( $teacher_assigned_subs[ $filter_class ] ?? array() ), true ) ) ) {
+                wp_die( esc_html__( 'Security Check: You are not authorized to submit examination attendance for this allocation.', 'ifsedu-sms' ) );
+            }
+
             $exam_id         = isset( $_POST['exam_id'] ) ? absint( $_POST['exam_id'] ) : 0;
             $class_name      = isset( $_POST['class_name'] ) ? sanitize_text_field( wp_unslash( $_POST['class_name'] ) ) : '';
             $section_name    = isset( $_POST['section_name'] ) ? sanitize_text_field( wp_unslash( $_POST['section_name'] ) ) : '';
@@ -96,24 +156,23 @@ function educore_exam_attendance_view() {
         }
     }
 
-    // Capture GET Request Parameters
-    $filter_exam    = isset( $_GET['exam_id'] ) ? absint( $_GET['exam_id'] ) : 0;
-    $filter_class   = isset( $_GET['class_name'] ) ? sanitize_text_field( wp_unslash( $_GET['class_name'] ) ) : '';
-    $filter_section = isset( $_GET['section_name'] ) ? sanitize_text_field( wp_unslash( $_GET['section_name'] ) ) : '';
-    $filter_subject = isset( $_GET['subject_name'] ) ? sanitize_text_field( wp_unslash( $_GET['subject_name'] ) ) : '';
-    $filter_date    = isset( $_GET['attendance_date'] ) ? sanitize_text_field( wp_unslash( $_GET['attendance_date'] ) ) : current_time( 'Y-m-d' );
-
     $exams = $wpdb->get_results( "SELECT id, exam_name FROM {$table_exams} ORDER BY id DESC" );
 
-    // Fetch Unique Classes and build section maps with Natural Numeric Sorting
+    // Fetch Unique Classes and build section maps with Natural Numeric Sorting & Complete Subject Info (Scoped if Teacher)
     $raw_units = $wpdb->get_results( "SELECT id, class_name, section_name, dept_name FROM {$table_units} WHERE class_name != ''" );
-    $academic_classes    = array();
-    $class_section_map   = array();
-    $class_subject_map   = array();
+    $academic_classes   = array();
+    $class_section_map  = array();
+    $class_subject_map  = array();
 
     if ( ! empty( $raw_units ) ) {
         foreach ( $raw_units as $unit ) {
             $c_name = trim( $unit->class_name );
+
+            // If teacher mode, skip unassigned classes
+            if ( ! $is_admin && ! in_array( $c_name, $teacher_assigned_classes, true ) ) {
+                continue;
+            }
+
             if ( ! isset( $class_section_map[ $c_name ] ) ) {
                 $class_section_map[ $c_name ] = array();
                 $class_subject_map[ $c_name ] = array();
@@ -126,16 +185,39 @@ function educore_exam_attendance_view() {
                 $class_section_map[ $c_name ][] = trim( $unit->dept_name );
             }
 
-            // Fetch subjects mapped to this specific unit id or class name
-            $subs = $wpdb->get_results( $wpdb->prepare( 
-                "SELECT subject_name, subject_code FROM {$table_subjects} WHERE class_id = %d OR class_id = %s OR class_name = %s", 
-                $unit->id, $c_name, $c_name 
-            ) );
+            // Fetch subjects mapped strictly class-wise with full marks distribution
+            $clean_c = trim( str_ireplace( 'Class ', '', $c_name ) );
+            if ( ! $is_admin && isset( $teacher_id ) ) {
+                $subs = $wpdb->get_results( $wpdb->prepare( 
+                    "SELECT DISTINCT s.subject_name, s.subject_code, s.total_marks, s.pass_marks, s.cq_marks, s.cq_pass, s.mcq_marks, s.mcq_pass, s.practical_marks, s.practical_pass 
+                     FROM {$table_teacher_subjects} ts
+                     INNER JOIN {$table_subjects} s ON ts.subject_id = s.id
+                     INNER JOIN {$table_units} u ON ts.class_id = u.id
+                     WHERE ts.teacher_id = %d AND (u.id = %d OR u.class_name = %s OR u.class_name = %s)", 
+                    $teacher_id, $unit->id, $c_name, $clean_c
+                ) );
+            } else {
+                $subs = $wpdb->get_results( $wpdb->prepare( 
+                    "SELECT subject_name, subject_code, total_marks, pass_marks, cq_marks, cq_pass, mcq_marks, mcq_pass, practical_marks, practical_pass 
+                     FROM {$table_subjects} 
+                     WHERE class_id = %d OR class_id = %s OR class_name = %s OR class_name = %s", 
+                    $unit->id, $c_name, $c_name, $clean_c
+                ) );
+            }
+
             if ( ! empty( $subs ) ) {
                 foreach ( $subs as $sub ) {
                     $class_subject_map[ $c_name ][] = array(
-                        'name' => $sub->subject_name,
-                        'code' => $sub->subject_code ? ' (' . $sub->subject_code . ')' : ''
+                        'name'            => $sub->subject_name,
+                        'code'            => $sub->subject_code ? ' (' . $sub->subject_code . ')' : '',
+                        'total_marks'     => $sub->total_marks,
+                        'pass_marks'      => $sub->pass_marks,
+                        'cq_marks'        => $sub->cq_marks,
+                        'cq_pass'         => $sub->cq_pass,
+                        'mcq_marks'       => $sub->mcq_marks,
+                        'mcq_pass'        => $sub->mcq_pass,
+                        'practical_marks' => $sub->practical_marks,
+                        'practical_pass'  => $sub->practical_pass,
                     );
                 }
             }
@@ -147,7 +229,6 @@ function educore_exam_attendance_view() {
         }
 
         foreach ( $class_subject_map as $c_name => $subs ) {
-            // Unique mapping based on subject name
             $unique_subs = array();
             foreach ( $subs as $s ) {
                 $unique_subs[ $s['name'] ] = $s;
@@ -155,22 +236,30 @@ function educore_exam_attendance_view() {
             $class_subject_map[ $c_name ] = array_values( $unique_subs );
         }
 
-        // Fallback: if no subjects mapped via units, fetch all global subjects for every class
-        $all_global_subs = $wpdb->get_results( "SELECT subject_name, subject_code FROM {$table_subjects} ORDER BY subject_name ASC" );
-        foreach ( $academic_classes as $c_name ) {
-            if ( empty( $class_subject_map[ $c_name ] ) && ! empty( $all_global_subs ) ) {
-                foreach ( $all_global_subs as $gs ) {
-                    $class_subject_map[ $c_name ][] = array(
-                        'name' => $gs->subject_name,
-                        'code' => $gs->subject_code ? ' (' . $gs->subject_code . ')' : ''
-                    );
+        // Global fallback if specific mapping is empty (Admin only)
+        if ( $is_admin ) {
+            $all_global_subs = $wpdb->get_results( "SELECT subject_name, subject_code, total_marks, pass_marks, cq_marks, cq_pass, mcq_marks, mcq_pass, practical_marks, practical_pass FROM {$table_subjects} ORDER BY subject_name ASC" );
+            foreach ( $academic_classes as $c_name ) {
+                if ( empty( $class_subject_map[ $c_name ] ) && ! empty( $all_global_subs ) ) {
+                    foreach ( $all_global_subs as $gs ) {
+                        $class_subject_map[ $c_name ][] = array(
+                            'name'            => $gs->subject_name,
+                            'code'            => $gs->subject_code ? ' (' . $gs->subject_code . ')' : '',
+                            'total_marks'     => $gs->total_marks,
+                            'pass_marks'      => $gs->pass_marks,
+                            'cq_marks'        => $gs->cq_marks,
+                            'cq_pass'         => $gs->cq_pass,
+                            'mcq_marks'       => $gs->mcq_marks,
+                            'mcq_pass'        => $gs->mcq_pass,
+                            'practical_marks' => $gs->practical_marks,
+                            'practical_pass'  => $gs->practical_pass,
+                        );
+                    }
                 }
             }
         }
 
-        // Also ensure clean class name variants (e.g. "Class 1" vs "1") are mapped
-        $normalized_map_sec = array();
-        $normalized_map_sub = array();
+        // Map clean class name variants
         foreach ( $academic_classes as $c_name ) {
             $clean_key = trim( str_ireplace( 'Class ', '', $c_name ) );
             if ( isset( $class_section_map[ $c_name ] ) ) {
@@ -187,7 +276,7 @@ function educore_exam_attendance_view() {
         usort( $academic_classes, 'strnatcasecmp' );
     }
 
-    // Pre-populate Available Subjects for Selected Class on Server Load
+    // Pre-populate Available Sections & Class-wise Subjects on Server Load
     $available_sections = array();
     $available_subjects = array();
     if ( ! empty( $filter_class ) ) {
@@ -236,6 +325,35 @@ function educore_exam_attendance_view() {
             display: flex;
             flex-direction: column;
             gap: 20px;
+            font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            color: #0f172a;
+        }
+
+        .dpt-bento-card {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 24px 28px;
+            box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.03);
+        }
+
+        .dpt-card-header {
+            border-bottom: 2px solid #f1f5f9;
+            padding-bottom: 16px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .dpt-card-title {
+            font-size: 18px;
+            font-weight: 800;
+            color: #006a4e;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .dpt-filter-grid-5 {
@@ -250,6 +368,163 @@ function educore_exam_attendance_view() {
         }
         @media (max-width: 768px) {
             .dpt-filter-grid-5 { grid-template-columns: 1fr; }
+        }
+
+        .dpt-form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .dpt-form-label {
+            font-size: 12px;
+            font-weight: 700;
+            color: #475569;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .dpt-select-field, .dpt-input-field {
+            height: 42px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 0 12px;
+            font-size: 13.5px;
+            color: #0f172a;
+            background-color: #f8fafc;
+            width: 100%;
+            box-sizing: border-box;
+            transition: all 0.2s ease;
+        }
+
+        .dpt-select-field:focus, .dpt-input-field:focus {
+            border-color: #006a4e;
+            background-color: #ffffff;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(0, 106, 78, 0.12);
+        }
+
+        .dpt-btn-submit-trigger {
+            height: 42px;
+            background: #006a4e;
+            color: #ffffff;
+            font-weight: 800;
+            font-size: 13.5px;
+            border-radius: 8px;
+            padding: 0 20px;
+            cursor: pointer;
+            border: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            box-shadow: 0 4px 12px rgba(0, 106, 78, 0.2);
+            transition: background 0.2s ease;
+            width: 100%;
+        }
+
+        .dpt-btn-submit-trigger:hover { background: #00523c; }
+
+        .afdp-success-banner {
+            background: #ecfdf5;
+            border: 1px solid #a7f3d0;
+            color: #047857;
+            padding: 12px 18px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .afdp-roster-meta-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+            padding: 16px 20px;
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+            border-radius: 12px 12px 0 0;
+        }
+
+        .dpt-counter-cluster {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .dpt-badge-pill {
+            font-size: 11.5px;
+            font-weight: 800;
+            padding: 5px 12px;
+            border-radius: 20px;
+            border: 1px solid transparent;
+        }
+
+        .dpt-badge-total   { background: #f1f5f9; border-color: #cbd5e1; color: #334155; }
+        .dpt-badge-present { background: #ecfdf5; border-color: #a7f3d0; color: #059669; }
+        .dpt-badge-absent  { background: #fef2f2; border-color: #fecaca; color: #dc2626; }
+        .dpt-badge-late    { background: #fff7ed; border-color: #fed7aa; color: #c2410c; }
+
+        .afdp-bulk-automation-row {
+            background: #ffffff;
+            padding: 12px 20px;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+        }
+
+        .dpt-bulk-btn {
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            padding: 6px 14px;
+            font-size: 12px;
+            font-weight: 700;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .dpt-bulk-btn:hover { background: #f8fafc; border-color: #006a4e; color: #006a4e; }
+
+        .dpt-table-responsive {
+            width: 100%;
+            overflow-x: auto;
+        }
+
+        .dpt-attendance-matrix-table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        .dpt-attendance-matrix-table th {
+            background: #f8fafc;
+            color: #475569;
+            font-weight: 800;
+            font-size: 11.5px;
+            padding: 12px 16px;
+            border-bottom: 1px solid #e2e8f0;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .dpt-attendance-matrix-table td {
+            padding: 12px 16px;
+            border-bottom: 1px solid #f1f5f9;
+            font-size: 13.5px;
+            color: #334155;
+            background: #ffffff;
+            vertical-align: middle;
         }
 
         .dpt-avatar-cell {
@@ -294,21 +569,63 @@ function educore_exam_attendance_view() {
             font-size: 11.5px;
         }
 
+        .afdp-checkbox-group {
+            display: inline-flex;
+            background: #f1f5f9;
+            padding: 3px;
+            border-radius: 8px;
+            border: 1px solid #cbd5e1;
+            gap: 3px;
+        }
+
+        .afdp-checkbox-item {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+            pointer-events: none;
+        }
+
+        .afdp-checkbox-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 6px 14px;
+            font-size: 12px;
+            font-weight: 700;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: #64748b;
+            line-height: 1;
+        }
+
+        .afdp-checkbox-item[value="Present"]:checked + .afdp-checkbox-label { background: #059669; color: #ffffff; box-shadow: 0 2px 6px rgba(5, 150, 105, 0.3); }
+        .afdp-checkbox-item[value="Absent"]:checked + .afdp-checkbox-label { background: #dc2626; color: #ffffff; box-shadow: 0 2px 6px rgba(220, 38, 38, 0.3); }
+        .afdp-checkbox-item[value="Late"]:checked + .afdp-checkbox-label { background: #d97706; color: #ffffff; box-shadow: 0 2px 6px rgba(217, 119, 6, 0.3); }
+
         .dpt-remarks-input {
             width: 100%;
-            height: 34px;
+            height: 36px;
             border: 1px solid #cbd5e1;
             border-radius: 6px;
-            padding: 0 8px;
-            font-size: 12.5px;
+            padding: 0 10px;
+            font-size: 13px;
             background: #f8fafc;
             box-sizing: border-box;
+            transition: all 0.2s ease;
         }
 
         .dpt-remarks-input:focus {
             border-color: #006a4e;
             background: #ffffff;
             outline: none;
+            box-shadow: 0 0 0 2px rgba(0, 106, 78, 0.12);
+        }
+
+        @media print {
+            .no-print { display: none !important; }
+            .dpt-bento-card { border: none !important; box-shadow: none !important; padding: 0 !important; }
         }
     </style>
 
@@ -323,6 +640,19 @@ function educore_exam_attendance_view() {
 
         <!-- Exam Attendance Filter Console -->
         <div class="dpt-bento-card no-print">
+            <div class="dpt-card-header">
+                <h4 class="dpt-card-title">
+                    <span class="dashicons dashicons-welcome-write-blog"></span>
+                    <?php esc_html_e( 'Examination Hall Attendance Roster', 'ifsedu-sms' ); ?>
+                </h4>
+                <?php if ( ! $is_admin ) : ?>
+                    <span style="background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; padding:4px 12px; border-radius:20px; font-size:12px; font-weight:700;">
+                        <span class="dashicons dashicons-lock" style="font-size:14px; width:14px; height:14px; vertical-align:middle;"></span>
+                        <?php esc_html_e( 'Teacher Mode: Assigned Allocations Only', 'ifsedu-sms' ); ?>
+                    </span>
+                <?php endif; ?>
+            </div>
+
             <form method="GET" action="<?php echo esc_url( $admin_page_url ); ?>">
                 <input type="hidden" name="page" value="school_management_system">
                 <input type="hidden" name="tab" value="attendance">
@@ -349,7 +679,7 @@ function educore_exam_attendance_view() {
                             <option value=""><?php esc_html_e( '-- Choose Class --', 'ifsedu-sms' ); ?></option>
                             <?php foreach ( $academic_classes as $cls_name ) : ?>
                                 <option value="<?php echo esc_attr( $cls_name ); ?>" <?php selected( $filter_class, $cls_name ); ?>>
-                                    <?php printf( esc_html__( '%s', 'ifsedu-sms' ), esc_html( $cls_name ) ); ?>
+                                    <?php echo esc_html( $cls_name ); ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
@@ -400,7 +730,7 @@ function educore_exam_attendance_view() {
             </form>
         </div>
 
-        <!-- Local Instant Cascade Script (No AJAX failures) -->
+        <!-- Local Instant Cascade Script for Class-wise Subjects -->
         <script type="text/javascript">
         jQuery(document).ready(function($) {
             var classSectionMap = <?php echo wp_json_encode( $class_section_map ); ?>;
@@ -425,7 +755,7 @@ function educore_exam_attendance_view() {
                     });
                 }
 
-                // Populate Subjects
+                // Populate Class-Related Subjects
                 if (classSubjectMap[className] && classSubjectMap[className].length > 0) {
                     $.each(classSubjectMap[className], function(i, sub) {
                         var isSelected = (sub.name === currentSelectedSubject) ? 'selected' : '';
@@ -448,7 +778,7 @@ function educore_exam_attendance_view() {
 
         <!-- Exam Hall Attendance Roster Form -->
         <?php if ( $filter_exam > 0 && ! empty( $filter_class ) && ! empty( $filter_subject ) ) : ?>
-            <div class="dpt-bento-card">
+            <div class="dpt-bento-card" style="padding: 0; overflow: hidden;">
                 <form method="POST" action="">
                     <?php wp_nonce_field( 'save_exam_attendance_action', 'educore_exam_att_nonce_field' ); ?>
                     <input type="hidden" name="exam_id" value="<?php echo esc_attr( $filter_exam ); ?>">
@@ -483,10 +813,10 @@ function educore_exam_attendance_view() {
                         </div>
                         <div style="display:flex; gap:8px;">
                             <button type="button" class="dpt-bulk-btn exam-bulk-btn" data-target-status="Present">
-                                <span class="dashicons dashicons-yes"></span> <?php esc_html_e( 'Mark All Present', 'ifsedu-sms' ); ?>
+                                <span class="dashicons dashicons-yes" style="font-size:14px; width:14px; height:14px;"></span> <?php esc_html_e( 'Mark All Present', 'ifsedu-sms' ); ?>
                             </button>
                             <button type="button" class="dpt-bulk-btn exam-bulk-btn" data-target-status="Absent">
-                                <span class="dashicons dashicons-no-alt"></span> <?php esc_html_e( 'Mark All Absent', 'ifsedu-sms' ); ?>
+                                <span class="dashicons dashicons-no" style="font-size:14px; width:14px; height:14px;"></span> <?php esc_html_e( 'Mark All Absent', 'ifsedu-sms' ); ?>
                             </button>
                         </div>
                     </div>
@@ -561,8 +891,8 @@ function educore_exam_attendance_view() {
                     </div>
 
                     <?php if ( ! empty( $students_list ) ) : ?>
-                        <div style="text-align: right; margin-top: 24px;">
-                            <button type="submit" name="educore_save_exam_attendance" class="dpt-btn-submit-trigger" style="height: 44px; padding: 0 32px; font-size: 15px;">
+                        <div style="text-align: right; margin: 20px; padding: 0;">
+                            <button type="submit" name="educore_save_exam_attendance" class="dpt-btn-submit-trigger" style="height: 44px; padding: 0 32px; font-size: 15px; width: auto;">
                                 <span class="dashicons dashicons-saved"></span>
                                 <?php esc_html_e( 'Save Exam Hall Attendance', 'ifsedu-sms' ); ?>
                             </button>

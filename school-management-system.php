@@ -127,7 +127,7 @@ final class IFSEdu_School_Management_System {
         wp_enqueue_script( 'bootstrap', EDUCORE_URL . 'assets/js/bootstrap.bundle.min.js', array( 'jquery' ), EDUCORE_VERSION, true );
         wp_enqueue_script( 'datatables', EDUCORE_URL . 'assets/js/jquery.dataTables.min.js', array( 'jquery' ), EDUCORE_VERSION, true );
         wp_enqueue_script( 'datepicker', EDUCORE_URL . 'assets/js/bootstrap-datepicker.js', array( 'jquery' ), EDUCORE_VERSION, true );
-        wp_enqueue_script( 'educore-main', EDUCORE_URL . 'assets/js/main.js', array( 'jquery' ), EDUCORE_VERSION, true );
+        wp_enqueue_script( 'educore-main', EDUCORE_URL . 'assets/js/admin-script.js', array( 'jquery' ), EDUCORE_VERSION, true );
     }
 
     /**
@@ -138,62 +138,62 @@ final class IFSEdu_School_Management_System {
         $charset_collate = $wpdb->get_charset_collate();
         require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
-        // Schema Model 1: Students Base (Optimized for WordPress dbDelta)
-$table_students = $wpdb->prefix . 'sms_students';
-$sql_students = "CREATE TABLE $table_students (
-    id bigint(20) NOT NULL AUTO_INCREMENT,
-    student_id varchar(50) NOT NULL,
-    full_name varchar(255) NOT NULL,
-    class_name varchar(50) NOT NULL,
-    section_name varchar(50) DEFAULT '' NOT NULL,
-    shift varchar(50) DEFAULT 'No Shift' NOT NULL,
-    roll_no int(11) NOT NULL,
-    admission_date date DEFAULT '1970-01-01' NOT NULL,
-    fee_start_date date DEFAULT NULL,
-    birth_reg_no varchar(50) DEFAULT '' NOT NULL,
-    dob date DEFAULT '1970-01-01' NOT NULL,
-    birth_place varchar(100) DEFAULT '' NOT NULL,
-    gender varchar(20) DEFAULT 'Male' NOT NULL,
-    blood_group varchar(10) DEFAULT '' NOT NULL,
-    religion varchar(50) DEFAULT 'Islam' NOT NULL,
-    nationality varchar(50) DEFAULT 'Bangladeshi' NOT NULL,
-    student_email varchar(100) DEFAULT '' NOT NULL,
-    student_phone varchar(50) DEFAULT '' NOT NULL,
-    quota varchar(50) DEFAULT 'General' NOT NULL,
-    waiver_staff_id bigint(20) DEFAULT 0 NOT NULL,
-    waiver_percentage decimal(5,2) DEFAULT 0.00 NOT NULL,
-    father_name varchar(255) DEFAULT '' NOT NULL,
-    father_nid varchar(50) DEFAULT '' NOT NULL,
-    father_phone varchar(50) DEFAULT '' NOT NULL,
-    father_profession varchar(100) DEFAULT '' NOT NULL,
-    mother_name varchar(255) DEFAULT '' NOT NULL,
-    mother_nid varchar(50) DEFAULT '' NOT NULL,
-    mother_phone varchar(50) DEFAULT '' NOT NULL,
-    mother_profession varchar(100) DEFAULT '' NOT NULL,
-    guardian_name varchar(255) NOT NULL,
-    guardian_phone varchar(50) NOT NULL,
-    guardian_relation varchar(50) DEFAULT '' NOT NULL,
-    guardian_nid varchar(50) DEFAULT '' NOT NULL,
-    guardian_income varchar(50) DEFAULT '' NOT NULL,
-    prev_school_name varchar(255) DEFAULT '' NOT NULL,
-    prev_eiin varchar(50) DEFAULT '' NOT NULL,
-    prev_class varchar(50) DEFAULT '' NOT NULL,
-    prev_gpa varchar(20) DEFAULT '' NOT NULL,
-    address text NOT NULL,
-    permanent_address text NOT NULL,
-    residential_status varchar(50) DEFAULT 'Non-Residential' NOT NULL,
-    co_curricular text NOT NULL,
-    photo_url text,
-    status varchar(30) DEFAULT 'Active' NOT NULL,
-    created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    PRIMARY KEY  (id),
-    UNIQUE KEY student_id (student_id),
-    KEY class_section_idx (class_name, section_name),
-    KEY shift_idx (shift),
-    KEY waiver_staff_idx (waiver_staff_id),
-    KEY status_idx (status)
-) $charset_collate;";
-dbDelta( $sql_students );
+        // Schema Model 1: Students Base
+        $table_students = $wpdb->prefix . 'sms_students';
+        $sql_students = "CREATE TABLE $table_students (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            student_id varchar(50) NOT NULL,
+            full_name varchar(255) NOT NULL,
+            class_name varchar(50) NOT NULL,
+            section_name varchar(50) DEFAULT '' NOT NULL,
+            shift varchar(50) DEFAULT 'No Shift' NOT NULL,
+            roll_no int(11) NOT NULL,
+            admission_date date DEFAULT '1970-01-01' NOT NULL,
+            fee_start_date date DEFAULT NULL,
+            birth_reg_no varchar(50) DEFAULT '' NOT NULL,
+            dob date DEFAULT '1970-01-01' NOT NULL,
+            birth_place varchar(100) DEFAULT '' NOT NULL,
+            gender varchar(20) DEFAULT 'Male' NOT NULL,
+            blood_group varchar(10) DEFAULT '' NOT NULL,
+            religion varchar(50) DEFAULT 'Islam' NOT NULL,
+            nationality varchar(50) DEFAULT 'Bangladeshi' NOT NULL,
+            student_email varchar(100) DEFAULT '' NOT NULL,
+            student_phone varchar(50) DEFAULT '' NOT NULL,
+            quota varchar(50) DEFAULT 'General' NOT NULL,
+            waiver_staff_id bigint(20) DEFAULT 0 NOT NULL,
+            waiver_percentage decimal(5,2) DEFAULT 0.00 NOT NULL,
+            father_name varchar(255) DEFAULT '' NOT NULL,
+            father_nid varchar(50) DEFAULT '' NOT NULL,
+            father_phone varchar(50) DEFAULT '' NOT NULL,
+            father_profession varchar(100) DEFAULT '' NOT NULL,
+            mother_name varchar(255) DEFAULT '' NOT NULL,
+            mother_nid varchar(50) DEFAULT '' NOT NULL,
+            mother_phone varchar(50) DEFAULT '' NOT NULL,
+            mother_profession varchar(100) DEFAULT '' NOT NULL,
+            guardian_name varchar(255) NOT NULL,
+            guardian_phone varchar(50) NOT NULL,
+            guardian_relation varchar(50) DEFAULT '' NOT NULL,
+            guardian_nid varchar(50) DEFAULT '' NOT NULL,
+            guardian_income varchar(50) DEFAULT '' NOT NULL,
+            prev_school_name varchar(255) DEFAULT '' NOT NULL,
+            prev_eiin varchar(50) DEFAULT '' NOT NULL,
+            prev_class varchar(50) DEFAULT '' NOT NULL,
+            prev_gpa varchar(20) DEFAULT '' NOT NULL,
+            address text NOT NULL,
+            permanent_address text NOT NULL,
+            residential_status varchar(50) DEFAULT 'Non-Residential' NOT NULL,
+            co_curricular text NOT NULL,
+            photo_url text,
+            status varchar(30) DEFAULT 'Active' NOT NULL,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+            PRIMARY KEY  (id),
+            UNIQUE KEY student_id (student_id),
+            KEY class_section_idx (class_name, section_name),
+            KEY shift_idx (shift),
+            KEY waiver_staff_idx (waiver_staff_id),
+            KEY status_idx (status)
+        ) $charset_collate;";
+        dbDelta( $sql_students );
 
         // Schema Model 2: Staff Matrix
         $table_staff = $wpdb->prefix . 'sms_staff';
@@ -340,26 +340,26 @@ dbDelta( $sql_students );
         ) $charset_collate;";
         dbDelta( $sql_academic_units );
 
-        // Schema Model 9: Academic Subjects (BD NCTB Evaluation Standards Compliant)
-$table_subjects = $wpdb->prefix . 'sms_subjects';
-$sql_subjects = "CREATE TABLE $table_subjects (
-    id bigint(20) NOT NULL AUTO_INCREMENT,
-    class_id bigint(20) NOT NULL,
-    subject_name varchar(150) NOT NULL,
-    subject_code varchar(50) DEFAULT '' NOT NULL,
-    subject_type varchar(20) DEFAULT 'Mandatory' NOT NULL,
-    total_marks decimal(5,2) DEFAULT '100.00' NOT NULL,
-    pass_marks decimal(5,2) DEFAULT '33.00' NOT NULL,
-    cq_marks decimal(5,2) DEFAULT '70.00' NOT NULL,
-    cq_pass decimal(5,2) DEFAULT '23.00' NOT NULL,
-    mcq_marks decimal(5,2) DEFAULT '30.00' NOT NULL,
-    mcq_pass decimal(5,2) DEFAULT '10.00' NOT NULL,
-    practical_marks decimal(5,2) DEFAULT '0.00' NOT NULL,
-    practical_pass decimal(5,2) DEFAULT '0.00' NOT NULL,
-    PRIMARY KEY  (id),
-    KEY class_id_idx (class_id)
-) $charset_collate;";
-dbDelta( $sql_subjects );
+        // Schema Model 9: Subjects
+        $table_subjects = $wpdb->prefix . 'sms_subjects';
+        $sql_subjects = "CREATE TABLE $table_subjects (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            class_id bigint(20) NOT NULL,
+            subject_name varchar(150) NOT NULL,
+            subject_code varchar(50) DEFAULT '' NOT NULL,
+            subject_type varchar(20) DEFAULT 'Mandatory' NOT NULL,
+            total_marks decimal(5,2) DEFAULT '100.00' NOT NULL,
+            pass_marks decimal(5,2) DEFAULT '33.00' NOT NULL,
+            cq_marks decimal(5,2) DEFAULT '70.00' NOT NULL,
+            cq_pass decimal(5,2) DEFAULT '23.00' NOT NULL,
+            mcq_marks decimal(5,2) DEFAULT '30.00' NOT NULL,
+            mcq_pass decimal(5,2) DEFAULT '10.00' NOT NULL,
+            practical_marks decimal(5,2) DEFAULT '0.00' NOT NULL,
+            practical_pass decimal(5,2) DEFAULT '0.00' NOT NULL,
+            PRIMARY KEY  (id),
+            KEY class_id_idx (class_id)
+        ) $charset_collate;";
+        dbDelta( $sql_subjects );
 
         // Schema Model 10: Class Routine Management
         $table_routine = $wpdb->prefix . 'sms_routine';
@@ -368,6 +368,7 @@ dbDelta( $sql_subjects );
             class_id bigint(20) NOT NULL,
             subject_id bigint(20) NOT NULL,
             day_name varchar(20) NOT NULL,
+            shift varchar(50) DEFAULT 'No Shift' NOT NULL,
             start_time time NOT NULL,
             end_time time NOT NULL,
             room_no varchar(20) DEFAULT '' NOT NULL,
@@ -392,7 +393,7 @@ dbDelta( $sql_subjects );
         ) $charset_collate;";
         dbDelta( $sql_teacher_subjects );
 
-        // Schema Model 20: General Accounting Ledger
+        // Schema Model 12: General Accounting Ledger
         $table_accounting = $wpdb->prefix . 'sms_accounting';
         $sql_accounting = "CREATE TABLE $table_accounting (
             id bigint(20) NOT NULL AUTO_INCREMENT,
@@ -412,6 +413,57 @@ dbDelta( $sql_subjects );
             KEY entry_date_idx (entry_date)
         ) $charset_collate;";
         dbDelta( $sql_accounting );
+
+        // Schema Model 13: Notices & Events Management
+        $table_notices = $wpdb->prefix . 'sms_notices';
+        $sql_notices = "CREATE TABLE $table_notices (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            title varchar(255) NOT NULL,
+            notice_type varchar(50) DEFAULT 'Notice' NOT NULL,
+            priority varchar(20) DEFAULT 'Normal' NOT NULL,
+            target_audience varchar(50) DEFAULT 'All' NOT NULL,
+            description text NOT NULL,
+            event_date date DEFAULT NULL,
+            attachment_url text DEFAULT NULL,
+            created_by bigint(20) NOT NULL,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+            status varchar(20) DEFAULT 'Published' NOT NULL,
+            featured_image varchar(255) DEFAULT '' NOT NULL,
+            item_type varchar(30) DEFAULT 'notice' NOT NULL,
+            content longtext NOT NULL,
+            PRIMARY KEY  (id),
+            KEY notice_type_idx (notice_type),
+            KEY item_type_idx (item_type),
+            KEY status_idx (status)
+        ) $charset_collate;";
+        dbDelta( $sql_notices );
+
+        // Schema Model 14: Gallery Albums
+        $table_albums = $wpdb->prefix . 'sms_gallery_albums';
+        $sql_albums = "CREATE TABLE $table_albums (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            title varchar(255) NOT NULL,
+            category varchar(100) DEFAULT 'General' NOT NULL,
+            description text DEFAULT NULL,
+            cover_image text DEFAULT NULL,
+            status varchar(20) DEFAULT 'Published' NOT NULL,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+            PRIMARY KEY  (id)
+        ) $charset_collate;";
+        dbDelta( $sql_albums );
+
+        // Schema Model 15: Gallery Photos
+        $table_photos = $wpdb->prefix . 'sms_gallery_photos';
+        $sql_photos = "CREATE TABLE $table_photos (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            album_id bigint(20) NOT NULL,
+            image_url text NOT NULL,
+            caption varchar(255) DEFAULT '' NOT NULL,
+            uploaded_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+            PRIMARY KEY  (id),
+            KEY album_idx (album_id)
+        ) $charset_collate;";
+        dbDelta( $sql_photos );
 
         update_option( 'educore_db_version', EDUCORE_VERSION );
     }
@@ -459,7 +511,7 @@ dbDelta( $sql_subjects );
             'students' => array(
                 'label' => __( 'Students', 'ifsedu-sms' ),
                 'svg'   => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><path d="M320 32c-8.1 0-16.1 1.4-23.7 4.1L15.8 137.4C6.3 140.9 0 149.9 0 160s6.3 19.1 15.8 22.6l57.9 20.9C57.3 229.3 48 259.8 48 291.9v28.1c0 28.4-10.8 57.7-22.3 80.8-6.5 13-13.9 25.8-22.5 37.6-4.1 5.6-3.8 13.3 .9 18.6s12.5 5.5 18.6 1c43.6-32.3 75.3-78.8 89.6-132.3L320 380c103.5 0 197.5-44.5 259.5-114.7l44.6-16.1c9.5-3.5 15.8-12.5 15.8-22.6s-6.3-19.1-15.8-22.6L343.7 36.1C336.1 33.4 328.1 32 320 32zM128 408c0 35.3 86 72 192 72s192-36.7 192-72L496.7 262.6C454.4 316.5 390 348 320 348S185.6 316.5 143.3 262.6L128 408z"/></svg>',
-                'roles' => array( 'administrator', 'teacher' )
+                'roles' => array( 'administrator' )
             ),
             'attendance' => array(
                 'label' => __( 'Attendance', 'ifsedu-sms' ),
@@ -479,7 +531,7 @@ dbDelta( $sql_subjects );
             'exams' => array(
                 'label' => __( 'Exams Setup', 'ifsedu-sms' ),
                 'svg'   => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M152.1 38.2c9.9 8.9 10.7 24 1.8 33.9l-72 80c-4.8 5.3-11.2 8.1-18.1 7.8s-13.1-3.6-17.5-9L14.4 115.1c-8.2-10-6.8-24.8 3.2-33s24.8-6.8 33 3.2l16 19.5 51.5-57.3c8.9-9.9 24-10.7 33.9-1.8zM416 128H256c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32zM152.1 198.2c9.9 8.9 10.7 24 1.8 33.9l-72 80c-4.8 5.3-11.2 8.1-18.1 7.8s-13.1-3.6-17.5-9L14.4 275.1c-8.2-10-6.8-24.8 3.2-33s24.8-6.8 33 3.2l16 19.5 51.5-57.3c8.9-9.9 24-10.7 33.9-1.8zM416 288H256c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32zM152.1 358.2c9.9 8.9 10.7 24 1.8 33.9l-72 80c-4.8 5.3-11.2 8.1-18.1 7.8s-13.1-3.6-17.5-9L14.4 435.1c-8.2-10-6.8-24.8 3.2-33s24.8-6.8 33 3.2l16 19.5 51.5-57.3c8.9-9.9 24-10.7 33.9-1.8zM416 448H256c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32z"/></svg>',
-                'roles' => array( 'administrator', 'teacher' )
+                'roles' => array( 'administrator' )
             ),
             'results' => array(
                 'label' => __( 'Results & Marks', 'ifsedu-sms' ),
@@ -499,12 +551,12 @@ dbDelta( $sql_subjects );
             'notices' => array(
                 'label' => __( 'Notices & Events', 'ifsedu-sms' ),
                 'svg'   => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M160 368c26.5 0 48 21.5 48 48v16l72.5-54.4c8.3-6.2 18.4-9.6 28.8-9.6H448c8.8 0 16-7.2 16-16V64c0-8.8-7.2-16-16-16H64c-8.8 0-16 7.2-16 16V352c0 8.8 7.2 16 16 16h96zm48 124l-.2 .2-5.1 3.8-17.1 12.8c-4.8 3.6-11.3 4.2-16.8 1.5s-8.8-8.2-8.8-14.3V474.7v-4.5V416H160c-53 0-96-43-96-96V64C64 11 107-32 160-32H448c53 0 96 43 96 96V352c0 53-43 96-96 96H309.3L208 504z"/></svg>',
-                'roles' => array( 'administrator', 'teacher', 'accountant' )
+                'roles' => array( 'administrator' )
             ),
             'reports' => array(
                 'label' => __( 'Reports', 'ifsedu-sms' ),
                 'svg'   => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><path d="M336 0H48C21.5 0 0 21.5 0 48v416c0 26.5 21.5 48 48 48h288c26.5 0 48-21.5 48-48V48c0-26.5-21.5-48-48-48zM144 432H96v-48h48v48zm0-96H96v-48h48v48zm0-96H96v-48h48v48zm144 192H176v-48h112v48zm0-96H176v-48h112v48zm0-96H176v-48h112v48zm0-112H96V80h192v48z"/></svg>',
-                'roles' => array( 'administrator', 'teacher', 'accountant' )
+                'roles' => array( 'administrator' )
             ),
             'users' => array(
                 'label' => __( 'Users & Roles', 'ifsedu-sms' ),
@@ -665,25 +717,6 @@ dbDelta( $sql_subjects );
                 ?>
             </main>
         </div>
-
-        <!-- Sidebar Collapse & Retention State Script -->
-        <script type="text/javascript">
-        document.addEventListener('DOMContentLoaded', function() {
-            const sidebar = document.getElementById('educoreSidebar');
-            const toggleBtn = document.getElementById('educoreToggleSidebar');
-            
-            if (sidebar && toggleBtn) {
-                if (localStorage.getItem('educore_sidebar_collapsed') === 'true') {
-                    sidebar.classList.add('collapsed');
-                }
-
-                toggleBtn.addEventListener('click', function() {
-                    sidebar.classList.toggle('collapsed');
-                    localStorage.setItem('educore_sidebar_collapsed', sidebar.classList.contains('collapsed'));
-                });
-            }
-        });
-        </script>
         <?php
     }
 

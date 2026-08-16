@@ -4,7 +4,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Fee Configuration, Categories & Class-wise Fee Structure Matrix
+ * Fee Configuration, Categories, Late Fine Settings & Class-wise Fee Structure Matrix
  * File: inc/fees/fees-settings.php
  */
 function educore_fees_settings_view() {
@@ -13,16 +13,18 @@ function educore_fees_settings_view() {
     }
 
     global $wpdb;
-    $table_fee_types = $wpdb->prefix . 'sms_fee_types';
-    $table_units     = $wpdb->prefix . 'sms_academic_units';
+    $table_fee_types  = $wpdb->prefix . 'sms_fee_types';
+    $table_units      = $wpdb->prefix . 'sms_academic_units';
+    $table_late_cfg   = $wpdb->prefix . 'sms_late_fee_config';
 
     // --------------------------------------------------------------------------
-    // 0. AUTO-SCHEMA CHECK (Ensures Fee Types Table Exists)
+    // 0. AUTO-SCHEMA CHECK (Ensures Fee Tables & Late Fine Columns Exist)
     // --------------------------------------------------------------------------
-    $check_table = $wpdb->get_var( "SHOW TABLES LIKE '{$table_fee_types}'" );
-    if ( empty( $check_table ) ) {
-        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-        $charset_collate = $wpdb->get_charset_collate();
+    require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    $charset_collate = $wpdb->get_charset_collate();
+
+    // Fee Types Table
+    if ( $wpdb->get_var( "SHOW TABLES LIKE '{$table_fee_types}'" ) !== $table_fee_types ) {
         $sql_fee_types = "CREATE TABLE {$table_fee_types} (
             id bigint(20) NOT NULL AUTO_INCREMENT,
             class_name varchar(50) NOT NULL,
@@ -36,44 +38,103 @@ function educore_fees_settings_view() {
         dbDelta( $sql_fee_types );
     }
 
+    // Late Fine Configuration Table
+    if ( $wpdb->get_var( "SHOW TABLES LIKE '{$table_late_cfg}'" ) !== $table_late_cfg ) {
+        $sql_late_cfg = "CREATE TABLE {$table_late_cfg} (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            fine_type varchar(30) DEFAULT 'Fixed' NOT NULL,
+            fine_amount decimal(10,2) DEFAULT '0.00' NOT NULL,
+            grace_days int(11) DEFAULT '5' NOT NULL,
+            fine_start_date int(11) DEFAULT '12' NOT NULL,
+            max_fine_cap decimal(10,2) DEFAULT '0.00' NOT NULL,
+            status varchar(20) DEFAULT 'Active' NOT NULL,
+            PRIMARY KEY  (id)
+        ) $charset_collate;";
+        dbDelta( $sql_late_cfg );
+    } else {
+        $check_start_date = $wpdb->get_results( "SHOW COLUMNS FROM `{$table_late_cfg}` LIKE 'fine_start_date'" );
+        if ( empty( $check_start_date ) ) {
+            $wpdb->query( "ALTER TABLE `{$table_late_cfg}` ADD `fine_start_date` int(11) DEFAULT '12' NOT NULL AFTER `grace_days`" );
+        }
+    }
+
     // --------------------------------------------------------------------------
-    // 1. FORM SUBMISSION (Save Class-wise Fee Structures with Repeater)
+    // 1. FORM SUBMISSIONS
     // --------------------------------------------------------------------------
+    // Save Class-wise Fee Structure (Upsert logic to preserve existing categories)
     if ( isset( $_POST['save_class_fee_structure'] ) && check_admin_referer( 'educore_save_fees_settings_action', 'educore_fees_settings_nonce' ) ) {
         $target_class = isset( $_POST['target_class'] ) ? sanitize_text_field( wp_unslash( $_POST['target_class'] ) ) : '';
         $fee_titles   = isset( $_POST['fee_title'] ) && is_array( $_POST['fee_title'] ) ? array_map( 'sanitize_text_field', wp_unslash( $_POST['fee_title'] ) ) : array();
-        $fee_amounts  = isset( $_POST['amount'] ) && is_array( $_POST['amount'] ) ? array_map( 'floatval', $_POST['amount'] ) : array();
+        $fee_amounts  = isset( $_POST['amount'] ) && is_array( $_POST['amount'] ) ? array_map( 'floatval', wp_unslash( $_POST['amount'] ) ) : array();
         $period_types = isset( $_POST['period_type'] ) && is_array( $_POST['period_type'] ) ? array_map( 'sanitize_text_field', wp_unslash( $_POST['period_type'] ) ) : array();
 
         if ( ! empty( $target_class ) && ! empty( $fee_titles ) ) {
-            // Remove existing fee mappings for this specific class to avoid duplicates
-            $wpdb->delete( $table_fee_types, array( 'class_name' => $target_class ), array( '%s' ) );
-
-            $inserted_count = 0;
+            $saved_count = 0;
             foreach ( $fee_titles as $index => $title ) {
                 $trimmed_title = trim( $title );
                 $amount        = isset( $fee_amounts[ $index ] ) ? floatval( $fee_amounts[ $index ] ) : 0.00;
                 $period        = isset( $period_types[ $index ] ) ? sanitize_text_field( $period_types[ $index ] ) : 'Monthly';
 
                 if ( ! empty( $trimmed_title ) ) {
-                    $wpdb->insert(
-                        $table_fee_types,
-                        array(
-                            'class_name'  => $target_class,
-                            'fee_title'   => $trimmed_title,
-                            'amount'      => $amount,
-                            'period_type' => $period,
-                        ),
-                        array( '%s', '%s', '%f', '%s' )
-                    );
-                    $inserted_count++;
+                    $existing_id = $wpdb->get_var( $wpdb->prepare(
+                        "SELECT id FROM {$table_fee_types} WHERE class_name = %s AND fee_title = %s",
+                        $target_class, $trimmed_title
+                    ) );
+
+                    if ( $existing_id ) {
+                        $wpdb->update(
+                            $table_fee_types,
+                            array( 'amount' => $amount, 'period_type' => $period ),
+                            array( 'id' => $existing_id ),
+                            array( '%f', '%s' ),
+                            array( '%d' )
+                        );
+                    } else {
+                        $wpdb->insert(
+                            $table_fee_types,
+                            array( 'class_name' => $target_class, 'fee_title' => $trimmed_title, 'amount' => $amount, 'period_type' => $period ),
+                            array( '%s', '%s', '%f', '%s' )
+                        );
+                    }
+                    $saved_count++;
                 }
             }
 
             echo '<div class="notice notice-success is-dismissible" style="padding:12px; margin-bottom:20px; font-weight:700; border-left:4px solid #006a4e; background:#ecfdf5; color:#065f46;">' .
-                 sprintf( esc_html__( 'Successfully mapped %d fee categories for Class: %s', 'ifsedu-sms' ), $inserted_count, esc_html( $target_class ) ) .
+                 sprintf( esc_html__( 'Successfully saved/updated %d fee categories for Class: %s', 'ifsedu-sms' ), $saved_count, esc_html( $target_class ) ) .
                  '</div>';
         }
+    }
+
+    // Save Late Fine Configuration
+    if ( isset( $_POST['save_late_fine_config'] ) && check_admin_referer( 'educore_save_late_fine_action', 'educore_late_fine_nonce' ) ) {
+        $fine_type       = isset( $_POST['fine_type'] ) ? sanitize_text_field( wp_unslash( $_POST['fine_type'] ) ) : 'Fixed';
+        $fine_amount     = isset( $_POST['fine_amount'] ) ? floatval( $_POST['fine_amount'] ) : 0.00;
+        $grace_days      = isset( $_POST['grace_days'] ) ? absint( $_POST['grace_days'] ) : 0;
+        $fine_start_date = isset( $_POST['fine_start_date'] ) ? absint( $_POST['fine_start_date'] ) : 12;
+        $max_cap         = isset( $_POST['max_fine_cap'] ) ? floatval( $_POST['max_fine_cap'] ) : 0.00;
+        $status          = isset( $_POST['fine_status'] ) ? sanitize_text_field( wp_unslash( $_POST['fine_status'] ) ) : 'Active';
+
+        $existing_cfg_id = $wpdb->get_var( "SELECT id FROM {$table_late_cfg} LIMIT 1" );
+
+        $config_data = array(
+            'fine_type'       => $fine_type,
+            'fine_amount'     => $fine_amount,
+            'grace_days'      => $grace_days,
+            'fine_start_date' => $fine_start_date,
+            'max_fine_cap'    => $max_cap,
+            'status'          => $status,
+        );
+
+        if ( $existing_cfg_id ) {
+            $wpdb->update( $table_late_cfg, $config_data, array( 'id' => $existing_cfg_id ), array( '%s', '%f', '%d', '%d', '%f', '%s' ), array( '%d' ) );
+        } else {
+            $wpdb->insert( $table_late_cfg, $config_data, array( '%s', '%f', '%d', '%d', '%f', '%s' ) );
+        }
+
+        echo '<div class="notice notice-success is-dismissible" style="padding:12px; margin-bottom:20px; font-weight:700; border-left:4px solid #006a4e; background:#ecfdf5; color:#065f46;">' .
+             esc_html__( 'Late fee fine rules updated successfully.', 'ifsedu-sms' ) .
+             '</div>';
     }
 
     // Handle Delete Single Fee Item
@@ -97,6 +158,7 @@ function educore_fees_settings_view() {
     }
 
     $all_fee_types = $wpdb->get_results( "SELECT * FROM {$table_fee_types} ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC, fee_title ASC" );
+    $late_config   = $wpdb->get_row( "SELECT * FROM {$table_late_cfg} LIMIT 1" );
     ?>
 
     <style>
@@ -295,7 +357,7 @@ function educore_fees_settings_view() {
                     <select name="target_class" id="target_class_selector" class="dpt-select" required>
                         <option value=""><?php esc_html_e( '-- Choose Class --', 'ifsedu-sms' ); ?></option>
                         <?php foreach ( $academic_classes as $cls_name ) : ?>
-                            <option value="<?php echo esc_attr( $cls_name ); ?>"><?php printf( esc_html__( 'Class %s', 'ifsedu-sms' ), esc_html( $cls_name ) ); ?></option>
+                            <option value="<?php echo esc_attr( $cls_name ); ?>"><?php printf( esc_html__( '%s', 'ifsedu-sms' ), esc_html( $cls_name ) ); ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
@@ -344,6 +406,71 @@ function educore_fees_settings_view() {
             </form>
         </div>
 
+        <!-- Late Fee Fine Configuration Card -->
+        <div class="dpt-bento-card">
+            <div class="dpt-card-header">
+                <h4 class="dpt-card-title">
+                    <span class="dashicons dashicons-clock"></span>
+                    <?php esc_html_e( 'Late Fee Fine & Due Penalty Automation', 'ifsedu-sms' ); ?>
+                </h4>
+            </div>
+
+            <form method="POST" action="">
+                <?php wp_nonce_field( 'educore_save_late_fine_action', 'educore_late_fine_nonce' ); ?>
+
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 20px;">
+                    <div class="dpt-form-group">
+                        <label class="dpt-form-label"><?php esc_html_e( 'Fine Calculation Type', 'ifsedu-sms' ); ?></label>
+                        <select name="fine_type" class="dpt-select">
+                            <option value="Fixed" <?php selected( $late_config->fine_type ?? 'Fixed', 'Fixed' ); ?>><?php esc_html_e( 'Fixed Fine (Per Overdue Bill)', 'ifsedu-sms' ); ?></option>
+                            <option value="Daily" <?php selected( $late_config->fine_type ?? 'Fixed', 'Daily' ); ?>><?php esc_html_e( 'Daily Accruing Fine (Per Overdue Day)', 'ifsedu-sms' ); ?></option>
+                            <option value="Percentage" <?php selected( $late_config->fine_type ?? 'Fixed', 'Percentage' ); ?>><?php esc_html_e( 'Percentage of Due Amount (%)', 'ifsedu-sms' ); ?></option>
+                        </select>
+                    </div>
+
+                    <div class="dpt-form-group">
+                        <label class="dpt-form-label"><?php esc_html_e( 'Fine Amount / Rate (৳ or %)', 'ifsedu-sms' ); ?></label>
+                        <input type="number" step="0.01" min="0" name="fine_amount" class="dpt-input" value="<?php echo esc_attr( $late_config->fine_amount ?? '50.00' ); ?>" placeholder="50.00">
+                    </div>
+
+                    <div class="dpt-form-group">
+                        <label class="dpt-form-label"><?php esc_html_e( 'Fine Start Date (Day of Month)', 'ifsedu-sms' ); ?></label>
+                        <select name="fine_start_date" class="dpt-select">
+                            <?php 
+                            $selected_day = isset( $late_config->fine_start_date ) ? absint( $late_config->fine_start_date ) : 12;
+                            for ( $d = 1; $d <= 31; $d++ ) {
+                                echo '<option value="' . $d . '" ' . selected( $selected_day, $d, false ) . '>' . sprintf( esc_html__( 'Every Month %dth / Day %d', 'ifsedu-sms' ), $d, $d ) . '</option>';
+                            }
+                            ?>
+                        </select>
+                    </div>
+
+                    <div class="dpt-form-group">
+                        <label class="dpt-form-label"><?php esc_html_e( 'Grace Period (Days Allowed)', 'ifsedu-sms' ); ?></label>
+                        <input type="number" min="0" name="grace_days" class="dpt-input" value="<?php echo esc_attr( $late_config->grace_days ?? '5' ); ?>" placeholder="5">
+                    </div>
+
+                    <div class="dpt-form-group">
+                        <label class="dpt-form-label"><?php esc_html_e( 'Maximum Fine Cap (৳ 0 for Unlimited)', 'ifsedu-sms' ); ?></label>
+                        <input type="number" step="0.01" min="0" name="max_fine_cap" class="dpt-input" value="<?php echo esc_attr( $late_config->max_fine_cap ?? '500.00' ); ?>" placeholder="500.00">
+                    </div>
+
+                    <div class="dpt-form-group">
+                        <label class="dpt-form-label"><?php esc_html_e( 'Automation Status', 'ifsedu-sms' ); ?></label>
+                        <select name="fine_status" class="dpt-select">
+                            <option value="Active" <?php selected( $late_config->status ?? 'Active', 'Active' ); ?>><?php esc_html_e( 'Active (Auto-Apply)', 'ifsedu-sms' ); ?></option>
+                            <option value="Inactive" <?php selected( $late_config->status ?? 'Active', 'Inactive' ); ?>><?php esc_html_e( 'Inactive (Disabled)', 'ifsedu-sms' ); ?></option>
+                        </select>
+                    </div>
+                </div>
+
+                <button type="submit" name="save_late_fine_config" class="dpt-btn-submit">
+                    <span class="dashicons dashicons-saved"></span>
+                    <?php esc_html_e( 'Save Late Fine Rules', 'ifsedu-sms' ); ?>
+                </button>
+            </form>
+        </div>
+
         <!-- Mapped Fee Matrix Directory Card -->
         <div class="dpt-bento-card">
             <div class="dpt-card-header">
@@ -372,7 +499,7 @@ function educore_fees_settings_view() {
                             );
                         ?>
                             <tr>
-                                <td><strong style="color: #006a4e;"><?php printf( esc_html__( 'Class %s', 'ifsedu-sms' ), esc_html( $item->class_name ) ); ?></strong></td>
+                                <td><strong style="color: #006a4e;"><?php printf( esc_html__( '%s', 'ifsedu-sms' ), esc_html( $item->class_name ) ); ?></strong></td>
                                 <td><strong style="color: #0f172a;"><?php echo esc_html( $item->fee_title ); ?></strong></td>
                                 <td><span style="background: #f0fdf4; color: #166534; padding: 2px 8px; border-radius: 4px; font-weight: 800;">৳<?php echo number_format( floatval( $item->amount ), 2 ); ?></span></td>
                                 <td><span style="background: #f1f5f9; color: #475569; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 700;"><?php echo esc_html( $item->period_type ); ?></span></td>

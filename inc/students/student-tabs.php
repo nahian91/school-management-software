@@ -9,14 +9,15 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Standardized Typography and Modern Bento Element Alignment
  */
 function educore_students_tab() {
-    $sub_tab = isset( $_GET['sub'] ) ? sanitize_text_field( $_GET['sub'] ) : 'list';
+    $sub_tab = isset( $_GET['sub'] ) ? sanitize_text_field( wp_unslash( $_GET['sub'] ) ) : 'list';
     
     // Construct URLs for top submenu links
     $all_students_url = admin_url( 'admin.php?page=school_management_system&tab=students&sub=list' );
     $add_student_url  = admin_url( 'admin.php?page=school_management_system&tab=students&sub=add' );
     $id_card_url      = admin_url( 'admin.php?page=school_management_system&tab=students&sub=id_card' );
     $admit_card_url   = admin_url( 'admin.php?page=school_management_system&tab=students&sub=admit_card' );
-    $certificate_url  = admin_url( 'admin.php?page=school_management_system&tab=students&sub=certificate' ); // NEW: Certificate URL
+    $certificate_url  = admin_url( 'admin.php?page=school_management_system&tab=students&sub=certificate' );
+    $promotion_url    = admin_url( 'admin.php?page=school_management_system&tab=students&sub=promotion' ); // NEW: Promotion URL
     ?>
 
     <style>
@@ -25,7 +26,8 @@ function educore_students_tab() {
            ========================================================================== */
         .dpt-students-nav-root {
             margin: 20px 20px 24px 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: #0f172a;
         }
 
         /* Modern Bento Top Header Frame Block */
@@ -69,13 +71,13 @@ function educore_students_tab() {
         /* Active Nav Pill State */
         .dpt-nav-link-active {
             background: #006a4e;
-            color: #ffffff;
+            color: #ffffff !important;
             font-weight: 700;
             box-shadow: 0 4px 12px rgba(0, 106, 78, 0.15);
         }
         .dpt-nav-link-active:hover {
             background: #00523c;
-            color: #ffffff;
+            color: #ffffff !important;
         }
 
         /* Default Inactive Nav Pill State */
@@ -164,28 +166,33 @@ function educore_students_tab() {
             <div class="dpt-nav-button-group">
                 <a href="<?php echo esc_url( $all_students_url ); ?>" 
                    class="dpt-nav-link <?php echo ( $sub_tab === 'list' ) ? 'dpt-nav-link-active' : 'dpt-nav-link-inactive'; ?>">
-                    <span class="dashicons dashicons-groups"></span> All Students
+                    <span class="dashicons dashicons-groups"></span> <?php esc_html_e( 'All Students', 'ifsedu-sms' ); ?>
                 </a>
                 
                 <a href="<?php echo esc_url( $add_student_url ); ?>" 
                    class="dpt-nav-link <?php echo ( $sub_tab === 'add' ) ? 'dpt-nav-link-active' : 'dpt-nav-link-inactive'; ?>">
-                    <span class="dashicons dashicons-plus-alt2"></span> + Add New Student
+                    <span class="dashicons dashicons-plus-alt2"></span> <?php esc_html_e( '+ Add New Student', 'ifsedu-sms' ); ?>
                 </a>
                 
                 <a href="<?php echo esc_url( $id_card_url ); ?>" 
                    class="dpt-nav-link <?php echo ( $sub_tab === 'id_card' ) ? 'dpt-nav-link-active' : 'dpt-nav-link-inactive'; ?>">
-                    <span class="dashicons dashicons-id-alt"></span> Student ID Cards
+                    <span class="dashicons dashicons-id-alt"></span> <?php esc_html_e( 'Student ID Cards', 'ifsedu-sms' ); ?>
                 </a>
                 
                 <a href="<?php echo esc_url( $admit_card_url ); ?>" 
                    class="dpt-nav-link <?php echo ( $sub_tab === 'admit_card' ) ? 'dpt-nav-link-active' : 'dpt-nav-link-inactive'; ?>">
-                    <span class="dashicons dashicons-tickets-alt"></span> Admit Cards
+                    <span class="dashicons dashicons-tickets-alt"></span> <?php esc_html_e( 'Admit Cards', 'ifsedu-sms' ); ?>
                 </a>
 
-                <!-- NEW: Certificate Tab -->
                 <a href="<?php echo esc_url( $certificate_url ); ?>" 
                    class="dpt-nav-link <?php echo ( $sub_tab === 'certificate' ) ? 'dpt-nav-link-active' : 'dpt-nav-link-inactive'; ?>">
-                    <span class="dashicons dashicons-awards"></span> Certificate
+                    <span class="dashicons dashicons-awards"></span> <?php esc_html_e( 'Certificate', 'ifsedu-sms' ); ?>
+                </a>
+
+                <!-- NEW: Student Promotion Tab -->
+                <a href="<?php echo esc_url( $promotion_url ); ?>" 
+                   class="dpt-nav-link <?php echo ( $sub_tab === 'promotion' ) ? 'dpt-nav-link-active' : 'dpt-nav-link-inactive'; ?>">
+                    <span class="dashicons dashicons-randomize"></span> <?php esc_html_e( 'Student Promotion', 'ifsedu-sms' ); ?>
                 </a>
             </div>
 
@@ -193,7 +200,7 @@ function educore_students_tab() {
                 <div>
                     <span class="afdp-context-badge">
                         <span class="dashicons dashicons-edit" style="font-size:14px; width:14px; height:14px;"></span>
-                        <?php echo ucfirst( $sub_tab ); ?>ing Student Record
+                        <?php printf( esc_html__( '%sing Student Record', 'ifsedu-sms' ), esc_html( ucfirst( $sub_tab ) ) ); ?>
                     </span>
                 </div>
             <?php endif; ?>
@@ -220,7 +227,7 @@ function educore_students_tab() {
                     if ( function_exists( 'educore_student_id_card_view' ) ) {
                         educore_student_id_card_view();
                     } else {
-                        echo '<div class="afdp-notice-card"><span class="dashicons dashicons-info" style="vertical-align:middle; margin-right:6px;"></span> Student ID Card Generator module is initializing. Define <code>educore_student_id_card_view()</code>.</div>';
+                        echo '<div class="afdp-notice-card"><span class="dashicons dashicons-info" style="vertical-align:middle; margin-right:6px;"></span> ' . sprintf( esc_html__( 'Student ID Card Generator module is initializing. Define %s.', 'ifsedu-sms' ), '<code>educore_student_id_card_view()</code>' ) . '</div>';
                     }
                     break;
 
@@ -228,16 +235,24 @@ function educore_students_tab() {
                     if ( function_exists( 'educore_student_admit_card_view' ) ) {
                         educore_student_admit_card_view();
                     } else {
-                        echo '<div class="afdp-notice-card"><span class="dashicons dashicons-info" style="vertical-align:middle; margin-right:6px;"></span> Admit Card Generator module is initializing. Define <code>educore_student_admit_card_view()</code>.</div>';
+                        echo '<div class="afdp-notice-card"><span class="dashicons dashicons-info" style="vertical-align:middle; margin-right:6px;"></span> ' . sprintf( esc_html__( 'Admit Card Generator module is initializing. Define %s.', 'ifsedu-sms' ), '<code>educore_student_admit_card_view()</code>' ) . '</div>';
                     }
                     break;
 
-                // NEW: Certificate Routing Logic
                 case 'certificate':
                     if ( function_exists( 'educore_student_certificate_view' ) ) {
                         educore_student_certificate_view();
                     } else {
-                        echo '<div class="afdp-notice-card"><span class="dashicons dashicons-info" style="vertical-align:middle; margin-right:6px;"></span> Certificate Generator module is initializing. Define <code>educore_student_certificate_view()</code>.</div>';
+                        echo '<div class="afdp-notice-card"><span class="dashicons dashicons-info" style="vertical-align:middle; margin-right:6px;"></span> ' . sprintf( esc_html__( 'Certificate Generator module is initializing. Define %s.', 'ifsedu-sms' ), '<code>educore_student_certificate_view()</code>' ) . '</div>';
+                    }
+                    break;
+
+                // NEW: Student Promotion Route Handler
+                case 'promotion':
+                    if ( function_exists( 'educore_student_promotion_view' ) ) {
+                        educore_student_promotion_view();
+                    } else {
+                        echo '<div class="afdp-notice-card"><span class="dashicons dashicons-info" style="vertical-align:middle; margin-right:6px;"></span> ' . sprintf( esc_html__( 'Student Promotion module is initializing. Define %s.', 'ifsedu-sms' ), '<code>educore_student_promotion_view()</code>' ) . '</div>';
                     }
                     break;
 

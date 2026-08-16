@@ -10,7 +10,13 @@ $table_subjects         = $wpdb->prefix . 'sms_subjects';
 $table_teacher_subjects = $wpdb->prefix . 'sms_teacher_subjects';
 $table_staff            = $wpdb->prefix . 'sms_staff';
 
-// Dynamic Base URL preservation from current URI without action state params
+// Ensure shift column exists in sms_routine table
+$column_check = $wpdb->get_results( "SHOW COLUMNS FROM `{$table_routine}` LIKE 'shift'" );
+if ( empty( $column_check ) ) {
+    $wpdb->query( "ALTER TABLE `{$table_routine}` ADD `shift` varchar(50) DEFAULT 'No Shift' NOT NULL AFTER `day_name`" );
+}
+
+// Dynamic Base URL preservation
 $current_uri = remove_query_arg( array( 'action', 'id', '_wpnonce', 'status', 'msg' ), $_SERVER['REQUEST_URI'] );
 $base_url    = esc_url_raw( $current_uri );
 
@@ -43,22 +49,23 @@ if ( isset( $_GET['action'] ) && $_GET['action'] === 'delete_routine' && isset( 
 if ( $_SERVER['REQUEST_METHOD'] === 'POST' && isset( $_POST['save_routine'] ) ) {
     check_admin_referer( 'routine_action', 'routine_nonce' );
     
-    $class_unit_id  = isset( $_POST['section_id'] ) ? absint( $_POST['section_id'] ) : 0; // Unit ID
-    $class_name_val = isset( $_POST['class_id'] ) ? sanitize_text_field( $_POST['class_id'] ) : '';
+    $class_unit_id  = isset( $_POST['section_id'] ) ? absint( $_POST['section_id'] ) : 0;
+    $class_name_val = isset( $_POST['class_id'] ) ? sanitize_text_field( wp_unslash( $_POST['class_id'] ) ) : '';
     $subject_id     = isset( $_POST['subject_id'] ) ? absint( $_POST['subject_id'] ) : 0;
-    $day_name       = isset( $_POST['day_name'] ) ? sanitize_text_field( $_POST['day_name'] ) : '';
+    $day_name       = isset( $_POST['day_name'] ) ? sanitize_text_field( wp_unslash( $_POST['day_name'] ) ) : '';
+    $shift          = isset( $_POST['shift'] ) ? sanitize_text_field( wp_unslash( $_POST['shift'] ) ) : 'No Shift';
     
-    // MySQL Strict Mode requires TIME to be HH:MM:SS
-    $raw_start      = isset( $_POST['start_time'] ) ? sanitize_text_field( $_POST['start_time'] ) : '';
-    $raw_end        = isset( $_POST['end_time'] ) ? sanitize_text_field( $_POST['end_time'] ) : '';
+    // Time formatting for MySQL
+    $raw_start      = isset( $_POST['start_time'] ) ? sanitize_text_field( wp_unslash( $_POST['start_time'] ) ) : '';
+    $raw_end        = isset( $_POST['end_time'] ) ? sanitize_text_field( wp_unslash( $_POST['end_time'] ) ) : '';
     $start_time     = $raw_start ? date( 'H:i:s', strtotime( $raw_start ) ) : '00:00:00';
     $end_time       = $raw_end ? date( 'H:i:s', strtotime( $raw_end ) ) : '00:00:00';
 
-    $room_no        = isset( $_POST['room_no'] ) ? sanitize_text_field( $_POST['room_no'] ) : '';
+    $room_no        = isset( $_POST['room_no'] ) ? sanitize_text_field( wp_unslash( $_POST['room_no'] ) ) : '';
 
     $final_class_id = $class_unit_id > 0 ? $class_unit_id : 0;
 
-    // Fallback if no section was specifically chosen
+    // Fallback if no specific section unit was chosen
     if ( $final_class_id === 0 && ! empty( $class_name_val ) ) {
         $unit_match = $wpdb->get_row( $wpdb->prepare( "SELECT id FROM {$table_units} WHERE class_name = %s LIMIT 1", $class_name_val ) );
         if ( $unit_match ) {
@@ -73,20 +80,20 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' && isset( $_POST['save_routine'] ) ) 
                 'class_id'   => $final_class_id,
                 'subject_id' => $subject_id,
                 'day_name'   => $day_name,
+                'shift'      => $shift,
                 'start_time' => $start_time,
                 'end_time'   => $end_time,
                 'room_no'    => $room_no,
             ), 
-            array( '%d', '%d', '%s', '%s', '%s', '%s' )
+            array( '%d', '%d', '%s', '%s', '%s', '%s', '%s' )
         );
 
         if ( $inserted ) {
             if ( class_exists( 'IFSEdu_School_Management_System' ) ) {
-                IFSEdu_School_Management_System::log_activity( "Added new class routine for {$day_name}" );
+                IFSEdu_School_Management_System::log_activity( "Added new class routine slot for {$day_name} ({$shift})" );
             }
             
-            // Clear filters so the new item shows immediately
-            $clean_url = remove_query_arg( array( 'filter_class', 'filter_section' ), $base_url );
+            $clean_url = remove_query_arg( array( 'filter_class', 'filter_section', 'filter_shift' ), $base_url );
             $redirect_target = add_query_arg( array( 'status' => 'success' ), $clean_url );
 
             if ( function_exists( 'educore_safe_redirect_helper' ) ) {
@@ -110,26 +117,30 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' && isset( $_POST['save_routine'] ) ) 
     }
 }
 
-// Fetch Classes with Natural Numeric Sorting
-$classes = $wpdb->get_results( 
-    "SELECT id, class_name FROM {$table_units} 
+// 1. Fetch Distinct Classes from Class Setup (sms_academic_units)
+$raw_classes = $wpdb->get_col( 
+    "SELECT DISTINCT class_name FROM {$table_units} 
      WHERE class_name IS NOT NULL AND class_name != '' 
-     GROUP BY class_name 
      ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC" 
 );
 
-if ( ! empty( $classes ) ) {
-    usort( $classes, function( $a, $b ) {
-        return strnatcasecmp( $a->class_name, $b->class_name );
-    });
+$classes = array();
+if ( ! empty( $raw_classes ) ) {
+    $classes = array_values( array_unique( $raw_classes ) );
+    usort( $classes, 'strnatcasecmp' );
 }
 
-// All academic units for dynamic section filtering
-$all_units = $wpdb->get_results( "SELECT id, class_name, section_name FROM {$table_units} ORDER BY section_name ASC" );
+// 2. Fetch All Academic Units (Classes & Sections) from Class Setup
+$all_units = $wpdb->get_results( 
+    "SELECT id, class_name, section_name, dept_name 
+     FROM {$table_units} 
+     WHERE class_name != '' 
+     ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC, section_name ASC" 
+);
 
-// Fetch subjects mapped with Unit Class ID and Section Name
+// 3. Fetch Subjects mapped with Class/Unit Setup
 $subjects = $wpdb->get_results( "
-    SELECT s.id, s.subject_name, s.class_id, u.class_name, u.section_name 
+    SELECT s.id, s.subject_name, s.subject_code, s.class_id, u.class_name, u.section_name 
     FROM {$table_subjects} s 
     LEFT JOIN {$table_units} u ON s.class_id = u.id 
     ORDER BY s.subject_name ASC
@@ -138,8 +149,9 @@ $subjects = $wpdb->get_results( "
 $days = array( 'Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday' );
 
 // Preview Filter Params
-$filter_class = isset( $_GET['filter_class'] ) ? sanitize_text_field( $_GET['filter_class'] ) : '';
+$filter_class = isset( $_GET['filter_class'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_class'] ) ) : '';
 $filter_sec   = isset( $_GET['filter_section'] ) ? absint( $_GET['filter_section'] ) : 0;
+$filter_shift = isset( $_GET['filter_shift'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_shift'] ) ) : '';
 
 // Fetch Routines with Assigned Teacher Resolution
 $query = "SELECT r.*, u.class_name, u.section_name, s.subject_name, st.full_name as teacher_name, st.designation 
@@ -155,6 +167,9 @@ if ( ! empty( $filter_class ) ) {
 }
 if ( $filter_sec > 0 ) {
     $where[] = $wpdb->prepare( "r.class_id = %d", $filter_sec );
+}
+if ( ! empty( $filter_shift ) ) {
+    $where[] = $wpdb->prepare( "r.shift = %s", $filter_shift );
 }
 
 if ( ! empty( $where ) ) {
@@ -194,7 +209,7 @@ if ( ! empty( $routines ) ) {
 
 <style>
     .dpt-routine-container {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         color: #0f172a;
         display: flex;
         flex-direction: column;
@@ -252,12 +267,12 @@ if ( ! empty( $routines ) ) {
 
     .dpt-routine-form-grid {
         display: grid;
-        grid-template-columns: repeat(4, 1fr) repeat(2, 110px) 1fr 130px;
+        grid-template-columns: repeat(4, 1fr) 130px repeat(2, 110px) 1fr 130px;
         gap: 12px;
         align-items: end;
     }
 
-    @media (max-width: 1400px) {
+    @media (max-width: 1500px) {
         .dpt-routine-form-grid {
             grid-template-columns: repeat(4, 1fr);
         }
@@ -416,7 +431,20 @@ if ( ! empty( $routines ) ) {
         margin-top: 4px;
         display: flex;
         justify-content: space-between;
+        align-items: center;
     }
+
+    .dpt-shift-badge {
+        display: inline-block;
+        font-size: 10px;
+        font-weight: 700;
+        padding: 2px 6px;
+        border-radius: 4px;
+    }
+
+    .dpt-shift-morning { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+    .dpt-shift-day     { background: #e0e7ff; color: #3730a3; border: 1px solid #c7d2fe; }
+    .dpt-shift-none    { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
 
     .dpt-slot-teacher {
         font-size: 11px;
@@ -589,49 +617,63 @@ if ( ! empty( $routines ) ) {
         </div>
     <?php endif; ?>
 
-    <!-- 1. Add New Routine Bento Box -->
+    <!-- 1. Add New Routine Bento Box (Loaded from Class Setup) -->
     <div class="dpt-bento-card no-print">
         <div class="afdp-card-header">
             <h5 class="afdp-card-title">
                 <span class="dashicons dashicons-calendar-alt"></span>
                 <?php esc_html_e( 'Configure New Class Routine Slot', 'ifsedu-sms' ); ?>
             </h5>
+            <span style="font-size:12px; font-weight:700; color:#006a4e; background:#ecfdf5; padding:4px 12px; border-radius:20px; border:1px solid #a7f3d0;">
+                <span class="dashicons dashicons-admin-settings" style="font-size:14px; width:14px; height:14px; vertical-align:middle;"></span>
+                <?php esc_html_e( 'Class Setup Linked', 'ifsedu-sms' ); ?>
+            </span>
         </div>
         
         <form method="POST" action="<?php echo esc_url( $base_url ); ?>">
             <?php wp_nonce_field( 'routine_action', 'routine_nonce' ); ?>
             
             <div class="dpt-routine-form-grid">
-                <!-- Target Class -->
+                <!-- Target Class (Loaded dynamically from sms_academic_units) -->
                 <div class="dpt-input-wrapper">
-                    <label class="dpt-form-label"><?php esc_html_e( 'Target Class', 'ifsedu-sms' ); ?></label>
+                    <label class="dpt-form-label"><?php esc_html_e( 'Target Class', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
                     <select name="class_id" id="dpt_class_select" class="dpt-field-select" required>
-                        <option value=""><?php esc_html_e( 'Select Class...', 'ifsedu-sms' ); ?></option>
-                        <?php foreach ( $classes as $c ) : ?>
-                            <option value="<?php echo esc_attr( $c->class_name ); ?>"><?php echo esc_html( $c->class_name ); ?></option>
+                        <option value=""><?php esc_html_e( '-- Choose Class --', 'ifsedu-sms' ); ?></option>
+                        <?php foreach ( $classes as $cls_name ) : ?>
+                            <option value="<?php echo esc_attr( $cls_name ); ?>"><?php echo esc_html( $cls_name ); ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
 
-                <!-- Section Selection -->
+                <!-- Section Selection (Populated dynamically from sms_academic_units) -->
                 <div class="dpt-input-wrapper">
                     <label class="dpt-form-label"><?php esc_html_e( 'Section', 'ifsedu-sms' ); ?></label>
                     <select name="section_id" id="dpt_section_select" class="dpt-field-select">
-                        <option value=""><?php esc_html_e( 'Select Section...', 'ifsedu-sms' ); ?></option>
+                        <option value=""><?php esc_html_e( '-- Choose Section --', 'ifsedu-sms' ); ?></option>
                     </select>
                 </div>
 
-                <!-- Subject Selection -->
+                <!-- Academic Shift -->
                 <div class="dpt-input-wrapper">
-                    <label class="dpt-form-label"><?php esc_html_e( 'Academic Subject', 'ifsedu-sms' ); ?></label>
+                    <label class="dpt-form-label"><?php esc_html_e( 'Shift', 'ifsedu-sms' ); ?></label>
+                    <select name="shift" class="dpt-field-select">
+                        <option value="No Shift"><?php esc_html_e( 'No Shift', 'ifsedu-sms' ); ?></option>
+                        <option value="Morning Shift"><?php esc_html_e( 'Morning Shift', 'ifsedu-sms' ); ?></option>
+                        <option value="Day Shift"><?php esc_html_e( 'Day Shift', 'ifsedu-sms' ); ?></option>
+                    </select>
+                </div>
+
+                <!-- Subject Selection (Populated dynamically based on Class/Unit) -->
+                <div class="dpt-input-wrapper">
+                    <label class="dpt-form-label"><?php esc_html_e( 'Academic Subject', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
                     <select name="subject_id" id="dpt_subject_select" class="dpt-field-select" required>
-                        <option value=""><?php esc_html_e( 'Select Subject...', 'ifsedu-sms' ); ?></option>
+                        <option value=""><?php esc_html_e( '-- Choose Subject --', 'ifsedu-sms' ); ?></option>
                     </select>
                 </div>
 
                 <!-- Day Selection -->
                 <div class="dpt-input-wrapper">
-                    <label class="dpt-form-label"><?php esc_html_e( 'Day', 'ifsedu-sms' ); ?></label>
+                    <label class="dpt-form-label"><?php esc_html_e( 'Day', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
                     <select name="day_name" class="dpt-field-select" required>
                         <?php foreach ( $days as $d ) : ?>
                             <option value="<?php echo esc_attr( $d ); ?>"><?php echo esc_html( $d ); ?></option>
@@ -641,13 +683,13 @@ if ( ! empty( $routines ) ) {
 
                 <!-- Start Time -->
                 <div class="dpt-input-wrapper">
-                    <label class="dpt-form-label"><?php esc_html_e( 'Start Time', 'ifsedu-sms' ); ?></label>
+                    <label class="dpt-form-label"><?php esc_html_e( 'Start Time', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
                     <input type="time" name="start_time" class="dpt-field-input" required>
                 </div>
 
                 <!-- End Time -->
                 <div class="dpt-input-wrapper">
-                    <label class="dpt-form-label"><?php esc_html_e( 'End Time', 'ifsedu-sms' ); ?></label>
+                    <label class="dpt-form-label"><?php esc_html_e( 'End Time', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
                     <input type="time" name="end_time" class="dpt-field-input" required>
                 </div>
 
@@ -681,26 +723,34 @@ if ( ! empty( $routines ) ) {
         <form method="GET" action="" class="dpt-filter-bar no-print">
             <?php 
                 foreach ( $_GET as $key => $val ) {
-                    if ( ! in_array( $key, array( 'filter_class', 'filter_section' ), true ) ) {
+                    if ( ! in_array( $key, array( 'filter_class', 'filter_section', 'filter_shift' ), true ) ) {
                         echo '<input type="hidden" name="' . esc_attr( $key ) . '" value="' . esc_attr( $val ) . '">';
                     }
                 }
             ?>
             <div style="font-weight: 700; font-size: 13px; color: #475569;"><?php esc_html_e( 'Filter Schedule:', 'ifsedu-sms' ); ?></div>
             
-            <!-- Filter Class -->
+            <!-- Filter Class (Loaded from Class Setup) -->
             <select name="filter_class" id="dpt_filter_class" class="dpt-field-select" style="width: auto; height: 36px;">
                 <option value=""><?php esc_html_e( '-- All Classes --', 'ifsedu-sms' ); ?></option>
-                <?php foreach ( $classes as $c ) : ?>
-                    <option value="<?php echo esc_attr( $c->class_name ); ?>" <?php selected( $filter_class, $c->class_name ); ?>>
-                        <?php echo esc_html( $c->class_name ); ?>
+                <?php foreach ( $classes as $cls_name ) : ?>
+                    <option value="<?php echo esc_attr( $cls_name ); ?>" <?php selected( $filter_class, $cls_name ); ?>>
+                        <?php echo esc_html( $cls_name ); ?>
                     </option>
                 <?php endforeach; ?>
             </select>
 
-            <!-- Filter Section -->
+            <!-- Filter Section (Loaded from Class Setup) -->
             <select name="filter_section" id="dpt_filter_section" class="dpt-field-select" style="width: auto; height: 36px;">
                 <option value=""><?php esc_html_e( '-- All Sections --', 'ifsedu-sms' ); ?></option>
+            </select>
+
+            <!-- Filter Shift -->
+            <select name="filter_shift" class="dpt-field-select" style="width: auto; height: 36px;">
+                <option value=""><?php esc_html_e( '-- All Shifts --', 'ifsedu-sms' ); ?></option>
+                <option value="No Shift" <?php selected( $filter_shift, 'No Shift' ); ?>><?php esc_html_e( 'No Shift', 'ifsedu-sms' ); ?></option>
+                <option value="Morning Shift" <?php selected( $filter_shift, 'Morning Shift' ); ?>><?php esc_html_e( 'Morning Shift', 'ifsedu-sms' ); ?></option>
+                <option value="Day Shift" <?php selected( $filter_shift, 'Day Shift' ); ?>><?php esc_html_e( 'Day Shift', 'ifsedu-sms' ); ?></option>
             </select>
 
             <button type="submit" class="dpt-btn-secondary" style="height: 36px; padding: 0 14px;">
@@ -708,8 +758,8 @@ if ( ! empty( $routines ) ) {
                 <?php esc_html_e( 'Apply Filter', 'ifsedu-sms' ); ?>
             </button>
 
-            <?php if ( ! empty( $filter_class ) || $filter_sec > 0 ) : ?>
-                <a href="<?php echo esc_url( $base_url ); ?>" class="dpt-square-btn" style="width: auto; padding: 0 10px; height: 34px;" title="Clear Filters">
+            <?php if ( ! empty( $filter_class ) || $filter_sec > 0 || ! empty( $filter_shift ) ) : ?>
+                <a href="<?php echo esc_url( $base_url ); ?>" class="dpt-square-btn" style="width: auto; padding: 0 10px; height: 34px;" title="<?php esc_attr_e( 'Clear Filters', 'ifsedu-sms' ); ?>">
                     <?php esc_html_e( 'Reset Filter', 'ifsedu-sms' ); ?>
                 </a>
             <?php endif; ?>
@@ -722,15 +772,28 @@ if ( ! empty( $routines ) ) {
                     <div class="dpt-day-header"><?php echo esc_html( $day ); ?></div>
                     <div class="dpt-day-slots">
                         <?php if ( ! empty( $matrix_routine[$day] ) ) : ?>
-                            <?php foreach ( $matrix_routine[$day] as $slot ) : ?>
+                            <?php foreach ( $matrix_routine[$day] as $slot ) : 
+                                $shift_val = ! empty( $slot->shift ) ? $slot->shift : 'No Shift';
+                                $shift_badge_class = 'dpt-shift-none';
+                                if ( $shift_val === 'Morning Shift' ) {
+                                    $shift_badge_class = 'dpt-shift-morning';
+                                } elseif ( $shift_val === 'Day Shift' ) {
+                                    $shift_badge_class = 'dpt-shift-day';
+                                }
+                            ?>
                                 <div class="dpt-slot-card">
                                     <div class="dpt-slot-time">
                                         <span class="dashicons dashicons-clock" style="font-size:11px; width:11px; height:11px;"></span>
-                                        <?php echo esc_html( date( 'g:i A', strtotime( $slot->start_time ) ) . ' - ' . date( 'g:i A', strtotime( $slot->end_time ) ) ); ?>
+                                        <span><?php echo esc_html( date( 'g:i A', strtotime( $slot->start_time ) ) . ' - ' . date( 'g:i A', strtotime( $slot->end_time ) ) ); ?></span>
                                     </div>
                                     <div class="dpt-slot-subject"><?php echo esc_html( $slot->subject_name ); ?></div>
                                     <div class="dpt-slot-meta">
-                                        <span>Cls: <strong><?php echo esc_html( $slot->class_name ); ?></strong> <?php echo ! empty( $slot->section_name ) ? '(' . esc_html( $slot->section_name ) . ')' : ''; ?></span>
+                                        <span>
+                                            Cls: <strong><?php echo esc_html( $slot->class_name ); ?></strong> <?php echo ! empty( $slot->section_name ) ? '(' . esc_html( $slot->section_name ) . ')' : ''; ?>
+                                            <?php if ( $shift_val !== 'No Shift' ) : ?>
+                                                <span class="dpt-shift-badge <?php echo esc_attr( $shift_badge_class ); ?>"><?php echo esc_html( $shift_val ); ?></span>
+                                            <?php endif; ?>
+                                        </span>
                                         <span>Rm: <strong><?php echo esc_html( $slot->room_no ? $slot->room_no : 'N/A' ); ?></strong></span>
                                     </div>
                                     <?php if ( ! empty( $slot->teacher_name ) ) : ?>
@@ -752,99 +815,19 @@ if ( ! empty( $routines ) ) {
         </div>
     </div>
 
-    <!-- 3. Detailed Routine Table Directory -->
-    <div class="dpt-bento-card no-print">
-        <div class="afdp-card-header">
-            <h5 class="afdp-card-title">
-                <span class="dashicons dashicons-list-view"></span>
-                <?php esc_html_e( 'Routine Slot Directory', 'ifsedu-sms' ); ?>
-            </h5>
-            <span class="dpt-count-pill">
-                <?php echo esc_html( count( $routines ) ); ?> <?php esc_html_e( 'Slots Loaded', 'ifsedu-sms' ); ?>
-            </span>
-        </div>
-
-        <div class="dpt-responsive-datatable">
-            <table class="dpt-architecture-table">
-                <thead>
-                    <tr>
-                        <th><?php esc_html_e( 'Day', 'ifsedu-sms' ); ?></th>
-                        <th><?php esc_html_e( 'Class', 'ifsedu-sms' ); ?></th>
-                        <th><?php esc_html_e( 'Section', 'ifsedu-sms' ); ?></th>
-                        <th><?php esc_html_e( 'Subject', 'ifsedu-sms' ); ?></th>
-                        <th><?php esc_html_e( 'Assigned Teacher', 'ifsedu-sms' ); ?></th>
-                        <th><?php esc_html_e( 'Timeline', 'ifsedu-sms' ); ?></th>
-                        <th><?php esc_html_e( 'Room No', 'ifsedu-sms' ); ?></th>
-                        <th style="text-align: right; width: 60px;"><?php esc_html_e( 'Action', 'ifsedu-sms' ); ?></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php if ( ! empty( $routines ) ) : 
-                        foreach ( $routines as $r ) : 
-                            $delete_url = wp_nonce_url( 
-                                add_query_arg( array( 'action' => 'delete_routine', 'id' => $r->id ), $base_url ), 
-                                'delete_routine_' . $r->id 
-                            );
-                    ?>
-                    <tr>
-                        <td style="font-weight: 800; color: #006a4e;"><?php echo esc_html( $r->day_name ); ?></td>
-                        <td style="font-weight: 600; color: #0f172a;"><?php echo esc_html( $r->class_name ); ?></td>
-                        <td>
-                            <?php if ( ! empty( $r->section_name ) ) : ?>
-                                <span class="dpt-section-badge"><?php echo esc_html( $r->section_name ); ?></span>
-                            <?php else : ?>
-                                <span style="color: #94a3b8;">—</span>
-                            <?php endif; ?>
-                        </td>
-                        <td style="font-weight: 600; color: #334155;"><?php echo esc_html( $r->subject_name ); ?></td>
-                        <td>
-                            <?php if ( ! empty( $r->teacher_name ) ) : ?>
-                                <strong style="color: #006a4e;"><?php echo esc_html( $r->teacher_name ); ?></strong>
-                                <?php if ( ! empty( $r->designation ) ) : ?>
-                                    <small style="display: block; color: #64748b; font-size: 11px;"><?php echo esc_html( $r->designation ); ?></small>
-                                <?php endif; ?>
-                            <?php else : ?>
-                                <span style="color: #94a3b8; font-style: italic;"><?php esc_html_e( 'Unassigned', 'ifsedu-sms' ); ?></span>
-                            <?php endif; ?>
-                        </td>
-                        <td>
-                            <span class="dpt-timeline-badge">
-                                <span class="dashicons dashicons-clock" style="font-size:12px; width:12px; height:12px;"></span>
-                                <?php echo esc_html( date( 'g:i A', strtotime( $r->start_time ) ) . ' - ' . date( 'g:i A', strtotime( $r->end_time ) ) ); ?>
-                            </span>
-                        </td>
-                        <td><span class="dpt-room-code"><?php echo esc_html( $r->room_no ? $r->room_no : 'N/A' ); ?></span></td>
-                        <td style="text-align: right;">
-                            <a href="<?php echo esc_url( $delete_url ); ?>" class="dpt-square-btn" title="<?php esc_attr_e( 'Delete Routine Slot', 'ifsedu-sms' ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Are you sure you want to delete this routine slot?', 'ifsedu-sms' ) ); ?>');">
-                                <span class="dashicons dashicons-trash"></span>
-                            </a>
-                        </td>
-                    </tr>
-                    <?php endforeach; else : ?>
-                    <tr>
-                        <td colspan="8" style="text-align: center; padding: 40px; color: #94a3b8;">
-                            <?php esc_html_e( 'No routine slots configured yet.', 'ifsedu-sms' ); ?>
-                        </td>
-                    </tr>
-                    <?php endif; ?>
-                </tbody>
-            </table>
-        </div>
-    </div>
-
 </div>
 
-<!-- Dynamic Script for Class-wise Section & Subject Resolution -->
+<!-- Dynamic Script for Class Setup Cascading Resolution -->
 <script type="text/javascript">
 document.addEventListener('DOMContentLoaded', function() {
     const unitsMap = <?php echo json_encode( $all_units ); ?>;
     const subjectsMap = <?php echo json_encode( $subjects ); ?>;
     const currentFilterSection = <?php echo json_encode( $filter_sec ); ?>;
 
-    // Helper to populate dynamic sections based on selected class name
+    // Populate dynamic sections strictly from Class Setup (sms_academic_units)
     function populateSections(classSelectElem, sectionSelectElem, selectedSecId = '') {
         const selectedClass = classSelectElem.value;
-        sectionSelectElem.innerHTML = '<option value=""><?php esc_html_e( '-- All Sections --', 'ifsedu-sms' ); ?></option>';
+        sectionSelectElem.innerHTML = '<option value=""><?php esc_html_e( '-- Choose Section --', 'ifsedu-sms' ); ?></option>';
 
         if (!selectedClass) return;
 
@@ -863,12 +846,12 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Helper to populate dynamic subjects based on selected class AND section
+    // Populate dynamic subjects based on Class and Section Setup
     function populateSubjects(classSelectElem, sectionSelectElem, subjectSelectElem) {
         const selectedClass = classSelectElem.value;
         const selectedUnitId = sectionSelectElem ? sectionSelectElem.value : '';
 
-        subjectSelectElem.innerHTML = '<option value=""><?php esc_html_e( 'Select Subject...', 'ifsedu-sms' ); ?></option>';
+        subjectSelectElem.innerHTML = '<option value=""><?php esc_html_e( '-- Choose Subject --', 'ifsedu-sms' ); ?></option>';
 
         if (!selectedClass) return;
 
@@ -889,13 +872,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 seen.add(subject.id);
                 const opt = document.createElement('option');
                 opt.value = subject.id;
-                opt.textContent = subject.subject_name;
+                opt.textContent = subject.subject_name + (subject.subject_code ? ' [' + subject.subject_code + ']' : '');
                 subjectSelectElem.appendChild(opt);
             }
         });
     }
 
-    // 1. Creation Form Elements
+    // 1. Creation Form Setup
     const formClassSelect = document.getElementById('dpt_class_select');
     const formSecSelect   = document.getElementById('dpt_section_select');
     const formSubjectSelect = document.getElementById('dpt_subject_select');
@@ -911,7 +894,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // 2. Filter Bar Elements
+    // 2. Filter Bar Setup
     const filterClassSelect = document.getElementById('dpt_filter_class');
     const filterSecSelect   = document.getElementById('dpt_filter_section');
     if (filterClassSelect && filterSecSelect) {

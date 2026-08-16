@@ -5,6 +5,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * Shared Form View for Adding and Editing Notices & Events
+ * File: inc/notices/notice-events-add.php
  * Theme Aesthetic: Elite Neo-Bento UI Architecture
  * Custom Prefixes Applied: dpt-, afdp-
  */
@@ -50,18 +51,49 @@ function educore_notice_events_add_edit_view( $type = 'notice' ) {
             }
         }
 
+        $form_type        = ( $type === 'events' || $type === 'event' ) ? 'event' : 'notice';
+        $title            = sanitize_text_field( wp_unslash( $_POST['title'] ) );
+        $category         = sanitize_text_field( wp_unslash( $_POST['category'] ) );
+        $target_audience  = sanitize_text_field( wp_unslash( $_POST['target_audience'] ) );
+        $publish_date_val = ! empty( $_POST['publish_date'] ) ? sanitize_text_field( wp_unslash( $_POST['publish_date'] ) ) : current_time( 'Y-m-d' );
+        $event_location   = isset( $_POST['event_location'] ) ? sanitize_text_field( wp_unslash( $_POST['event_location'] ) ) : '';
+        $content_body     = wp_kses_post( wp_unslash( $_POST['content'] ) );
+        $status           = sanitize_text_field( wp_unslash( $_POST['status'] ) );
+
+        // Universal Schema Data Array (Covers both standard and legacy columns)
         $data = array(
-            'title'           => sanitize_text_field( $_POST['title'] ),
-            'notice_type'     => ( $type === 'events' ) ? 'Event' : sanitize_text_field( $_POST['notice_type'] ),
-            'priority'        => sanitize_text_field( $_POST['priority'] ),
-            'target_audience' => sanitize_text_field( $_POST['target_audience'] ),
-            'description'     => wp_kses_post( $_POST['description'] ),
-            'event_date'      => ! empty( $_POST['event_date'] ) ? sanitize_text_field( $_POST['event_date'] ) : NULL,
+            'title'           => $title,
+            'type'            => $form_type,
+            'category'        => $category,
+            'target_audience' => $target_audience,
+            'publish_date'    => $publish_date_val,
+            'event_location'  => $event_location,
+            'content'         => $content_body,
             'attachment_url'  => sanitize_url( $attachment_url ),
-            'featured_image'  => sanitize_url( $featured_image ),
-            'created_by'      => get_current_user_id(),
-            'status'          => sanitize_text_field( $_POST['status'] )
+            'status'          => $status,
+            'created_by'      => get_current_user_id()
         );
+
+        // Fallback column checks for custom schema variants
+        $has_notice_type_col = $wpdb->get_results( "SHOW COLUMNS FROM `{$table_notices}` LIKE 'notice_type'" );
+        if ( ! empty( $has_notice_type_col ) ) {
+            $data['notice_type'] = ( $form_type === 'event' ) ? 'Event' : 'Notice';
+        }
+
+        $has_desc_col = $wpdb->get_results( "SHOW COLUMNS FROM `{$table_notices}` LIKE 'description'" );
+        if ( ! empty( $has_desc_col ) ) {
+            $data['description'] = $content_body;
+        }
+
+        $has_event_date_col = $wpdb->get_results( "SHOW COLUMNS FROM `{$table_notices}` LIKE 'event_date'" );
+        if ( ! empty( $has_event_date_col ) ) {
+            $data['event_date'] = $publish_date_val;
+        }
+
+        $has_feat_img_col = $wpdb->get_results( "SHOW COLUMNS FROM `{$table_notices}` LIKE 'featured_image'" );
+        if ( ! empty( $has_feat_img_col ) ) {
+            $data['featured_image'] = sanitize_url( $featured_image );
+        }
 
         if ( $is_edit && $id > 0 ) {
             $wpdb->update( $table_notices, $data, array( 'id' => $id ) );
@@ -77,15 +109,23 @@ function educore_notice_events_add_edit_view( $type = 'notice' ) {
         }
     }
 
-    $back_url = admin_url( 'admin.php?page=school_management_system&tab=notice&type=' . $type . '&sub=list' );
+    $back_url = admin_url( 'admin.php?page=school_management_system&tab=notices&type=' . ( ( $type === 'events' || $type === 'event' ) ? 'events' : 'notice' ) . '&sub=list' );
+
+    // Normalize field getters for edit mode
+    $current_title     = $item ? $item->title : '';
+    $current_category  = $item ? ( isset( $item->category ) ? $item->category : ( isset( $item->notice_type ) ? $item->notice_type : 'General' ) ) : 'General';
+    $current_audience  = $item ? $item->target_audience : 'All';
+    $current_date      = $item ? ( ! empty( $item->publish_date ) ? $item->publish_date : ( ! empty( $item->event_date ) ? $item->event_date : current_time( 'Y-m-d' ) ) ) : current_time( 'Y-m-d' );
+    $current_location  = $item ? ( isset( $item->event_location ) ? $item->event_location : '' ) : '';
+    $current_content   = $item ? ( ! empty( $item->content ) ? $item->content : ( isset( $item->description ) ? $item->description : '' ) ) : '';
+    $current_status    = $item ? $item->status : 'Published';
+    $current_feat_img  = $item ? ( ! empty( $item->featured_image ) ? $item->featured_image : ( ! empty( $item->attachment_url ) ? $item->attachment_url : '' ) ) : '';
+    $current_attach    = $item && ! empty( $item->attachment_url ) ? $item->attachment_url : '';
     ?>
 
     <style>
-        /* ==========================================================================
-           NOTICE/EVENT FORM MATRIX - NEO BENTO AESTHETICS
-           ========================================================================== */
         .dpt-editor-root {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+            font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             color: #0f172a;
         }
 
@@ -115,7 +155,6 @@ function educore_notice_events_add_edit_view( $type = 'notice' ) {
             color: #0f172a;
         }
 
-        /* Main Form Card Node */
         .dpt-form-bento-card {
             background: #ffffff;
             border: 1px solid #e2e8f0;
@@ -144,20 +183,19 @@ function educore_notice_events_add_edit_view( $type = 'notice' ) {
             letter-spacing: -0.4px;
         }
 
-        /* Form Grid Mechanics */
         .dpt-grid-row {
             display: grid;
             gap: 20px;
             margin-bottom: 20px;
         }
 
-        .dpt-cols-12 { grid-template-columns: 1fr; }
-        .dpt-cols-8-4 { grid-template-columns: 2fr 1fr; }
-        .dpt-cols-3   { grid-template-columns: repeat(3, 1fr); }
-        .dpt-cols-2   { grid-template-columns: repeat(2, 1fr); }
+        .dpt-cols-12   { grid-template-columns: 1fr; }
+        .dpt-cols-8-4  { grid-template-columns: 2fr 1fr; }
+        .dpt-cols-3    { grid-template-columns: repeat(3, 1fr); }
+        .dpt-cols-4    { grid-template-columns: repeat(4, 1fr); }
 
-        @media (max-width: 868px) {
-            .dpt-cols-8-4, .dpt-cols-3, .dpt-cols-2 {
+        @media (max-width: 992px) {
+            .dpt-cols-8-4, .dpt-cols-3, .dpt-cols-4 {
                 grid-template-columns: 1fr;
             }
         }
@@ -169,10 +207,11 @@ function educore_notice_events_add_edit_view( $type = 'notice' ) {
         }
 
         .dpt-field-label {
-            font-size: 13px;
+            font-size: 12.5px;
             font-weight: 700;
             color: #334155;
-            letter-spacing: -0.1px;
+            text-transform: uppercase;
+            letter-spacing: 0.2px;
         }
 
         .dpt-field-label span.required {
@@ -212,7 +251,6 @@ function educore_notice_events_add_edit_view( $type = 'notice' ) {
             outline: none;
         }
 
-        /* Image Preview Box Style */
         .dpt-img-preview-box {
             display: flex;
             align-items: center;
@@ -225,14 +263,13 @@ function educore_notice_events_add_edit_view( $type = 'notice' ) {
         }
 
         .dpt-img-preview-box img {
-            width: 60px;
-            height: 60px;
+            width: 50px;
+            height: 50px;
             object-fit: cover;
-            border-radius: 8px;
+            border-radius: 6px;
             border: 1px solid #e2e8f0;
         }
 
-        /* WYSIWYG Editor Wrap Styling */
         .dpt-editor-wrapper {
             border: 1px solid #cbd5e1;
             border-radius: 12px;
@@ -244,9 +281,8 @@ function educore_notice_events_add_edit_view( $type = 'notice' ) {
             border: none;
         }
 
-        /* Action Buttons */
         .dpt-submit-action {
-            margin-top: 30px;
+            margin-top: 24px;
             padding-top: 20px;
             border-top: 1px solid #f1f5f9;
         }
@@ -274,7 +310,6 @@ function educore_notice_events_add_edit_view( $type = 'notice' ) {
             transform: translateY(-1px);
         }
 
-        /* Custom Alert Banner */
         .afdp-alert-node {
             padding: 14px 18px;
             border-radius: 10px;
@@ -295,7 +330,6 @@ function educore_notice_events_add_edit_view( $type = 'notice' ) {
 
     <div class="dpt-editor-root">
         
-        <!-- Navigation Back Action -->
         <div class="dpt-top-action-bar">
             <a href="<?php echo esc_url( $back_url ); ?>" class="dpt-btn-back">
                 <span class="dashicons dashicons-arrow-left-alt"></span>
@@ -304,83 +338,93 @@ function educore_notice_events_add_edit_view( $type = 'notice' ) {
         </div>
 
         <?php if ( ! empty( $alert_message ) ) : ?>
-            <div class="afdp-alert-node afdp-alert-<?php echo esc_attr($alert_type); ?>">
+            <div class="afdp-alert-node afdp-alert-<?php echo esc_attr( $alert_type ); ?>">
                 <span class="dashicons dashicons-yes-alt"></span>
                 <?php echo esc_html( $alert_message ); ?>
             </div>
         <?php endif; ?>
 
-        <!-- Main Form Container Matrix -->
         <div class="dpt-form-bento-card">
             
             <div class="afdp-form-header">
                 <h3 class="afdp-form-title">
                     <span class="dashicons <?php echo $is_edit ? 'dashicons-edit' : 'dashicons-plus-alt'; ?>"></span>
-                    <?php echo $is_edit ? esc_html__( 'Edit Record Details', 'ifsedu-sms' ) : esc_html__( 'Add New Announcement / Event', 'ifsedu-sms' ); ?>
+                    <?php 
+                        if ( $is_edit ) {
+                            printf( esc_html__( 'Edit %s Record', 'ifsedu-sms' ), ( $type === 'events' ? 'Event' : 'Notice' ) );
+                        } else {
+                            printf( esc_html__( 'Publish New %s', 'ifsedu-sms' ), ( $type === 'events' ? 'Academic Event' : 'Notice / Announcement' ) );
+                        }
+                    ?>
                 </h3>
             </div>
 
             <form method="POST" action="" enctype="multipart/form-data">
                 <?php wp_nonce_field( 'save_item_action', 'educore_item_nonce' ); ?>
 
-                <!-- Row 1: Title & Category -->
-                <div class="dpt-grid-row <?php echo ( $type !== 'events' ) ? 'dpt-cols-8-4' : 'dpt-cols-12'; ?>">
+                <!-- Row 1: Title & Date -->
+                <div class="dpt-grid-row dpt-cols-8-4">
                     <div class="dpt-field-node">
                         <label class="dpt-field-label">
                             <?php esc_html_e( 'Title', 'ifsedu-sms' ); ?> <span class="required">*</span>
                         </label>
-                        <input type="text" name="title" class="dpt-input-control" value="<?php echo $item ? esc_attr( $item->title ) : ''; ?>" placeholder="Enter notice or event heading..." required>
-                    </div>
-
-                    <?php if ( $type !== 'events' ) : ?>
-                        <div class="dpt-field-node">
-                            <label class="dpt-field-label"><?php esc_html_e( 'Category Type', 'ifsedu-sms' ); ?></label>
-                            <select name="notice_type" class="dpt-select-control">
-                                <option value="Notice" <?php selected( $item ? $item->notice_type : '', 'Notice' ); ?>>General Notice</option>
-                                <option value="Holiday" <?php selected( $item ? $item->notice_type : '', 'Holiday' ); ?>>Holiday Notice</option>
-                                <option value="Exam" <?php selected( $item ? $item->notice_type : '', 'Exam' ); ?>>Exam Notice</option>
-                            </select>
-                        </div>
-                    <?php endif; ?>
-                </div>
-
-                <!-- Row 2: Target, Priority, Date -->
-                <div class="dpt-grid-row dpt-cols-3">
-                    <div class="dpt-field-node">
-                        <label class="dpt-field-label"><?php esc_html_e( 'Target Audience', 'ifsedu-sms' ); ?></label>
-                        <select name="target_audience" class="dpt-select-control">
-                            <option value="All" <?php selected( $item ? $item->target_audience : '', 'All' ); ?>>All Stakeholders</option>
-                            <option value="Students" <?php selected( $item ? $item->target_audience : '', 'Students' ); ?>>Students Only</option>
-                            <option value="Teachers" <?php selected( $item ? $item->target_audience : '', 'Teachers' ); ?>>Teachers Only</option>
-                        </select>
-                    </div>
-
-                    <div class="dpt-field-node">
-                        <label class="dpt-label dpt-field-label"><?php esc_html_e( 'Priority Level', 'ifsedu-sms' ); ?></label>
-                        <select name="priority" class="dpt-select-control">
-                            <option value="Normal" <?php selected( $item ? $item->priority : '', 'Normal' ); ?>>Normal</option>
-                            <option value="High" <?php selected( $item ? $item->priority : '', 'High' ); ?>>High</option>
-                            <option value="Urgent" <?php selected( $item ? $item->priority : '', 'Urgent' ); ?>>Urgent</option>
-                        </select>
+                        <input type="text" name="title" class="dpt-input-control" value="<?php echo esc_attr( $current_title ); ?>" placeholder="<?php esc_attr_e( 'Enter heading...', 'ifsedu-sms' ); ?>" required>
                     </div>
 
                     <div class="dpt-field-node">
                         <label class="dpt-field-label">
-                            <?php echo ( $type === 'events' ) ? esc_html__( 'Event Date', 'ifsedu-sms' ) : esc_html__( 'Effective Date', 'ifsedu-sms' ); ?>
+                            <?php echo ( $type === 'events' ) ? esc_html__( 'Event Date', 'ifsedu-sms' ) : esc_html__( 'Publish Date', 'ifsedu-sms' ); ?> <span class="required">*</span>
                         </label>
-                        <input type="date" name="event_date" class="dpt-input-control" value="<?php echo $item ? esc_attr( $item->event_date ) : ''; ?>">
+                        <input type="date" name="publish_date" class="dpt-input-control" value="<?php echo esc_attr( $current_date ); ?>" required>
+                    </div>
+                </div>
+
+                <!-- Row 2: Category, Audience, Location/Venue, Status -->
+                <div class="dpt-grid-row <?php echo ( $type === 'events' ) ? 'dpt-cols-4' : 'dpt-cols-3'; ?>">
+                    <div class="dpt-field-node">
+                        <label class="dpt-field-label"><?php esc_html_e( 'Category', 'ifsedu-sms' ); ?></label>
+                        <select name="category" class="dpt-select-control">
+                            <option value="General" <?php selected( $current_category, 'General' ); ?>>General</option>
+                            <option value="Academic" <?php selected( $current_category, 'Academic' ); ?>>Academic</option>
+                            <option value="Exam" <?php selected( $current_category, 'Exam' ); ?>>Exam</option>
+                            <option value="Holiday" <?php selected( $current_category, 'Holiday' ); ?>>Holiday</option>
+                        </select>
+                    </div>
+
+                    <div class="dpt-field-node">
+                        <label class="dpt-field-label"><?php esc_html_e( 'Target Audience', 'ifsedu-sms' ); ?></label>
+                        <select name="target_audience" class="dpt-select-control">
+                            <option value="All" <?php selected( $current_audience, 'All' ); ?>>All Users</option>
+                            <option value="Students" <?php selected( $current_audience, 'Students' ); ?>>Students Only</option>
+                            <option value="Teachers" <?php selected( $current_audience, 'Teachers' ); ?>>Teachers Only</option>
+                        </select>
+                    </div>
+
+                    <?php if ( $type === 'events' ) : ?>
+                        <div class="dpt-field-node">
+                            <label class="dpt-field-label"><?php esc_html_e( 'Event Venue / Location', 'ifsedu-sms' ); ?></label>
+                            <input type="text" name="event_location" class="dpt-input-control" value="<?php echo esc_attr( $current_location ); ?>" placeholder="e.g. Main Auditorium">
+                        </div>
+                    <?php endif; ?>
+
+                    <div class="dpt-field-node">
+                        <label class="dpt-field-label"><?php esc_html_e( 'Publication Status', 'ifsedu-sms' ); ?></label>
+                        <select name="status" class="dpt-select-control">
+                            <option value="Published" <?php selected( $current_status, 'Published' ); ?>>Published</option>
+                            <option value="Draft" <?php selected( $current_status, 'Draft' ); ?>>Draft</option>
+                        </select>
                     </div>
                 </div>
 
                 <!-- Row 3: Rich Description Editor -->
                 <div class="dpt-grid-row dpt-cols-12">
                     <div class="dpt-field-node">
-                        <label class="dpt-field-label"><?php esc_html_e( 'Description Details', 'ifsedu-sms' ); ?></label>
+                        <label class="dpt-field-label"><?php esc_html_e( 'Description & Detailed Content', 'ifsedu-sms' ); ?></label>
                         <div class="dpt-editor-wrapper">
                             <?php 
                             wp_editor( 
-                                $item ? $item->description : '', 
-                                'description', 
+                                $current_content, 
+                                'content', 
                                 array( 
                                     'textarea_rows' => 8,
                                     'quicktags'     => true,
@@ -392,18 +436,16 @@ function educore_notice_events_add_edit_view( $type = 'notice' ) {
                     </div>
                 </div>
 
-                <!-- Row 4: Featured Image, File Upload & Status -->
-                <div class="dpt-grid-row dpt-cols-3">
+                <!-- Row 4: Banner Image & File Attachment -->
+                <div class="dpt-grid-row dpt-cols-2">
                     <!-- Featured Image Field -->
                     <div class="dpt-field-node">
-                        <label class="dpt-field-label">
-                            <?php esc_html_e( 'Featured Image (JPG / PNG)', 'ifsedu-sms' ); ?>
-                        </label>
+                        <label class="dpt-field-label"><?php esc_html_e( 'Banner Image (JPG / PNG / WEBP)', 'ifsedu-sms' ); ?></label>
                         <input type="file" name="featured_image_file" class="dpt-input-file" accept="image/*">
-                        <?php if ( $item && ! empty( $item->featured_image ) ) : ?>
+                        <?php if ( ! empty( $current_feat_img ) && preg_match( '/\.(jpg|jpeg|png|webp|gif)$/i', $current_feat_img ) ) : ?>
                             <div class="dpt-img-preview-box">
-                                <img src="<?php echo esc_url( $item->featured_image ); ?>" alt="Featured Image Preview">
-                                <span style="font-size: 12px; color: #475569; font-weight:600;">Current Banner</span>
+                                <img src="<?php echo esc_url( $current_feat_img ); ?>" alt="Banner Preview">
+                                <span style="font-size: 12px; color: #475569; font-weight:600;"><?php esc_html_e( 'Current Banner Active', 'ifsedu-sms' ); ?></span>
                             </div>
                         <?php endif; ?>
                     </div>
@@ -411,29 +453,20 @@ function educore_notice_events_add_edit_view( $type = 'notice' ) {
                     <!-- Attachment File Field -->
                     <div class="dpt-field-node">
                         <label class="dpt-field-label">
-                            <?php esc_html_e( 'Attachment File (PDF / DOC)', 'ifsedu-sms' ); ?>
-                            <?php if ( $item && ! empty( $item->attachment_url ) ) : ?>
-                                &mdash; <a href="<?php echo esc_url( $item->attachment_url ); ?>" target="_blank" style="color:#006a4e; text-decoration:underline;">View Current</a>
+                            <?php esc_html_e( 'Attachment Document (PDF / DOC / ZIP)', 'ifsedu-sms' ); ?>
+                            <?php if ( ! empty( $current_attach ) ) : ?>
+                                &mdash; <a href="<?php echo esc_url( $current_attach ); ?>" target="_blank" style="color:#006a4e; text-decoration:underline; font-weight:600;"><?php esc_html_e( 'View Current', 'ifsedu-sms' ); ?></a>
                             <?php endif; ?>
                         </label>
                         <input type="file" name="item_file" class="dpt-input-file">
                     </div>
-
-                    <!-- Publication Status Field -->
-                    <div class="dpt-field-node">
-                        <label class="dpt-field-label"><?php esc_html_e( 'Publication Status', 'ifsedu-sms' ); ?></label>
-                        <select name="status" class="dpt-select-control">
-                            <option value="Published" <?php selected( $item ? $item->status : '', 'Published' ); ?>>Published</option>
-                            <option value="Draft" <?php selected( $item ? $item->status : '', 'Draft' ); ?>>Draft</option>
-                        </select>
-                    </div>
                 </div>
 
-                <!-- Form Submit Action Bar -->
+                <!-- Submit Action Bar -->
                 <div class="dpt-submit-action">
                     <button type="submit" name="educore_save_item" class="dpt-btn-primary">
                         <span class="dashicons dashicons-saved"></span>
-                        <?php esc_html_e( 'Save & Publish Record', 'ifsedu-sms' ); ?>
+                        <?php echo $is_edit ? esc_html__( 'Update Record', 'ifsedu-sms' ) : esc_html__( 'Save & Publish', 'ifsedu-sms' ); ?>
                     </button>
                 </div>
 

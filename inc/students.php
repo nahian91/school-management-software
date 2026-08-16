@@ -11,3 +11,4 @@ require_once plugin_dir_path(__FILE__) . 'students/student-view.php';
 require_once plugin_dir_path(__FILE__) . 'students/student-admit-card.php';
 require_once plugin_dir_path(__FILE__) . 'students/student-id-card.php';
 require_once plugin_dir_path(__FILE__) . 'students/student-certificate.php';
+require_once plugin_dir_path(__FILE__) . 'students/student-promotion.php';

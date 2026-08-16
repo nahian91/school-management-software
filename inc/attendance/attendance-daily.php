@@ -6,19 +6,96 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Daily Student Attendance Entry Workspace
  * File: inc/attendance/attendance-daily.php
+ * Strictly Filtered by Assigned Teacher Subjects & Units from Academic Setup
  */
 function educore_daily_attendance_view( $classes, $sections, $filter_class, $filter_section, $filter_date ) {
     global $wpdb;
 
-    $table_students   = $wpdb->prefix . 'sms_students';
-    $table_attendance = $wpdb->prefix . 'sms_attendance';
-    $table_units      = $wpdb->prefix . 'sms_academic_units';
+    $current_user = wp_get_current_user();
+    $is_admin     = current_user_can( 'manage_options' );
 
-    // Fetch academic units for dynamic section dropdown
-    $all_units = $wpdb->get_results( "SELECT id, class_name, section_name FROM {$table_units} WHERE section_name != '' ORDER BY section_name ASC" );
+    $table_students         = $wpdb->prefix . 'sms_students';
+    $table_attendance       = $wpdb->prefix . 'sms_attendance';
+    $table_units            = $wpdb->prefix . 'sms_academic_units';
+    $table_staff            = $wpdb->prefix . 'sms_staff';
+    $table_teacher_subjects = $wpdb->prefix . 'sms_teacher_subjects';
 
-    // Fetch all active students for the dynamic student dropdown
-    $all_active_students = $wpdb->get_results( "SELECT id, class_name, section_name, full_name, roll_no FROM {$table_students} WHERE status = 'Active' ORDER BY CAST(roll_no AS UNSIGNED) ASC" );
+    // 1. Resolve Exact Assigned Classes & Sections for Non-Admin Teachers from sms_teacher_subjects
+    $teacher_assigned_classes  = array();
+    $teacher_assigned_sections = array();
+    $assigned_unit_ids         = array();
+
+    if ( ! $is_admin ) {
+        $teacher_id = $wpdb->get_var( $wpdb->prepare(
+            "SELECT id FROM {$table_staff} WHERE email = %s OR full_name = %s LIMIT 1",
+            $current_user->user_email,
+            $current_user->display_name
+        ) );
+
+        if ( $teacher_id ) {
+            $allocations = $wpdb->get_results( $wpdb->prepare(
+                "SELECT DISTINCT u.id AS unit_id, u.class_name, u.section_name 
+                 FROM {$table_teacher_subjects} ts
+                 INNER JOIN {$table_units} u ON ts.class_id = u.id
+                 WHERE ts.teacher_id = %d AND u.class_name != ''",
+                $teacher_id
+            ) );
+
+            foreach ( $allocations as $al ) {
+                $assigned_unit_ids[] = intval( $al->unit_id );
+                if ( ! in_array( $al->class_name, $teacher_assigned_classes, true ) ) {
+                    $teacher_assigned_classes[] = $al->class_name;
+                }
+                if ( ! empty( $al->section_name ) && ! in_array( $al->section_name, $teacher_assigned_sections, true ) ) {
+                    $teacher_assigned_sections[] = $al->section_name;
+                }
+            }
+        }
+        // Override global classes parameter with teacher's assigned scope
+        $classes = $teacher_assigned_classes;
+    }
+
+    // 2. Fetch Academic Units scoped to teacher's assignments or global
+    if ( ! $is_admin && ! empty( $assigned_unit_ids ) ) {
+        $unit_placeholders = implode( ',', array_fill( 0, count( $assigned_unit_ids ), '%d' ) );
+        $all_units = $wpdb->get_results( $wpdb->prepare(
+            "SELECT id, class_name, section_name FROM {$table_units} WHERE id IN ($unit_placeholders) AND section_name != '' ORDER BY section_name ASC",
+            ...$assigned_unit_ids
+        ) );
+    } else {
+        $all_units = $wpdb->get_results( "SELECT id, class_name, section_name FROM {$table_units} WHERE section_name != '' ORDER BY section_name ASC" );
+    }
+
+    // Auto-select class & section for teachers if not explicitly chosen
+    if ( ! $is_admin && empty( $filter_class ) && ! empty( $classes[0] ) ) {
+        $filter_class = $classes[0];
+    }
+    if ( ! $is_admin && empty( $filter_section ) && ! empty( $all_units ) ) {
+        foreach ( $all_units as $unit_row ) {
+            if ( $unit_row->class_name === $filter_class && ! empty( $unit_row->section_name ) ) {
+                $filter_section = $unit_row->section_name;
+                break;
+            }
+        }
+    }
+
+    // 3. Fetch Active Students scoped to Assigned Classes & Sections
+    if ( ! $is_admin && ! empty( $classes ) ) {
+        $class_placeholders = implode( ',', array_fill( 0, count( $classes ), '%s' ) );
+        $st_query = "SELECT id, class_name, section_name, full_name, roll_no FROM {$table_students} WHERE status = 'Active' AND class_name IN ($class_placeholders)";
+        $st_args  = $classes;
+
+        if ( ! empty( $teacher_assigned_sections ) ) {
+            $sec_placeholders = implode( ',', array_fill( 0, count( $teacher_assigned_sections ), '%s' ) );
+            $st_query .= " AND section_name IN ($sec_placeholders)";
+            $st_args = array_merge( $st_args, $teacher_assigned_sections );
+        }
+
+        $st_query .= " ORDER BY CAST(roll_no AS UNSIGNED) ASC, roll_no ASC";
+        $all_active_students = $wpdb->get_results( $wpdb->prepare( $st_query, ...$st_args ) );
+    } else {
+        $all_active_students = $wpdb->get_results( "SELECT id, class_name, section_name, full_name, roll_no FROM {$table_students} WHERE status = 'Active' ORDER BY CAST(roll_no AS UNSIGNED) ASC, roll_no ASC" );
+    }
 
     // Additional Filter for specific student
     $filter_student = isset( $_GET['filter_student'] ) ? intval( $_GET['filter_student'] ) : 0;
@@ -79,7 +156,6 @@ function educore_daily_attendance_view( $classes, $sections, $filter_class, $fil
     ?>
 
     <style>
-        /* Modern Segmented Status Control Styling */
         .att-segmented-group {
             display: inline-flex;
             background: #f1f5f9;
@@ -127,7 +203,6 @@ function educore_daily_attendance_view( $classes, $sections, $filter_class, $fil
             background: rgba(255, 255, 255, 0.6);
         }
 
-        /* Active State: Present */
         .att-radio-input[value="Present"]:checked + .att-status-pill {
             background: #059669;
             color: #ffffff;
@@ -138,7 +213,6 @@ function educore_daily_attendance_view( $classes, $sections, $filter_class, $fil
             opacity: 1;
         }
 
-        /* Active State: Absent */
         .att-radio-input[value="Absent"]:checked + .att-status-pill {
             background: #dc2626;
             color: #ffffff;
@@ -149,7 +223,6 @@ function educore_daily_attendance_view( $classes, $sections, $filter_class, $fil
             opacity: 1;
         }
 
-        /* Active State: Late */
         .att-radio-input[value="Late"]:checked + .att-status-pill {
             background: #d97706;
             color: #ffffff;
@@ -174,7 +247,12 @@ function educore_daily_attendance_view( $classes, $sections, $filter_class, $fil
             </div>
             
             <div class="dpt-form-group" style="flex:1; min-width:180px;">
-                <label style="display:block; font-size:12px; font-weight:700; color:#475569; margin-bottom:6px;"><?php esc_html_e( 'Academic Class', 'ifsedu-sms' ); ?> *</label>
+                <label style="display:block; font-size:12px; font-weight:700; color:#475569; margin-bottom:6px;">
+                    <?php esc_html_e( 'Academic Class', 'ifsedu-sms' ); ?> *
+                    <?php if ( ! $is_admin ) : ?>
+                        <span style="color:#059669; font-size:11px; font-weight:700;">(<?php esc_html_e( 'Assigned Only', 'ifsedu-sms' ); ?>)</span>
+                    <?php endif; ?>
+                </label>
                 <select name="class_name" id="educore_attendance_class_select" style="width:100%; height:40px; border:1px solid #cbd5e1; border-radius:8px; padding:0 12px;" required>
                     <option value=""><?php esc_html_e( '-- Select Class --', 'ifsedu-sms' ); ?></option>
                     <?php foreach ( $classes as $cls ) : ?>
@@ -184,10 +262,14 @@ function educore_daily_attendance_view( $classes, $sections, $filter_class, $fil
             </div>
             
             <div class="dpt-form-group" style="flex:1; min-width:180px;">
-                <label style="display:block; font-size:12px; font-weight:700; color:#475569; margin-bottom:6px;"><?php esc_html_e( 'Section', 'ifsedu-sms' ); ?></label>
+                <label style="display:block; font-size:12px; font-weight:700; color:#475569; margin-bottom:6px;">
+                    <?php esc_html_e( 'Section', 'ifsedu-sms' ); ?>
+                    <?php if ( ! $is_admin ) : ?>
+                        <span style="color:#059669; font-size:11px; font-weight:700;">(<?php esc_html_e( 'Assigned', 'ifsedu-sms' ); ?>)</span>
+                    <?php endif; ?>
+                </label>
                 <select name="section_name" id="educore_attendance_section_select" style="width:100%; height:40px; border:1px solid #cbd5e1; border-radius:8px; padding:0 12px;">
                     <option value=""><?php esc_html_e( '-- All Sections --', 'ifsedu-sms' ); ?></option>
-                    <!-- Options populated via JS -->
                 </select>
             </div>
 
@@ -195,7 +277,6 @@ function educore_daily_attendance_view( $classes, $sections, $filter_class, $fil
                 <label style="display:block; font-size:12px; font-weight:700; color:#475569; margin-bottom:6px;"><?php esc_html_e( 'Student (Optional)', 'ifsedu-sms' ); ?></label>
                 <select name="filter_student" id="educore_attendance_student_select" style="width:100%; height:40px; border:1px solid #cbd5e1; border-radius:8px; padding:0 12px;">
                     <option value=""><?php esc_html_e( '-- All Students --', 'ifsedu-sms' ); ?></option>
-                    <!-- Options populated via JS -->
                 </select>
             </div>
             
@@ -207,12 +288,22 @@ function educore_daily_attendance_view( $classes, $sections, $filter_class, $fil
 
     <?php
     if ( ! empty( $filter_class ) ) {
+        // Enforce boundary check for non-admin teachers
+        if ( ! $is_admin && ! in_array( $filter_class, $classes, true ) ) {
+            echo '<div style="background:#fef2f2; border:1px solid #fecaca; color:#dc2626; padding:20px; border-radius:12px; text-align:center; font-weight:600;"><p style="margin:0;">' . esc_html__( 'You are not authorized to mark attendance for this class.', 'ifsedu-sms' ) . '</p></div>';
+            return;
+        }
+
         $query = "SELECT id, student_id, full_name, roll_no FROM {$table_students} WHERE status = 'Active' AND class_name = %s";
         $sql_args = array( $filter_class );
 
         if ( ! empty( $filter_section ) ) {
             $query .= " AND section_name = %s";
             $sql_args[] = $filter_section;
+        } elseif ( ! $is_admin && ! empty( $teacher_assigned_sections ) ) {
+            $sec_placeholders = implode( ',', array_fill( 0, count( $teacher_assigned_sections ), '%s' ) );
+            $query .= " AND section_name IN ($sec_placeholders)";
+            $sql_args = array_merge( $sql_args, $teacher_assigned_sections );
         }
 
         if ( $filter_student > 0 ) {
@@ -288,7 +379,6 @@ function educore_daily_attendance_view( $classes, $sections, $filter_class, $fil
                                         
                                         <!-- Segmented Pill Control -->
                                         <div class="att-segmented-group">
-                                            
                                             <input type="radio" class="att-radio-input status-radio-node" name="attendance[<?php echo $student_internal_id; ?>]" id="stu_pres_<?php echo $student_internal_id; ?>" value="Present" <?php checked( $current_status, 'Present' ); ?>>
                                             <label class="att-status-pill" for="stu_pres_<?php echo $student_internal_id; ?>">
                                                 <span class="dashicons dashicons-yes-alt"></span>
@@ -306,7 +396,6 @@ function educore_daily_attendance_view( $classes, $sections, $filter_class, $fil
                                                 <span class="dashicons dashicons-clock"></span>
                                                 <?php esc_html_e( 'Late', 'ifsedu-sms' ); ?>
                                             </label>
-
                                         </div>
 
                                     </td>
@@ -336,7 +425,6 @@ function educore_daily_attendance_view( $classes, $sections, $filter_class, $fil
     <script type="text/javascript">
     document.addEventListener('DOMContentLoaded', function() {
         
-        // 1. Safe JSON Injection to prevent JS crashing if arrays are empty
         const rawUnits = <?php echo wp_json_encode( !empty($all_units) ? $all_units : array() ); ?>;
         const rawStudents = <?php echo wp_json_encode( !empty($all_active_students) ? $all_active_students : array() ); ?>;
         
@@ -395,7 +483,6 @@ function educore_daily_attendance_view( $classes, $sections, $filter_class, $fil
         }
 
         if (classSelect && sectionSelect && studentSelect) {
-            // Initial load
             populateSections(classSelect.value, currentFilterSection);
             populateStudents(classSelect.value, currentFilterSection, currentFilterStudent);
 
@@ -409,7 +496,7 @@ function educore_daily_attendance_view( $classes, $sections, $filter_class, $fil
             });
         }
         
-        // 2. Bulk Action & Live Counter Engine
+        // Bulk Action & Live Counter Engine
         function updateLiveCounters() {
             const total = document.querySelectorAll('.student-attendance-row').length;
             const present = document.querySelectorAll('.status-radio-node[value="Present"]:checked').length;
