@@ -50,6 +50,7 @@ function educore_attendance_tab() {
 
     // Tab URLs
     $daily_url   = admin_url( 'admin.php?page=school_management_system&tab=attendance&sub=daily' );
+    $exam_url    = admin_url( 'admin.php?page=school_management_system&tab=attendance&sub=exam' );
     $monthly_url = admin_url( 'admin.php?page=school_management_system&tab=attendance&sub=monthly' );
     $staff_url   = admin_url( 'admin.php?page=school_management_system&tab=attendance&sub=staff' );
     $reports_url = admin_url( 'admin.php?page=school_management_system&tab=attendance&sub=reports' );
@@ -64,7 +65,6 @@ function educore_attendance_tab() {
         
         .dpt-nav-link { height: 38px; padding: 0 16px; border-radius: 8px; font-size: 13.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; text-decoration: none; transition: all 0.2s ease; border: 1px solid transparent; }
         
-        /* Vibrant Green Active State matching the uploaded image */
         .dpt-nav-link-active { background: #008f5d; color: #ffffff; font-weight: 700; box-shadow: 0 4px 12px rgba(0, 143, 93, 0.2); }
         
         .dpt-nav-link-inactive { background: #f8fafc; border-color: #e2e8f0; color: #475569; }
@@ -76,7 +76,7 @@ function educore_attendance_tab() {
         .dpt-form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; align-items: end; }
         .dpt-form-group { display: flex; flex-direction: column; gap: 6px; }
         .dpt-form-label { font-size: 12.5px; font-weight: 700; color: #475569; margin: 0; }
-        .dpt-input-field, .dpt-select-field { height: 40px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0 12px; font-size: 13.5px; color: #0f172a; background-color: #f8fafc; width: 100%; box-shadow: none; transition: all 0.2s; }
+        .dpt-input-field, .dpt-select-field { height: 40px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0 12px; font-size: 13.5px; color: #0f172a; background-color: #f8fafc; width: 100%; box-shadow: none; transition: all 0.2s; box-sizing: border-box; }
         .dpt-input-field:focus, .dpt-select-field:focus { border-color: #006a4e; background-color: #ffffff; box-shadow: 0 0 0 3px rgba(0, 106, 78, 0.1); outline: none; }
 
         .dpt-btn-submit-trigger { height: 40px; background: #008f5d; border: 1px solid transparent; color: #ffffff; font-weight: 700; font-size: 13.5px; border-radius: 8px; padding: 0 20px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all 0.2s; box-shadow: 0 4px 12px rgba(0, 143, 93, 0.2); }
@@ -127,6 +127,11 @@ function educore_attendance_tab() {
                     <?php esc_html_e( 'Daily', 'ifsedu-sms' ); ?>
                 </a>
 
+                <a href="<?php echo esc_url( $exam_url ); ?>" class="dpt-nav-link <?php echo ( $sub_tab === 'exam' ) ? 'dpt-nav-link-active' : 'dpt-nav-link-inactive'; ?>">
+                    <span class="dashicons dashicons-welcome-write-blog"></span>
+                    <?php esc_html_e( 'Exam Attendance', 'ifsedu-sms' ); ?>
+                </a>
+
                 <a href="<?php echo esc_url( $monthly_url ); ?>" class="dpt-nav-link <?php echo ( $sub_tab === 'monthly' ) ? 'dpt-nav-link-active' : 'dpt-nav-link-inactive'; ?>">
                     <span class="dashicons dashicons-chart-bar"></span>
                     <?php esc_html_e( 'Monthly', 'ifsedu-sms' ); ?>
@@ -147,6 +152,16 @@ function educore_attendance_tab() {
         <div class="dpt-module-viewport-container">
             <?php
             switch ( $sub_tab ) {
+                case 'exam':
+                    $exam_file = plugin_dir_path( __FILE__ ) . 'attendance-exam.php';
+                    if ( file_exists( $exam_file ) ) {
+                        require_once $exam_file;
+                        if ( function_exists( 'educore_exam_attendance_view' ) ) {
+                            educore_exam_attendance_view();
+                        }
+                    }
+                    break;
+
                 case 'monthly':
                     require_once plugin_dir_path( __FILE__ ) . 'attendance-monthly.php';
                     if ( function_exists( 'educore_monthly_attendance_summary_view' ) ) {
@@ -162,8 +177,6 @@ function educore_attendance_tab() {
                     break;
 
                 case 'reports':
-                    // Note: Ensure attendance-reports.php exists if you use this!
-                    // require_once plugin_dir_path( __FILE__ ) . 'attendance-reports.php';
                     if ( function_exists( 'educore_student_attendance_log_view' ) ) {
                         educore_student_attendance_log_view( $classes );
                     }

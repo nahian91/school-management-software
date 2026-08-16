@@ -7,6 +7,45 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Enterprise Academic ID Card Engine & Precision Print Compiler
  * File: student-id-card-view.php
  */
+
+// --------------------------------------------------------------------------
+// 0. AJAX HANDLER FOR DYNAMIC STUDENT SELECTOR
+// --------------------------------------------------------------------------
+add_action( 'wp_ajax_educore_get_students_for_id_card', 'educore_get_students_for_id_card_handler' );
+function educore_get_students_for_id_card_handler() {
+    check_ajax_referer( 'educore_id_card_nonce', 'security' );
+
+    if ( ! current_user_can( 'manage_options' ) ) {
+        wp_send_json_error( array( 'message' => __( 'Permission denied.', 'ifsedu-sms' ) ) );
+    }
+
+    global $wpdb;
+    $table_students = $wpdb->prefix . 'sms_students';
+    $class_name     = isset( $_POST['class_name'] ) ? sanitize_text_field( wp_unslash( $_POST['class_name'] ) ) : '';
+    $section_name   = isset( $_POST['section_name'] ) ? sanitize_text_field( wp_unslash( $_POST['section_name'] ) ) : '';
+
+    if ( empty( $class_name ) ) {
+        wp_send_json_success( array() );
+    }
+
+    $sql    = "SELECT id, full_name, student_id, roll_no FROM {$table_students} WHERE status = 'Active' AND class_name = %s";
+    $params = array( $class_name );
+
+    if ( ! empty( $section_name ) ) {
+        $sql .= " AND section_name = %s";
+        $params[] = $section_name;
+    }
+
+    $sql .= " ORDER BY CAST(roll_no AS UNSIGNED) ASC, roll_no ASC";
+    $students = $wpdb->get_results( $wpdb->prepare( $sql, ...$params ) );
+
+    wp_send_json_success( $students );
+}
+
+
+// --------------------------------------------------------------------------
+// 1. MAIN ID CARD COMPILER VIEW
+// --------------------------------------------------------------------------
 function educore_student_id_card_view() {
     if ( ! current_user_can( 'manage_options' ) ) {
         wp_die( esc_html__( 'You do not have sufficient administrative permissions to access this page.', 'ifsedu-sms' ) );
@@ -98,17 +137,17 @@ function educore_student_id_card_view() {
         .afdp-bento-card {
             background: #ffffff;
             border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            padding: 24px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-            margin-bottom: 28px;
+            border-radius: 16px;
+            padding: 28px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.03);
+            margin-bottom: 32px;
         }
 
         .afdp-bento-card h4 {
-            font-size: 18px;
-            font-weight: 700;
-            color: #0f172a;
-            margin: 0 0 20px 0;
+            font-size: 20px;
+            font-weight: 800;
+            color: #006a4e;
+            margin: 0 0 24px 0;
             display: flex;
             align-items: center;
             gap: 10px;
@@ -124,7 +163,7 @@ function educore_student_id_card_view() {
         .dpt-input-block {
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 8px;
         }
 
         .dpt-input-block label {
@@ -135,10 +174,10 @@ function educore_student_id_card_view() {
 
         .dpt-input-block select {
             width: 100%;
-            height: 40px;
+            height: 42px;
             background: #f8fafc;
             border: 1px solid #cbd5e1;
-            border-radius: 6px;
+            border-radius: 8px;
             padding: 0 12px;
             font-size: 13.5px;
             color: #0f172a;
@@ -147,6 +186,7 @@ function educore_student_id_card_view() {
 
         .dpt-input-block select:focus {
             border-color: #006a4e;
+            background: #ffffff;
             outline: none;
             box-shadow: 0 0 0 3px rgba(0, 106, 78, 0.12);
         }
@@ -154,9 +194,9 @@ function educore_student_id_card_view() {
         .dpt-action-block { display: flex; gap: 10px; }
 
         .dpt-btn {
-            height: 40px;
-            padding: 0 16px;
-            border-radius: 6px;
+            height: 42px;
+            padding: 0 18px;
+            border-radius: 8px;
             font-size: 13.5px;
             font-weight: 700;
             display: inline-flex;
@@ -164,17 +204,17 @@ function educore_student_id_card_view() {
             justify-content: center;
             gap: 6px;
             cursor: pointer;
-            border: none;
+            border: 1px solid transparent;
             transition: all 0.2s ease;
             text-decoration: none;
             white-space: nowrap;
         }
 
-        .dpt-btn-primary { background: #006a4e; color: #ffffff; }
+        .dpt-btn-primary { background: #006a4e; color: #ffffff; box-shadow: 0 4px 12px rgba(0, 106, 78, 0.2); }
         .dpt-btn-primary:hover { background: #00523c; }
 
-        .dpt-btn-secondary { background: #0284c7; color: #ffffff; }
-        .dpt-btn-secondary:hover { background: #0369a1; }
+        .dpt-btn-secondary { background: #0f172a; color: #ffffff; }
+        .dpt-btn-secondary:hover { background: #1e293b; }
 
         /* Card Layout Matrix */
         .dpt-id-cards-container {
@@ -201,10 +241,10 @@ function educore_student_id_card_view() {
             background: #f1f5f9;
             color: #334155;
             border: 1px solid #cbd5e1;
-            border-radius: 4px;
-            font-size: 0.72rem;
-            font-weight: 700;
-            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 11.5px;
+            font-weight: 800;
+            padding: 5px 12px;
             cursor: pointer;
             display: inline-flex;
             align-items: center;
@@ -241,11 +281,11 @@ function educore_student_id_card_view() {
             left: 0;
             width: 100%;
             height: 100%;
-            background: radial-gradient(circle at 90% 10%, rgba(0, 106, 78, 0.03) 0%, transparent 60%);
+            background: radial-gradient(circle at 90% 10%, rgba(0, 106, 78, 0.04) 0%, transparent 60%);
             pointer-events: none;
         }
 
-        /* Adjusted Header for Full Proper School Name */
+        /* Header Layout */
         .id-card-header {
             background: linear-gradient(135deg, #006a4e 0%, #004533 100%);
             color: #ffffff;
@@ -253,7 +293,7 @@ function educore_student_id_card_view() {
             text-align: center;
             border-bottom: 2.5px solid #d97706;
             flex-shrink: 0;
-            min-height: 38px;
+            min-height: 42px;
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -262,25 +302,23 @@ function educore_student_id_card_view() {
 
         .id-card-header h6 {
             margin: 0;
-            font-weight: 800;
+            font-weight: 900;
             text-transform: uppercase;
             font-size: 0.65rem;
             letter-spacing: 0.2px;
             line-height: 1.15;
             color: #ffffff;
-            white-space: normal;
-            word-break: keep-all;
             text-align: center;
             max-width: 98%;
         }
 
         .id-card-header small {
             font-size: 0.48rem;
-            letter-spacing: 0.6px;
+            letter-spacing: 0.8px;
             opacity: 0.95;
             display: block;
-            margin-top: 1px;
-            font-weight: 700;
+            margin-top: 2px;
+            font-weight: 800;
             text-transform: uppercase;
             color: #fef08a;
         }
@@ -316,12 +354,12 @@ function educore_student_id_card_view() {
             line-height: 1.25;
         }
 
-        .id-card-table td { padding: 1px 0; vertical-align: middle; border: none !important; }
-        .id-card-table td.lbl { color: #64748b; font-weight: 700; width: 32%; text-transform: uppercase; font-size: 0.58rem; }
+        .id-card-table td { padding: 1.5px 0; vertical-align: middle; border: none !important; }
+        .id-card-table td.lbl { color: #64748b; font-weight: 700; width: 32%; text-transform: uppercase; font-size: 0.55rem; }
         .id-card-table td.val { color: #0f172a; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
         .id-code-area {
-            margin: auto 8px 22px 8px;
+            margin: auto 8px 24px 8px;
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -376,9 +414,12 @@ function educore_student_id_card_view() {
             text-transform: uppercase;
             border-top: 1px solid #94a3b8;
             padding-top: 1px;
+            font-size: 0.52rem;
         }
 
-        /* Print Media Overrides */
+        /* ==========================================================================
+           PRINT STYLES
+           ========================================================================== */
         @media print {
             @page { size: A4 portrait; margin: 8mm 6mm 8mm 6mm; }
 
@@ -425,11 +466,6 @@ function educore_student_id_card_view() {
             .id-card-header {
                 background: #006a4e !important;
                 color: #ffffff !important;
-                min-height: 10mm !important;
-            }
-
-            .id-card-header h6 {
-                font-size: 0.65rem !important;
             }
         }
     </style>
@@ -439,8 +475,8 @@ function educore_student_id_card_view() {
         <!-- Filter Form Controls -->
         <div class="afdp-bento-card no-print">
             <h4>
-                <span class="dashicons dashicons-id-alt" style="color:#006a4e;"></span>
-                <?php esc_html_e( 'Student ID Card Generator', 'ifsedu-sms' ); ?>
+                <span class="dashicons dashicons-id-alt" style="color:#006a4e; font-size:24px; width:24px; height:24px;"></span>
+                <?php esc_html_e( 'Student PVC ID Card Generator', 'ifsedu-sms' ); ?>
             </h4>
 
             <form method="GET" action="" class="dpt-form-grid-wrapper" id="dpt_id_filter_form">
@@ -455,7 +491,7 @@ function educore_student_id_card_view() {
                         <option value=""><?php esc_html_e( '-- Select Class --', 'ifsedu-sms' ); ?></option>
                         <?php foreach ( array_keys( $class_sections_map ) as $c_name ) : ?>
                             <option value="<?php echo esc_attr( $c_name ); ?>" <?php selected( $selected_class, $c_name ); ?>>
-                                <?php printf( esc_html__( 'Class %s', 'ifsedu-sms' ), esc_html( $c_name ) ); ?>
+                                <?php printf( esc_html__( '%s', 'ifsedu-sms' ), esc_html( $c_name ) ); ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
@@ -476,7 +512,7 @@ function educore_student_id_card_view() {
                         <option value="0"><?php esc_html_e( '-- All Students in Section --', 'ifsedu-sms' ); ?></option>
                         <?php foreach ( $available_students as $st_item ) : ?>
                             <option value="<?php echo intval( $st_item->id ); ?>" <?php selected( $selected_student, $st_item->id ); ?>>
-                                <?php echo esc_html( '[Roll ' . $st_item->roll_no . '] ' . $st_item->full_name . ' (' . $st_item->student_id . ')' ); ?>
+                                <?php echo esc_html( '[Roll ' . $st_item->roll_no . '] ' . $st_item->full_name . ' (' . strtoupper( $st_item->student_id ) . ')' ); ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
@@ -484,7 +520,7 @@ function educore_student_id_card_view() {
 
                 <!-- Verification Code Type -->
                 <div class="dpt-input-block">
-                    <label><?php esc_html_e( 'Code Type', 'ifsedu-sms' ); ?></label>
+                    <label><?php esc_html_e( 'Verification Type', 'ifsedu-sms' ); ?></label>
                     <select name="code_type">
                         <option value="barcode" <?php selected( $code_type, 'barcode' ); ?>><?php esc_html_e( 'Barcode Only (Code128)', 'ifsedu-sms' ); ?></option>
                         <option value="qrcode" <?php selected( $code_type, 'qrcode' ); ?>><?php esc_html_e( 'QR Code Only (Profile URL)', 'ifsedu-sms' ); ?></option>
@@ -501,7 +537,7 @@ function educore_student_id_card_view() {
                     <?php if ( ! empty( $students ) ) : ?>
                         <button type="button" onclick="educorePrintAllCards();" class="dpt-btn dpt-btn-secondary">
                             <span class="dashicons dashicons-printer"></span>
-                            <?php esc_html_e( 'Print All Cards', 'ifsedu-sms' ); ?>
+                            <?php esc_html_e( 'Print Batch', 'ifsedu-sms' ); ?>
                         </button>
                     <?php endif; ?>
                 </div>
@@ -522,7 +558,7 @@ function educore_student_id_card_view() {
                                 <div class="id-card-single-action no-print">
                                     <button type="button" class="btn-single-print" onclick="educorePrintSingleCard('<?php echo esc_js( $wrapper_id ); ?>');">
                                         <span class="dashicons dashicons-printer" style="font-size:13px; width:13px; height:13px;"></span>
-                                        <?php esc_html_e( 'Print Single', 'ifsedu-sms' ); ?>
+                                        <?php esc_html_e( 'Print ID', 'ifsedu-sms' ); ?>
                                     </button>
                                 </div>
 
@@ -544,7 +580,7 @@ function educore_student_id_card_view() {
                                         <table class="id-card-table">
                                             <tr>
                                                 <td class="lbl"><?php esc_html_e( 'ID No:', 'ifsedu-sms' ); ?></td>
-                                                <td class="val" style="color: #006a4e;"><?php echo esc_html( $student->student_id ); ?></td>
+                                                <td class="val" style="color: #006a4e; text-transform: uppercase;"><?php echo esc_html( $student->student_id ); ?></td>
                                             </tr>
                                             <tr>
                                                 <td class="lbl"><?php esc_html_e( 'Name:', 'ifsedu-sms' ); ?></td>
@@ -572,7 +608,7 @@ function educore_student_id_card_view() {
                                     <div class="id-code-area">
                                         <?php if ( $code_type === 'barcode' || $code_type === 'both' ) : ?>
                                             <div style="flex: 1; text-align: center;">
-                                                <svg class="id-barcode-svg" data-barcode="<?php echo esc_attr( $student->student_id ); ?>"></svg>
+                                                <svg class="id-barcode-svg" data-barcode="<?php echo esc_attr( strtoupper($student->student_id) ); ?>"></svg>
                                             </div>
                                         <?php endif; ?>
 
@@ -622,6 +658,7 @@ function educore_student_id_card_view() {
         const classSectionsMap = <?php echo wp_json_encode( $class_sections_map ); ?>;
         const classSelect       = document.getElementById('dpt_class_select');
         const sectionSelect     = document.getElementById('dpt_section_select');
+        const studentSelect     = document.getElementById('dpt_student_select');
         const selectedSection   = <?php echo wp_json_encode( $selected_section ); ?>;
 
         function updateSections() {
@@ -639,11 +676,50 @@ function educore_student_id_card_view() {
             }
         }
 
+        function reloadStudentsDropdown() {
+            const selectedClass   = classSelect.value;
+            const selectedSec     = sectionSelect.value;
+            
+            if (!selectedClass) {
+                studentSelect.innerHTML = '<option value="0"><?php echo esc_js( __( '-- All Students in Section --', 'ifsedu-sms' ) ); ?></option>';
+                return;
+            }
+
+            jQuery.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'educore_get_students_for_id_card',
+                    security: '<?php echo esc_js( wp_create_nonce( "educore_id_card_nonce" ) ); ?>',
+                    class_name: selectedClass,
+                    section_name: selectedSec
+                },
+                success: function(response) {
+                    if (response.success && response.data.length > 0) {
+                        let options = '<option value="0"><?php echo esc_js( __( '-- All Students in Section --', 'ifsedu-sms' ) ); ?></option>';
+                        response.data.forEach(function(st) {
+                            options += '<option value="' + st.id + '">[Roll ' + st.roll_no + '] ' + st.full_name + ' (' + st.student_id.toUpperCase() + ')</option>';
+                        });
+                        studentSelect.innerHTML = options;
+                    } else {
+                        studentSelect.innerHTML = '<option value="0"><?php echo esc_js( __( '-- All Students in Section --', 'ifsedu-sms' ) ); ?></option>';
+                    }
+                }
+            });
+        }
+
         if (classSelect) {
             classSelect.addEventListener('change', function() {
                 updateSections();
+                reloadStudentsDropdown();
             });
             updateSections();
+        }
+
+        if (sectionSelect) {
+            sectionSelect.addEventListener('change', function() {
+                reloadStudentsDropdown();
+            });
         }
 
         // Render Barcodes

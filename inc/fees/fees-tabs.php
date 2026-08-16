@@ -15,6 +15,7 @@ function educore_fees_tab() {
     // Construct URLs for top submenu links
     $all_fees_url = admin_url( 'admin.php?page=school_management_system&tab=fees&sub=list' );
     $collect_url  = admin_url( 'admin.php?page=school_management_system&tab=fees&sub=collect' );
+    $settings_url = admin_url( 'admin.php?page=school_management_system&tab=fees&sub=settings' );
     ?>
 
     <style>
@@ -172,6 +173,12 @@ function educore_fees_tab() {
                     <span class="dashicons dashicons-plus-alt2"></span>
                     <?php esc_html_e( '+ Collect Student Fee', 'ifsedu-sms' ); ?>
                 </a>
+
+                <a href="<?php echo esc_url( $settings_url ); ?>" 
+                   class="dpt-nav-link <?php echo ( $sub_tab === 'settings' ) ? 'dpt-nav-link-active' : 'dpt-nav-link-inactive'; ?>">
+                    <span class="dashicons dashicons-admin-settings"></span>
+                    <?php esc_html_e( 'Fee Settings', 'ifsedu-sms' ); ?>
+                </a>
             </div>
 
             <?php if ( $sub_tab === 'print' ) : ?>
@@ -193,6 +200,14 @@ function educore_fees_tab() {
                         educore_fees_collect_view();
                     } else {
                         echo '<div class="afdp-notice-card"><span class="dashicons dashicons-info" style="vertical-align:middle; margin-right:6px;"></span> ' . esc_html__( 'Fee Collection module is initializing. Define educore_fees_collect_view().', 'ifsedu-sms' ) . '</div>';
+                    }
+                    break;
+
+                case 'settings':
+                    if ( function_exists( 'educore_fees_settings_view' ) ) {
+                        educore_fees_settings_view();
+                    } else {
+                        echo '<div class="afdp-notice-card"><span class="dashicons dashicons-info" style="vertical-align:middle; margin-right:6px;"></span> ' . esc_html__( 'Fee Settings module is initializing. Define educore_fees_settings_view().', 'ifsedu-sms' ) . '</div>';
                     }
                     break;
 

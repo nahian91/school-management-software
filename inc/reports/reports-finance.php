@@ -15,6 +15,7 @@ function educore_reports_finance_view() {
     $table_fees       = $wpdb->prefix . 'sms_fees';
     $table_accounting = $wpdb->prefix . 'sms_accounting';
     $table_students   = $wpdb->prefix . 'sms_students';
+    $table_staff      = $wpdb->prefix . 'sms_staff';
 
     // --------------------------------------------------------------------------
     // 1. CAPTURE FILTER REQUEST INPUTS
@@ -58,6 +59,12 @@ function educore_reports_finance_view() {
             'Income' as flow_type,
             f.fee_type as category,
             COALESCE(s.full_name, 'Direct Fee Payment') as party_name,
+            s.student_id as student_uid,
+            s.class_name,
+            s.section_name,
+            s.shift,
+            s.waiver_percentage,
+            st.full_name as waiver_ref_staff,
             f.payment_method,
             f.net_payable,
             f.paid_amount,
@@ -65,6 +72,7 @@ function educore_reports_finance_view() {
             f.payment_status
             FROM {$table_fees} f
             LEFT JOIN {$table_students} s ON f.student_id = s.id
+            LEFT JOIN {$table_staff} st ON s.waiver_staff_id = st.id
             WHERE " . implode( ' AND ', $where_fees );
 
         $fees_rows = $wpdb->get_results( $wpdb->prepare( $fees_sql, ...$params_fees ) );
@@ -94,7 +102,6 @@ function educore_reports_finance_view() {
             $params_acct[] = $method_filter;
         }
 
-        // Only include general entries if status filter is empty or 'Paid'
         if ( empty( $status_filter ) || $status_filter === 'Paid' ) {
             $acct_sql = "SELECT 
                 a.entry_date as trans_date,
@@ -103,6 +110,12 @@ function educore_reports_finance_view() {
                 a.entry_type as flow_type,
                 a.category_name as category,
                 COALESCE(NULLIF(a.party_name, ''), a.title) as party_name,
+                '' as student_uid,
+                '' as class_name,
+                '' as section_name,
+                '' as shift,
+                0.00 as waiver_percentage,
+                '' as waiver_ref_staff,
                 a.payment_method,
                 a.amount as net_payable,
                 a.amount as paid_amount,
@@ -124,7 +137,7 @@ function educore_reports_finance_view() {
     } );
 
     // --------------------------------------------------------------------------
-    // 3. DYNAMIC SUMMARY METRICS CALCULATION (FILTER-AWARE)
+    // 3. DYNAMIC SUMMARY METRICS CALCULATION
     // --------------------------------------------------------------------------
     $total_revenue_inflow = 0.00;
     $total_expenses       = 0.00;
@@ -311,10 +324,10 @@ function educore_reports_finance_view() {
             height: 100%;
         }
 
-        .dpt-metric-card.dpt-card-emerald::before { background: #006a4e; }
-        .dpt-metric-card.dpt-card-rose::before    { background: #dc2626; }
-        .dpt-metric-card.dpt-card-blue::before    { background: #2563eb; }
-        .dpt-metric-card.dpt-card-amber::before   { background: #d97706; }
+        .dpt-card-emerald::before { background: #006a4e; }
+        .dpt-card-rose::before    { background: #dc2626; }
+        .dpt-card-blue::before    { background: #2563eb; }
+        .dpt-card-amber::before   { background: #d97706; }
 
         .dpt-metric-header {
             display: flex;
@@ -469,6 +482,18 @@ function educore_reports_finance_view() {
         .dpt-badge-partial { background: #fef3c7; color: #92400e; }
         .dpt-badge-unpaid  { background: #ffe4e6; color: #9f1239; }
 
+        .dpt-waiver-tag {
+            background: #f0fdf4;
+            color: #15803d;
+            border: 1px solid #bbf7d0;
+            font-size: 10.5px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 4px;
+            display: inline-block;
+            margin-top: 3px;
+        }
+
         /* Print Media Styles */
         @media print {
             body * { visibility: hidden; }
@@ -596,7 +621,7 @@ function educore_reports_finance_view() {
             </form>
         </div>
 
-        <!-- Summary Metric Bento Cards Matrix (Dynamic on Filter) -->
+        <!-- Summary Metric Bento Cards Matrix -->
         <div class="dpt-metrics-grid">
             
             <!-- Card 1: Total Revenue Inflow -->
@@ -678,7 +703,7 @@ function educore_reports_finance_view() {
                             <th><?php esc_html_e( 'Date & Voucher', 'ifsedu-sms' ); ?></th>
                             <th><?php esc_html_e( 'Flow', 'ifsedu-sms' ); ?></th>
                             <th><?php esc_html_e( 'Category', 'ifsedu-sms' ); ?></th>
-                            <th><?php esc_html_e( 'Student / Payer / Payee', 'ifsedu-sms' ); ?></th>
+                            <th><?php esc_html_e( 'Student / Payer / Payee Details', 'ifsedu-sms' ); ?></th>
                             <th><?php esc_html_e( 'Method', 'ifsedu-sms' ); ?></th>
                             <th><?php esc_html_e( 'Net Payable (৳)', 'ifsedu-sms' ); ?></th>
                             <th><?php esc_html_e( 'Paid / Settled (৳)', 'ifsedu-sms' ); ?></th>
@@ -707,7 +732,17 @@ function educore_reports_finance_view() {
                             </td>
                             <td><strong><?php echo esc_html( $log->category ); ?></strong></td>
                             <td>
-                                <span style="font-weight:600; color:#1e293b;"><?php echo esc_html( $log->party_name ); ?></span>
+                                <span style="font-weight:700; color:#1e293b;"><?php echo esc_html( $log->party_name ); ?></span>
+                                <?php if ( ! empty( $log->student_uid ) ) : ?>
+                                    <small style="display:block; color:#64748b; font-size:11.5px;">
+                                        ID: <?php echo esc_html( $log->student_uid ); ?> | Class: <?php echo esc_html( $log->class_name ); ?><?php echo ! empty( $log->section_name ) ? ' (' . esc_html( $log->section_name ) . ')' : ''; ?><?php echo ( ! empty( $log->shift ) && $log->shift !== 'No Shift' ) ? ' [' . esc_html( $log->shift ) . ']' : ''; ?>
+                                    </small>
+                                    <?php if ( ! empty( $log->waiver_percentage ) && floatval( $log->waiver_percentage ) > 0 ) : ?>
+                                        <span class="dpt-waiver-tag">
+                                            <?php echo esc_html( floatval( $log->waiver_percentage ) ); ?>% Waiver <?php echo ! empty( $log->waiver_ref_staff ) ? esc_html( '[' . $log->waiver_ref_staff . ']' ) : ''; ?>
+                                        </span>
+                                    <?php endif; ?>
+                                <?php endif; ?>
                             </td>
                             <td>
                                 <span style="background:#f8fafc; border:1px solid #e2e8f0; padding:2px 8px; border-radius:4px; font-weight:600; font-size:12px;">

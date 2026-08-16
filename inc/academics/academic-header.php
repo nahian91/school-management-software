@@ -1,5 +1,7 @@
 <?php
-if ( ! defined( 'ABSPATH' ) ) { exit; }
+if ( ! defined( 'ABSPATH' ) ) {
+    exit; // Exit if accessed directly
+}
 
 // Process Status Messages
 $message_text = '';
@@ -15,6 +17,9 @@ if ( isset( $_GET['status'] ) ) {
         $message_text = sprintf( __( 'Successfully added %d subject(s).', 'educore' ), $count );
     }
 }
+
+$current_subtab = isset( $_GET['subtab'] ) ? sanitize_text_field( wp_unslash( $_GET['subtab'] ) ) : 'units';
+$base_url       = admin_url( 'admin.php?page=school_management_system&tab=academics' );
 ?>
 
 <!-- Global Academic Dashboard Styles -->
@@ -25,10 +30,10 @@ if ( isset( $_GET['status'] ) ) {
     .afdp-header-frame h2 .dashicons { font-size: 26px; width: 26px; height: 26px; color: #006a4e; }
     .afdp-header-frame p { margin: 0; font-size: 13px; color: #64748b; font-weight: 500; }
 
-    .afdp-tab-nav { display: flex; gap: 12px; margin-bottom: 20px; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; }
-    .afdp-tab-link { text-decoration: none; padding: 8px 16px; border-radius: 8px; font-size: 13.5px; font-weight: 600; color: #64748b; transition: all 0.2s ease; }
+    .afdp-tab-nav { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid #e2e8f0; padding-bottom: 12px; flex-wrap: wrap; }
+    .afdp-tab-link { text-decoration: none; padding: 9px 16px; border-radius: 8px; font-size: 13.5px; font-weight: 700; color: #64748b; transition: all 0.2s ease; display: inline-flex; align-items: center; gap: 6px; }
     .afdp-tab-link:hover { color: #0f172a; background: #f1f5f9; }
-    .afdp-tab-link.active { background: #006a4e; color: #ffffff; box-shadow: 0 2px 4px rgba(0, 106, 78, 0.2); }
+    .afdp-tab-link.active { background: #006a4e; color: #ffffff; box-shadow: 0 2px 6px rgba(0, 106, 78, 0.2); }
 
     .dpt-bento-box { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02); margin-bottom: 24px; }
     .dpt-bento-subheading { font-size: 15px; font-weight: 800; color: #1e293b; margin: 0 0 18px 0; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; }
@@ -57,26 +62,29 @@ if ( isset( $_GET['status'] ) ) {
 <div class="dpt-academics-root">
     
     <div class="afdp-header-frame">
-        <h2><span class="dashicons dashicons-welcome-learn-more"></span> Academic Operations</h2>
-        <p>Manage unified classes, curriculum subjects, and routine setups.</p>
+        <h2><span class="dashicons dashicons-welcome-learn-more"></span> <?php esc_html_e( 'Academic Operations', 'educore' ); ?></h2>
+        <p><?php esc_html_e( 'Manage unified classes, curriculum subjects, teacher assignments, and routine setups.', 'educore' ); ?></p>
     </div>
 
     <!-- Sub-Tab Navigation -->
     <div class="afdp-tab-nav">
         <a href="<?php echo esc_url( add_query_arg( 'subtab', 'units', $base_url ) ); ?>" class="afdp-tab-link <?php echo $current_subtab === 'units' ? 'active' : ''; ?>">
-            Classes Setup
+            <span class="dashicons dashicons-category"></span> <?php esc_html_e( 'Classes Setup', 'educore' ); ?>
         </a>
         <a href="<?php echo esc_url( add_query_arg( 'subtab', 'subjects', $base_url ) ); ?>" class="afdp-tab-link <?php echo $current_subtab === 'subjects' ? 'active' : ''; ?>">
-            Class Wise Subjects
+            <span class="dashicons dashicons-book"></span> <?php esc_html_e( 'Class Wise Subjects', 'educore' ); ?>
+        </a>
+        <a href="<?php echo esc_url( add_query_arg( 'subtab', 'teacher_subjects', $base_url ) ); ?>" class="afdp-tab-link <?php echo $current_subtab === 'teacher_subjects' ? 'active' : ''; ?>">
+            <span class="dashicons dashicons-businessman"></span> <?php esc_html_e( 'Teacher Wise Subjects', 'educore' ); ?>
         </a>
         <a href="<?php echo esc_url( add_query_arg( 'subtab', 'routine', $base_url ) ); ?>" class="afdp-tab-link <?php echo $current_subtab === 'routine' ? 'active' : ''; ?>">
-            Class Routine
+            <span class="dashicons dashicons-calendar-alt"></span> <?php esc_html_e( 'Class Routine', 'educore' ); ?>
         </a>
     </div>
 
     <!-- Feedback Notice -->
     <?php if ( ! empty( $message_text ) ) : ?>
         <div class="afdp-alert-node afdp-alert-success">
-            <strong>Success:</strong> <?php echo esc_html( $message_text ); ?>
+            <strong><?php esc_html_e( 'Success:', 'educore' ); ?></strong> <?php echo esc_html( $message_text ); ?>
         </div>
     <?php endif; ?>

@@ -5,7 +5,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * High-End Academic Progress Marksheet & Tabulation Engine
- * File: exams-report-view.php
+ * File: inc/results/exams-report.php
  * Custom Prefixes Applied: dpt-, afdp-
  * Architecture: Neo-Bento Interface with Print-Ready Layouts & Security Controls
  */
@@ -272,22 +272,22 @@ function educore_exams_report_view() {
             border-color: #94a3b8;
         }
 
-        /* Printable Report Card Design */
+        /* Professional Printable Report Card Design */
         .afdp-report-card-container {
             max-width: 840px;
             margin: 0 auto;
             background: #ffffff;
-            padding: 40px;
-            border: 2px solid #006a4e;
-            border-radius: 12px;
+            padding: 44px;
+            border: 1px solid #cbd5e1;
+            border-radius: 16px;
             color: #0f172a;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.04);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
         }
 
         .afdp-report-header {
             text-align: center;
-            border-bottom: 2px double #006a4e;
-            padding-bottom: 16px;
+            border-bottom: 3px solid #006a4e;
+            padding-bottom: 18px;
             margin-bottom: 24px;
         }
 
@@ -300,7 +300,7 @@ function educore_exams_report_view() {
         .afdp-marks-table th, .afdp-marks-table td,
         .afdp-tabulation-table th, .afdp-tabulation-table td {
             border: 1px solid #cbd5e1;
-            padding: 10px 14px;
+            padding: 10px 12px;
             text-align: center;
             font-size: 13px;
         }
@@ -311,41 +311,43 @@ function educore_exams_report_view() {
             color: #334155;
             text-transform: uppercase;
             font-size: 11.5px;
+            letter-spacing: 0.3px;
         }
 
         .afdp-gpa-box {
             border: 2px solid #006a4e;
-            padding: 18px;
+            padding: 16px;
             text-align: center;
-            border-radius: 10px;
+            border-radius: 12px;
             margin-top: 24px;
-            background: #ecfdf5;
+            background: #f0fdf4;
         }
 
         .afdp-sign-row {
             display: flex;
             justify-content: space-between;
             align-items: flex-end;
-            margin-top: 50px;
+            margin-top: 60px;
             padding-top: 16px;
         }
 
         .afdp-sign-line {
-            border-top: 1.5px dashed #475569;
-            width: 190px;
+            border-top: 1.5px dashed #64748b;
+            width: 200px;
             text-align: center;
             font-size: 11.5px;
             font-weight: 700;
-            padding-top: 6px;
+            padding-top: 8px;
             color: #334155;
             text-transform: uppercase;
         }
 
         .afdp-tabulation-container {
             background: #ffffff;
-            padding: 30px;
+            padding: 32px;
             border: 1px solid #cbd5e1;
-            border-radius: 12px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
         }
 
         .afdp-status-banner {
@@ -361,7 +363,7 @@ function educore_exams_report_view() {
         }
 
         @media print {
-            @page { margin: 10mm; }
+            @page { size: A4; margin: 10mm; }
             body * { visibility: hidden; }
             .afdp-report-card-container, .afdp-report-card-container *,
             .afdp-tabulation-container, .afdp-tabulation-container * {
@@ -402,7 +404,7 @@ function educore_exams_report_view() {
                 if ( isset( $parsed_url['query'] ) ) {
                     parse_str( $parsed_url['query'], $query_params );
                     foreach ( $query_params as $param_key => $param_val ) {
-                        if ( ! in_array( $param_key, array( 'exam_id', 'report_type', 'class_name', 'section_name', 'student_id' ) ) ) {
+                        if ( ! in_array( $param_key, array( 'exam_id', 'report_type', 'class_name', 'section_name', 'student_id' ), true ) ) {
                             echo '<input type="hidden" name="' . esc_attr( $param_key ) . '" value="' . esc_attr( $param_val ) . '">';
                         }
                     }
@@ -432,7 +434,7 @@ function educore_exams_report_view() {
                         </select>
                     </div>
 
-                    <!-- 3. Class Selection (Exam-Targeted) -->
+                    <!-- 3. Class Selection -->
                     <div class="dpt-form-group">
                         <label class="dpt-form-label"><?php esc_html_e( '3. Exam Class', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
                         <select name="class_name" id="educore_class_filter" class="dpt-select-field" required>
@@ -453,7 +455,7 @@ function educore_exams_report_view() {
                         </select>
                     </div>
 
-                    <!-- 5. Student Selection (Individual Marksheet) -->
+                    <!-- 5. Student Selection -->
                     <div class="dpt-form-group" id="student_select_box" style="<?php echo ( 'tabulation' === $report_type ) ? 'display:none;' : ''; ?>">
                         <label class="dpt-form-label"><?php esc_html_e( '5. Target Student', 'ifsedu-sms' ); ?></label>
                         <select name="student_id" id="educore_student_filter" class="dpt-select-field">
@@ -530,17 +532,17 @@ function educore_exams_report_view() {
                     var sel = (cls === selectedClass) ? 'selected' : '';
                     $classSelect.append('<option value="' + cls + '" ' + sel + '>' + cls + '</option>');
                 });
+
+                populateSections(classSelect.value, currentSection);
             }
 
-            // Exam selection triggers targeted classes
             $('#educore_report_exam_select').on('change', function() {
                 populateExamClasses($(this).val(), '');
                 $('#educore_class_filter').trigger('change');
             });
 
-            // Fetch Sections & Reload Students when Class changes
             $('#educore_class_filter').on('change', function() {
-                var selectedClass   = $(this).val();
+                var selectedClass  = $(this).val();
                 var $sectionSelect = $('#educore_section_filter');
 
                 $sectionSelect.html('<option value=""><?php echo esc_js( __( '-- All Sections --', 'ifsedu-sms' ) ); ?></option>');
@@ -572,7 +574,6 @@ function educore_exams_report_view() {
                 });
             });
 
-            // Reload Students when Section changes
             $('#educore_section_filter').on('change', function() {
                 reloadStudents();
             });
@@ -608,14 +609,10 @@ function educore_exams_report_view() {
                         } else {
                             $studentSelect.html('<option value=""><?php echo esc_js( __( 'No Active Students Found', 'ifsedu-sms' ) ); ?></option>');
                         }
-                    },
-                    error: function() {
-                        $studentSelect.html('<option value=""><?php echo esc_js( __( '-- Choose Student --', 'ifsedu-sms' ) ); ?></option>');
                     }
                 });
             }
 
-            // Initial load trigger
             if ($('#educore_report_exam_select').val()) {
                 populateExamClasses($('#educore_report_exam_select').val(), currentClass);
             }
@@ -637,7 +634,6 @@ function educore_exams_report_view() {
                 return;
             }
 
-            // Aggregate Statistics
             $total_sub          = count( $results );
             $sum_gpa            = 0;
             $total_marks_all    = 0;
@@ -648,7 +644,7 @@ function educore_exams_report_view() {
                 $sum_gpa            += floatval( $r->gpa );
                 $total_marks_all    += floatval( $r->total_marks );
                 $obtained_marks_all += floatval( $r->obtained_marks );
-                if ( strtoupper( trim( $r->grade ) ) === 'F' ) {
+                if ( strtoupper( trim( $r->grade ) ) === 'F' || floatval( $r->gpa ) <= 0 ) {
                     $has_failed = true;
                 }
             }
@@ -661,70 +657,64 @@ function educore_exams_report_view() {
             <div style="text-align: center; margin-bottom: 24px;" class="no-print">
                 <button onclick="window.print();" class="dpt-btn-submit-trigger" style="width: auto; padding: 0 32px; font-size: 14px;">
                     <span class="dashicons dashicons-printer"></span>
-                    <?php esc_html_e( 'Print Academic Marksheet', 'ifsedu-sms' ); ?>
+                    <?php esc_html_e( 'Print Professional Marksheet', 'ifsedu-sms' ); ?>
                 </button>
             </div>
 
             <div class="afdp-report-card-container">
                 <div class="afdp-report-header">
-                    <h2 style="margin: 0; font-weight: 800; color: #006a4e; text-transform: uppercase; font-size: 20px;"><?php echo esc_html( $school_name ); ?></h2>
-                    <h4 style="margin: 6px 0 4px 0; font-weight: 700; color: #1e293b;"><?php echo esc_html( $exam->exam_name ); ?></h4>
-                    <span style="background: #006a4e; color: #ffffff; padding: 4px 14px; border-radius: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; display: inline-block; margin-top: 4px;">
-                        <?php esc_html_e( 'Academic Progress Marksheet', 'ifsedu-sms' ); ?>
-                    </span>
+                    <div style="font-size: 11px; font-weight: 800; color: #64748b; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 4px;"><?php esc_html_e( 'Official Academic Transcript', 'ifsedu-sms' ); ?></div>
+                    <h2 style="margin: 0; font-weight: 800; color: #006a4e; text-transform: uppercase; font-size: 22px; letter-spacing: 0.5px;"><?php echo esc_html( $school_name ); ?></h2>
+                    <h4 style="margin: 6px 0 4px 0; font-weight: 700; color: #1e293b; font-size: 15px;"><?php echo esc_html( $exam->exam_name ); ?></h4>
                 </div>
 
-                <div style="display: flex; justify-content: space-between; margin-bottom: 20px; font-size: 13.5px; line-height: 1.6;">
+                <div style="display: flex; justify-content: space-between; background: #f8fafc; border: 1px solid #e2e8f0; padding: 16px 20px; border-radius: 10px; margin-bottom: 24px; font-size: 13px; line-height: 1.6;">
                     <div>
                         <p style="margin: 2px 0;"><strong><?php esc_html_e( 'Student Name:', 'ifsedu-sms' ); ?></strong> <span style="text-transform: uppercase; font-weight: 800; color:#0f172a;"><?php echo esc_html( $student->full_name ); ?></span></p>
                         <p style="margin: 2px 0;"><strong><?php esc_html_e( 'Student ID:', 'ifsedu-sms' ); ?></strong> <code><?php echo esc_html( $student->student_id ); ?></code></p>
-                        <p style="margin: 2px 0;"><strong><?php esc_html_e( 'Guardian:', 'ifsedu-sms' ); ?></strong> <?php echo esc_html( $student->guardian_name ? $student->guardian_name : $student->father_name ); ?></p>
+                        <p style="margin: 2px 0;"><strong><?php esc_html_e( 'Guardian:', 'ifsedu-sms' ); ?></strong> <?php echo esc_html( ! empty( $student->guardian_name ) ? $student->guardian_name : $student->father_name ); ?></p>
                     </div>
                     <div style="text-align: right;">
                         <p style="margin: 2px 0;"><strong><?php esc_html_e( 'Class:', 'ifsedu-sms' ); ?></strong> <?php echo esc_html( $student->class_name ); ?></p>
-                        <p style="margin: 2px 0;"><strong><?php esc_html_e( 'Section:', 'ifsedu-sms' ); ?></strong> <?php echo esc_html( $student->section_name ? $student->section_name : __( 'N/A', 'ifsedu-sms' ) ); ?></p>
-                        <p style="margin: 2px 0;"><strong><?php esc_html_e( 'Roll Number:', 'ifsedu-sms' ); ?></strong> <span style="background: #f1f5f9; border: 1px solid #cbd5e1; padding: 2px 8px; border-radius: 4px; font-weight: 800;">#<?php echo esc_html( $student->roll_no ); ?></span></p>
+                        <p style="margin: 2px 0;"><strong><?php esc_html_e( 'Section:', 'ifsedu-sms' ); ?></strong> <?php echo esc_html( ! empty( $student->section_name ) ? $student->section_name : __( 'N/A', 'ifsedu-sms' ) ); ?></p>
+                        <p style="margin: 2px 0;"><strong><?php esc_html_e( 'Roll Number:', 'ifsedu-sms' ); ?></strong> <span style="background: #ffffff; border: 1px solid #cbd5e1; padding: 2px 8px; border-radius: 4px; font-weight: 800;">#<?php echo esc_html( $student->roll_no ); ?></span></p>
                     </div>
                 </div>
 
                 <table class="afdp-marks-table">
                     <thead>
                         <tr>
-                            <th style="text-align: left;"><?php esc_html_e( 'Subject Name', 'ifsedu-sms' ); ?></th>
-                            <th><?php esc_html_e( 'Total Marks', 'ifsedu-sms' ); ?></th>
+                            <th style="text-align: left; width: 35%;"><?php esc_html_e( 'Subject Name', 'ifsedu-sms' ); ?></th>
+                            <th><?php esc_html_e( 'Full Marks', 'ifsedu-sms' ); ?></th>
                             <th><?php esc_html_e( 'Obtained Marks', 'ifsedu-sms' ); ?></th>
-                            <th><?php esc_html_e( 'Grade', 'ifsedu-sms' ); ?></th>
-                            <th><?php esc_html_e( 'GPA', 'ifsedu-sms' ); ?></th>
+                            <th><?php esc_html_e( 'Letter Grade', 'ifsedu-sms' ); ?></th>
+                            <th><?php esc_html_e( 'Grade Point (GP)', 'ifsedu-sms' ); ?></th>
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ( $results as $r ) : ?>
+                        <?php foreach ( $results as $r ) : 
+                            $row_failed = ( 'F' === strtoupper( trim( $r->grade ) ) || floatval( $r->gpa ) <= 0 );
+                        ?>
                         <tr>
                             <td style="text-align: left; font-weight: 700; color: #0f172a;"><?php echo esc_html( $r->subject_name ); ?></td>
                             <td><?php echo floatval( $r->total_marks ); ?></td>
                             <td><strong><?php echo floatval( $r->obtained_marks ); ?></strong></td>
-                            <td style="font-weight: 800; color: <?php echo 'F' === strtoupper(trim($r->grade)) ? '#dc2626' : '#059669'; ?>;"><?php echo esc_html( $r->grade ); ?></td>
-                            <td><strong style="color: <?php echo 'F' === strtoupper(trim($r->grade)) ? '#dc2626' : '#2563eb'; ?>;"><?php echo number_format( floatval($r->gpa), 2 ); ?></strong></td>
+                            <td style="font-weight: 800; color: <?php echo $row_failed ? '#dc2626' : '#059669'; ?>;"><?php echo esc_html( $r->grade ); ?></td>
+                            <td><strong style="color: <?php echo $row_failed ? '#dc2626' : '#2563eb'; ?>;"><?php echo number_format( floatval( $r->gpa ), 2 ); ?></strong></td>
                         </tr>
                         <?php endforeach; ?>
                     </tbody>
                 </table>
 
                 <div class="afdp-gpa-box">
-                    <h4 style="margin: 0; font-weight: 800; color: #006a4e; text-transform: uppercase; font-size: 15px;"><?php esc_html_e( 'Final Result Evaluation', 'ifsedu-sms' ); ?></h4>
-                    <p style="font-size: 15px; margin: 8px 0 0 0; color: #334155;">
-                        <?php esc_html_e( 'Overall Evaluation:', 'ifsedu-sms' ); ?> 
+                    <h4 style="margin: 0; font-weight: 800; color: #006a4e; text-transform: uppercase; font-size: 14px; letter-spacing: 0.5px;"><?php esc_html_e( 'Final Result Summary', 'ifsedu-sms' ); ?></h4>
+                    <p style="font-size: 14.5px; margin: 6px 0 0 0; color: #1e293b;">
+                        <?php esc_html_e( 'Status:', 'ifsedu-sms' ); ?> 
                         <strong style="color: <?php echo $has_failed ? '#dc2626' : '#059669'; ?>;">
-                            <?php 
-                                if ( $has_failed ) {
-                                    esc_html_e( 'FAILED (F)', 'ifsedu-sms' );
-                                } else {
-                                    printf( esc_html__( 'PASSED (%s)', 'ifsedu-sms' ), esc_html( $final_grade ) );
-                                }
-                            ?>
+                            <?php echo $has_failed ? esc_html__( 'FAILED (F)', 'ifsedu-sms' ) : sprintf( esc_html__( 'PASSED (%s)', 'ifsedu-sms' ), esc_html( $final_grade ) ); ?>
                         </strong> &nbsp;|&nbsp; 
-                        <?php esc_html_e( 'Total Score:', 'ifsedu-sms' ); ?> <strong><?php echo $obtained_marks_all; ?> / <?php echo $total_marks_all; ?></strong> &nbsp;|&nbsp;
-                        <?php esc_html_e( 'Cumulative GPA:', 'ifsedu-sms' ); ?> <strong style="font-size: 17px; color: #006a4e;"><?php echo esc_html( $final_gpa ); ?></strong>
+                        <?php esc_html_e( 'Total Score:', 'ifsedu-sms' ); ?> <strong><?php echo floatval( $obtained_marks_all ); ?> / <?php echo floatval( $total_marks_all ); ?></strong> &nbsp;|&nbsp;
+                        <?php esc_html_e( 'GPA:', 'ifsedu-sms' ); ?> <strong style="font-size: 16px; color: #006a4e;"><?php echo esc_html( $final_gpa ); ?></strong>
                     </p>
                 </div>
 
@@ -777,9 +767,9 @@ function educore_exams_report_view() {
             </div>
 
             <div class="afdp-tabulation-container">
-                <div style="text-align: center; margin-bottom: 24px; border-bottom: 2px solid #e2e8f0; padding-bottom: 16px;">
+                <div style="text-align: center; margin-bottom: 24px; border-bottom: 2px solid #006a4e; padding-bottom: 16px;">
                     <h3 style="margin: 0; font-weight: 800; color: #006a4e; text-transform: uppercase; font-size: 20px;"><?php echo esc_html( $school_name ); ?></h3>
-                    <h5 style="margin: 6px 0 0 0; font-weight: 700; color: #1e293b;"><?php echo esc_html( $exam->exam_name ); ?> &mdash; <?php esc_html_e( 'Academic Tabulation Sheet', 'ifsedu-sms' ); ?></h5>
+                    <h5 style="margin: 6px 0 0 0; font-weight: 700; color: #1e293b; font-size: 14px;"><?php echo esc_html( $exam->exam_name ); ?> &mdash; <?php esc_html_e( 'Academic Tabulation Sheet', 'ifsedu-sms' ); ?></h5>
                     <span style="display: inline-block; background: #f1f5f9; color: #475569; padding: 3px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; margin-top: 6px; border: 1px solid #cbd5e1;">
                         <?php esc_html_e( 'Class:', 'ifsedu-sms' ); ?> <?php echo esc_html( $filter_class ); ?>
                         <?php if ( ! empty( $filter_section ) ) : ?>
@@ -826,13 +816,14 @@ function educore_exams_report_view() {
                                         $total_obtained += floatval( $res->obtained_marks );
                                         $sum_gpa        += floatval( $res->gpa );
                                         $sub_count++;
-                                        if ( 'F' === strtoupper( trim( $res->grade ) ) ) {
+                                        if ( 'F' === strtoupper( trim( $res->grade ) ) || floatval( $res->gpa ) <= 0 ) {
                                             $has_failed = true;
                                         }
+                                        $sub_failed = ( 'F' === strtoupper( trim( $res->grade ) ) || floatval( $res->gpa ) <= 0 );
                                         ?>
                                         <td>
                                             <strong><?php echo floatval( $res->obtained_marks ); ?></strong><br>
-                                            <small style="font-weight: 700; color: <?php echo 'F' === strtoupper( trim( $res->grade ) ) ? '#dc2626' : '#059669'; ?>;">(<?php echo esc_html( $res->grade ); ?>)</small>
+                                            <small style="font-weight: 700; color: <?php echo $sub_failed ? '#dc2626' : '#059669'; ?>;">(<?php echo esc_html( $res->grade ); ?>)</small>
                                         </td>
                                     <?php } else { ?>
                                         <td style="color: #94a3b8;">—</td>

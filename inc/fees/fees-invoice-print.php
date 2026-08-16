@@ -63,31 +63,33 @@ if ( ! function_exists( 'educore_number_to_words' ) ) {
 }
 
 /**
- * Invoice Print Controller
+ * Triplicate Fee Invoice Print Controller
  * File: fees-invoice-print.php
  * Custom Prefixes Applied: dpt-, afdp-
  */
 function educore_fees_invoice_print_view() {
     global $wpdb;
 
-    // Security Check
+    // Capability Check
     if ( ! current_user_can( 'manage_options' ) ) {
         wp_die( esc_html__( 'You do not have sufficient permissions to view or print payment receipts.', 'ifsedu-sms' ) );
     }
 
-    $invoice_id = isset( $_GET['invoice'] ) ? sanitize_text_field( $_GET['invoice'] ) : '';
+    $invoice_id = isset( $_GET['invoice'] ) ? sanitize_text_field( wp_unslash( $_GET['invoice'] ) ) : '';
     if ( empty( $invoice_id ) ) {
-        echo '<div class="afdp-alert-danger">' . esc_html__( 'No invoice identifier provided.', 'ifsedu-sms' ) . '</div>';
+        echo '<div class="afdp-alert-danger">' . esc_html__( 'No invoice identifier specified.', 'ifsedu-sms' ) . '</div>';
         return;
     }
 
     $table_fees     = $wpdb->prefix . 'sms_fees';
     $table_students = $wpdb->prefix . 'sms_students';
+    $table_staff    = $wpdb->prefix . 'sms_staff';
 
     $query = $wpdb->prepare( "
-        SELECT f.*, s.full_name, s.student_id as s_id, s.class_name, s.section_name, s.roll_no, s.guardian_phone 
+        SELECT f.*, s.full_name, s.student_id as s_id, s.class_name, s.section_name, s.shift, s.roll_no, s.guardian_phone, s.waiver_percentage, st.full_name as ref_staff_name 
         FROM {$table_fees} f 
         LEFT JOIN {$table_students} s ON f.student_id = s.id 
+        LEFT JOIN {$table_staff} st ON s.waiver_staff_id = st.id
         WHERE f.invoice_id = %s
     ", $invoice_id );
     
@@ -98,22 +100,21 @@ function educore_fees_invoice_print_view() {
         return;
     }
 
-    $back_url    = admin_url( 'admin.php?page=school_management_system&tab=fees' );
-    $school_name = get_option( 'educore_school_name', get_bloginfo( 'name' ) );
-    $school_logo = get_option( 'educore_school_logo', '' );
-    $copies      = array( 'Student Copy', 'Office Copy', 'Bank / Audit Copy' );
+    $back_url        = admin_url( 'admin.php?page=school_management_system&tab=fees' );
+    $school_name     = get_option( 'educore_school_name', get_bloginfo( 'name' ) );
+    $school_address  = get_option( 'educore_school_address', 'Sylhet, Bangladesh' );
+    $school_phone    = get_option( 'educore_school_phone', '' );
+    $school_logo     = get_option( 'educore_school_logo', '' );
+    $copies          = array( 'Student Copy', 'Office Copy', 'Accounts / Bank Copy' );
     ?>
 
     <style>
-        /* ==========================================================================
-           FEES INVOICE PRINT - NEO-BENTO & PRINT ENGINE
-           ========================================================================== */
         .afdp-print-toolbar {
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 12px;
-            margin-bottom: 24px;
+            margin: 20px auto 24px;
         }
 
         .dpt-btn-print {
@@ -134,7 +135,6 @@ function educore_fees_invoice_print_view() {
 
         .dpt-btn-print:hover {
             background: #00523c;
-            transform: translateY(-1px);
         }
 
         .dpt-btn-back {
@@ -173,7 +173,7 @@ function educore_fees_invoice_print_view() {
         .receipt-card {
             border: 1.5px solid #0f172a;
             border-radius: 8px;
-            padding: 14px;
+            padding: 12px 14px;
             background: #ffffff;
             display: flex;
             flex-direction: column;
@@ -184,15 +184,15 @@ function educore_fees_invoice_print_view() {
 
         .receipt-card-header {
             border-bottom: 2px double #0f172a;
-            padding-bottom: 8px;
-            margin-bottom: 10px;
+            padding-bottom: 6px;
+            margin-bottom: 8px;
             text-align: center;
         }
 
         .receipt-logo {
-            max-height: 38px;
+            max-height: 36px;
             width: auto;
-            margin-bottom: 4px;
+            margin-bottom: 3px;
             display: block;
             margin-left: auto;
             margin-right: auto;
@@ -200,17 +200,25 @@ function educore_fees_invoice_print_view() {
 
         .receipt-school-title {
             font-weight: 800;
-            font-size: 13.5px;
+            font-size: 12.5px;
             text-transform: uppercase;
             letter-spacing: 0.3px;
-            margin: 0 0 4px 0;
+            margin: 0 0 2px 0;
             color: #006a4e;
+            line-height: 1.2;
+        }
+
+        .receipt-school-sub {
+            font-size: 9.5px;
+            color: #64748b;
+            margin: 0 0 4px 0;
+            font-weight: 600;
         }
 
         .copy-type-badge {
             background-color: #0f172a;
             color: #ffffff;
-            font-size: 10px;
+            font-size: 9.5px;
             font-weight: 800;
             padding: 2px 8px;
             border-radius: 10px;
@@ -223,12 +231,12 @@ function educore_fees_invoice_print_view() {
             width: 100%;
             border-collapse: collapse;
             font-size: 11px;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
 
         .table-receipt-data td, 
         .table-receipt-data th {
-            padding: 4px 6px;
+            padding: 3px 4px;
             vertical-align: middle;
         }
 
@@ -241,21 +249,21 @@ function educore_fees_invoice_print_view() {
         }
 
         .dpt-bordered-table {
-            border: 1px solid #e2e8f0;
+            border: 1px solid #cbd5e1;
         }
 
         .dpt-bordered-table td, 
         .dpt-bordered-table th {
-            border: 1px solid #e2e8f0;
+            border: 1px solid #cbd5e1;
         }
 
         .words-box {
             background: #f8fafc;
             border: 1px solid #e2e8f0;
-            padding: 6px;
-            border-radius: 6px;
-            font-size: 10px;
-            margin-bottom: 12px;
+            padding: 5px 6px;
+            border-radius: 4px;
+            font-size: 9.5px;
+            margin-bottom: 10px;
             line-height: 1.3;
         }
 
@@ -263,18 +271,19 @@ function educore_fees_invoice_print_view() {
             display: flex;
             justify-content: space-between;
             align-items: flex-end;
-            margin-top: 15px;
-            padding-top: 5px;
+            margin-top: 12px;
+            padding-top: 4px;
         }
 
         .signature-line-box {
             border-top: 1px dashed #0f172a;
-            width: 90px;
+            width: 85px;
             text-align: center;
-            font-size: 9px;
+            font-size: 8.5px;
             font-weight: 700;
             padding-top: 2px;
             color: #334155;
+            text-transform: uppercase;
         }
 
         .afdp-alert-danger {
@@ -290,11 +299,11 @@ function educore_fees_invoice_print_view() {
             text-align: center;
         }
 
-        /* Printable Rules */
+        /* Landscape Print Rules */
         @media print {
             @page {
                 size: A4 landscape;
-                margin: 8mm;
+                margin: 6mm;
             }
             body {
                 background: #ffffff !important;
@@ -319,11 +328,12 @@ function educore_fees_invoice_print_view() {
             }
             .dpt-triplicate-grid {
                 grid-template-columns: repeat(3, 1fr) !important;
-                gap: 8mm !important;
+                gap: 6mm !important;
             }
             .receipt-card { 
                 border: 1px solid #000000 !important; 
                 box-shadow: none !important;
+                page-break-inside: avoid;
             }
             .receipt-school-title {
                 color: #000000 !important;
@@ -350,7 +360,7 @@ function educore_fees_invoice_print_view() {
     <div class="afdp-print-toolbar no-print">
         <button onclick="window.print();" class="dpt-btn-print">
             <span class="dashicons dashicons-printer" style="font-size:16px; width:16px; height:16px;"></span>
-            <?php esc_html_e( 'Print 3-Part Receipt Coupon', 'ifsedu-sms' ); ?>
+            <?php esc_html_e( 'Print 3-Part Receipt Voucher', 'ifsedu-sms' ); ?>
         </button>
         <a href="<?php echo esc_url( $back_url ); ?>" class="dpt-btn-back">
             <span class="dashicons dashicons-arrow-left-alt" style="font-size:14px; width:14px; height:14px;"></span>
@@ -372,31 +382,34 @@ function educore_fees_invoice_print_view() {
                             <h5 class="receipt-school-title">
                                 <?php echo esc_html( $school_name ); ?>
                             </h5>
-                            <div style="margin: 3px 0;">
+                            <p class="receipt-school-sub">
+                                <?php echo esc_html( $school_address ); ?><?php echo ! empty( $school_phone ) ? ' | Tel: ' . esc_html( $school_phone ) : ''; ?>
+                            </p>
+                            <div style="margin: 2px 0;">
                                 <span class="copy-type-badge"><?php echo esc_html( $copy_label ); ?></span>
                             </div>
-                            <span style="font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 0.3px; font-weight: 700;">
-                                <?php esc_html_e( 'Money Receipt', 'ifsedu-sms' ); ?>
-                            </span>
                         </div>
 
-                        <!-- Meta Info Table -->
+                        <!-- Student & Meta Info Table -->
                         <table class="table-receipt-data">
                             <tr>
                                 <td><strong>Invoice:</strong> #<?php echo esc_html( $receipt->invoice_id ); ?></td>
-                                <td style="text-align: right;"><strong>Date:</strong> <?php echo esc_html( date( 'd-M-Y', strtotime( $receipt->payment_date ) ) ); ?></td>
+                                <td style="text-align: right;"><strong>Date:</strong> <?php echo esc_html( date_i18n( 'd-M-Y', strtotime( $receipt->payment_date ) ) ); ?></td>
                             </tr>
                             <tr>
                                 <td><strong>Student ID:</strong> <?php echo esc_html( $receipt->s_id ? $receipt->s_id : 'N/A' ); ?></td>
-                                <td style="text-align: right;"><strong>Roll:</strong> <?php echo esc_html( $receipt->roll_no ? $receipt->roll_no : 'N/A' ); ?></td>
+                                <td style="text-align: right;"><strong>Roll:</strong> #<?php echo esc_html( $receipt->roll_no ? $receipt->roll_no : 'N/A' ); ?></td>
                             </tr>
                             <tr>
-                                <td colspan="2"><strong>Name:</strong> <span style="text-transform: uppercase; font-weight: 700;"><?php echo esc_html( $receipt->full_name ? $receipt->full_name : 'N/A' ); ?></span></td>
+                                <td colspan="2"><strong>Name:</strong> <span style="text-transform: uppercase; font-weight: 800;"><?php echo esc_html( $receipt->full_name ? $receipt->full_name : 'N/A' ); ?></span></td>
                             </tr>
                             <tr>
-                                <td colspan="2">
+                                <td>
                                     <strong>Class:</strong> <?php echo esc_html( $receipt->class_name ); ?> 
-                                    <?php echo ! empty( $receipt->section_name ) ? ' | <strong>Section:</strong> ' . esc_html( $receipt->section_name ) : ''; ?>
+                                    <?php echo ! empty( $receipt->section_name ) ? '(' . esc_html( $receipt->section_name ) . ')' : ''; ?>
+                                </td>
+                                <td style="text-align: right;">
+                                    <strong>Shift:</strong> <?php echo ( ! empty( $receipt->shift ) && $receipt->shift !== 'No Shift' ) ? esc_html( $receipt->shift ) : 'Regular'; ?>
                                 </td>
                             </tr>
                         </table>
@@ -406,49 +419,57 @@ function educore_fees_invoice_print_view() {
                             <thead>
                                 <tr>
                                     <th><?php esc_html_e( 'Description', 'ifsedu-sms' ); ?></th>
-                                    <th style="text-align: right;"><?php esc_html_e( 'Amount (BDT)', 'ifsedu-sms' ); ?></th>
+                                    <th style="text-align: right;"><?php esc_html_e( 'Amount (৳)', 'ifsedu-sms' ); ?></th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr>
                                     <td>
                                         <strong><?php echo esc_html( $receipt->fee_type ); ?></strong><br>
-                                        <span style="font-size: 9.5px; color: #64748b;">(<?php echo esc_html( ucfirst( $receipt->fee_month ) . ' ' . $receipt->fee_year ); ?>)</span>
+                                        <span style="font-size: 9px; color: #64748b;">(<?php echo esc_html( ucfirst( $receipt->fee_month ) . ' ' . $receipt->fee_year ); ?>)</span>
                                     </td>
-                                    <td style="text-align: right; font-weight: 600;"><?php echo esc_html( number_format( $receipt->amount, 2 ) ); ?></td>
+                                    <td style="text-align: right; font-weight: 600;"><?php echo esc_html( number_format( (float) $receipt->amount, 2 ) ); ?></td>
                                 </tr>
                                 <?php if ( floatval( $receipt->late_fine ) > 0 ) : ?>
                                 <tr>
                                     <td style="color: #dc2626;">Late Fine (+)</td>
-                                    <td style="text-align: right; color: #dc2626; font-weight: 600;"><?php echo esc_html( number_format( $receipt->late_fine, 2 ) ); ?></td>
+                                    <td style="text-align: right; color: #dc2626; font-weight: 600;"><?php echo esc_html( number_format( (float) $receipt->late_fine, 2 ) ); ?></td>
                                 </tr>
                                 <?php endif; ?>
                                 <?php if ( floatval( $receipt->discount ) > 0 ) : ?>
                                 <tr>
-                                    <td style="color: #2563eb;">Discount / Waiver (-)</td>
-                                    <td style="text-align: right; color: #2563eb; font-weight: 600;"><?php echo esc_html( number_format( $receipt->discount, 2 ) ); ?></td>
+                                    <td style="color: #2563eb;">
+                                        Waiver / Discount (-)
+                                        <?php if ( ! empty( $receipt->waiver_percentage ) && floatval( $receipt->waiver_percentage ) > 0 ) : ?>
+                                            <span style="font-size:8.5px; color:#15803d; display:block;">
+                                                [<?php echo esc_html( floatval( $receipt->waiver_percentage ) ); ?>% Waiver<?php echo ! empty( $receipt->ref_staff_name ) ? ' - ' . esc_html( $receipt->ref_staff_name ) : ''; ?>]
+                                            </span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td style="text-align: right; color: #2563eb; font-weight: 600;"><?php echo esc_html( number_format( (float) $receipt->discount, 2 ) ); ?></td>
                                 </tr>
                                 <?php endif; ?>
                                 <tr>
                                     <td style="font-weight: 700; background: #f8fafc;">Net Payable</td>
-                                    <td style="text-align: right; font-weight: 800; background: #f8fafc;">৳<?php echo esc_html( number_format( $receipt->net_payable, 2 ) ); ?></td>
+                                    <td style="text-align: right; font-weight: 800; background: #f8fafc;">৳<?php echo esc_html( number_format( (float) $receipt->net_payable, 2 ) ); ?></td>
                                 </tr>
                                 <tr>
                                     <td style="font-weight: 800; color: #006a4e;">Paid Amount</td>
-                                    <td style="text-align: right; font-weight: 800; color: #006a4e;">৳<?php echo esc_html( number_format( $receipt->paid_amount, 2 ) ); ?></td>
+                                    <td style="text-align: right; font-weight: 800; color: #006a4e;">৳<?php echo esc_html( number_format( (float) $receipt->paid_amount, 2 ) ); ?></td>
                                 </tr>
                                 <?php if ( floatval( $receipt->due_amount ) > 0 ) : ?>
                                 <tr>
                                     <td style="font-weight: 700; color: #dc2626;">Due Balance</td>
-                                    <td style="text-align: right; font-weight: 800; color: #dc2626;">৳<?php echo esc_html( number_format( $receipt->due_amount, 2 ) ); ?></td>
+                                    <td style="text-align: right; font-weight: 800; color: #dc2626;">৳<?php echo esc_html( number_format( (float) $receipt->due_amount, 2 ) ); ?></td>
                                 </tr>
                                 <?php endif; ?>
                             </tbody>
                         </table>
 
-                        <!-- Amount in Words -->
+                        <!-- Payment Method & Amount in Words -->
                         <div class="words-box">
-                            <strong>In Words:</strong> <em><?php echo esc_html( educore_number_to_words( $receipt->paid_amount ) ); ?></em>
+                            <div><strong>Method:</strong> <?php echo esc_html( $receipt->payment_method ); ?><?php echo ! empty( $receipt->transaction_id ) ? ' (Trx: ' . esc_html( $receipt->transaction_id ) . ')' : ''; ?></div>
+                            <div style="margin-top:2px;"><strong>In Words:</strong> <em><?php echo esc_html( educore_number_to_words( $receipt->paid_amount ) ); ?></em></div>
                         </div>
                     </div>
 

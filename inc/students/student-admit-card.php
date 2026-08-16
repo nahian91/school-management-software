@@ -536,7 +536,7 @@ function educore_student_admit_card_view() {
                         <option value="0"><?php esc_html_e( '-- All Students in Section --', 'ifsedu-sms' ); ?></option>
                         <?php foreach ( $available_students as $st_item ) : ?>
                             <option value="<?php echo intval( $st_item->id ); ?>" <?php selected( $selected_student, $st_item->id ); ?>>
-                                <?php echo esc_html( '[Roll ' . $st_item->roll_no . '] ' . $st_item->full_name . ' (' . $st_item->student_id . ')' ); ?>
+                                <?php echo esc_html( '[Roll ' . $st_item->roll_no . '] ' . $st_item->full_name . ' (' . strtoupper( $st_item->student_id ) . ')' ); ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
@@ -589,7 +589,7 @@ function educore_student_admit_card_view() {
                                         <h3 class="admit-school-title"><?php echo esc_html( $school_name ); ?></h3>
                                         <div class="admit-school-sub"><?php echo esc_html( get_bloginfo( 'description' ) ); ?></div>
                                         <div class="admit-title-badge">
-                                            <?php printf( esc_html__( 'ADMIT CARD : %1$s &mdash; %2$s', 'ifsedu-sms' ), esc_html( $exam_title ), esc_html( $exam_year ) ); ?>
+                                            <?php printf( esc_html__( 'ADMIT CARD : %1$s — %2$s', 'ifsedu-sms' ), esc_html( $exam_title ), esc_html( $exam_year ) ); ?>
                                         </div>
                                     </div>
 
@@ -599,18 +599,12 @@ function educore_student_admit_card_view() {
                                             <table class="admit-table">
                                                 <tr>
                                                     <td class="label-col"><?php esc_html_e( 'Student ID:', 'ifsedu-sms' ); ?></td>
-                                                    <td class="value-col" style="color: #006a4e;"><?php echo esc_html( $student->student_id ); ?></td>
+                                                    <td class="value-col" style="color: #006a4e;"><?php echo esc_html( strtoupper( $student->student_id ) ); ?></td>
                                                 </tr>
                                                 <tr>
                                                     <td class="label-col"><?php esc_html_e( 'Candidate Name:', 'ifsedu-sms' ); ?></td>
                                                     <td class="value-col" style="text-transform: uppercase;"><?php echo esc_html( $student->full_name ); ?></td>
                                                 </tr>
-                                                <?php if ( ! empty( $student->name_bn ) ) : ?>
-                                                <tr>
-                                                    <td class="label-col"><?php esc_html_e( 'নাম (বাংলা):', 'ifsedu-sms' ); ?></td>
-                                                    <td class="value-col"><?php echo esc_html( $student->name_bn ); ?></td>
-                                                </tr>
-                                                <?php endif; ?>
                                                 <tr>
                                                     <td class="label-col"><?php esc_html_e( 'Class & Section:', 'ifsedu-sms' ); ?></td>
                                                     <td class="value-col">
@@ -741,7 +735,8 @@ function educore_student_admit_card_view() {
                     if (response.success && response.data.length > 0) {
                         var options = '<option value="0"><?php echo esc_js( __( '-- All Students in Section --', 'ifsedu-sms' ) ); ?></option>';
                         $.each(response.data, function(i, st) {
-                            options += '<option value="' + st.id + '">[Roll ' + st.roll_no + '] ' + st.full_name + ' (' + st.student_id + ')</option>';
+                            var uid = (st.student_id || '').toUpperCase();
+                            options += '<option value="' + st.id + '">[Roll ' + st.roll_no + '] ' + st.full_name + ' (' + uid + ')</option>';
                         });
                         $studentSelect.html(options);
                     } else {

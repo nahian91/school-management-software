@@ -26,6 +26,9 @@ function dpt_handle_update_fee_invoice_ajax() {
     $fee_type       = isset( $_POST['fee_type'] ) ? sanitize_text_field( wp_unslash( $_POST['fee_type'] ) ) : '';
     $fee_month      = isset( $_POST['fee_month'] ) ? sanitize_text_field( wp_unslash( $_POST['fee_month'] ) ) : '';
     $fee_year       = isset( $_POST['fee_year'] ) ? sanitize_text_field( wp_unslash( $_POST['fee_year'] ) ) : '';
+    $amount         = isset( $_POST['amount'] ) ? floatval( $_POST['amount'] ) : 0.00;
+    $late_fine      = isset( $_POST['late_fine'] ) ? floatval( $_POST['late_fine'] ) : 0.00;
+    $discount       = isset( $_POST['discount'] ) ? floatval( $_POST['discount'] ) : 0.00;
     $net_payable    = isset( $_POST['net_payable'] ) ? floatval( $_POST['net_payable'] ) : 0.00;
     $paid_amount    = isset( $_POST['paid_amount'] ) ? floatval( $_POST['paid_amount'] ) : 0.00;
     $due_amount     = isset( $_POST['due_amount'] ) ? floatval( $_POST['due_amount'] ) : 0.00;
@@ -41,13 +44,16 @@ function dpt_handle_update_fee_invoice_ajax() {
             'fee_type'       => $fee_type,
             'fee_month'      => $fee_month,
             'fee_year'       => $fee_year,
+            'amount'         => $amount,
+            'late_fine'      => $late_fine,
+            'discount'       => $discount,
             'net_payable'    => $net_payable,
             'paid_amount'    => $paid_amount,
             'due_amount'     => $due_amount,
             'payment_status' => $payment_status,
         ),
         array( 'id' => $fee_id ),
-        array( '%s', '%s', '%s', '%f', '%f', '%f', '%s' ),
+        array( '%s', '%s', '%s', '%f', '%f', '%f', '%f', '%f', '%f', '%s' ),
         array( '%d' )
     );
 
@@ -66,6 +72,7 @@ function educore_fees_list_view() {
     $table_fees     = $wpdb->prefix . 'sms_fees';
     $table_students = $wpdb->prefix . 'sms_students';
     $table_units    = $wpdb->prefix . 'sms_academic_units';
+    $table_staff    = $wpdb->prefix . 'sms_staff';
 
     // 1. Capability Security Check
     if ( ! current_user_can( 'manage_options' ) ) {
@@ -75,12 +82,13 @@ function educore_fees_list_view() {
     // 2. Sanitize and Extract Filter Request Inputs
     $filter_class     = isset( $_GET['filter_class'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_class'] ) ) : '';
     $filter_section   = isset( $_GET['filter_section'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_section'] ) ) : '';
+    $filter_shift     = isset( $_GET['filter_shift'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_shift'] ) ) : '';
     $filter_student   = isset( $_GET['filter_student'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_student'] ) ) : '';
     $filter_date_from = isset( $_GET['filter_date_from'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_date_from'] ) ) : '';
     $filter_date_to   = isset( $_GET['filter_date_to'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_date_to'] ) ) : '';
     $filter_status    = isset( $_GET['filter_status'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_status'] ) ) : '';
 
-    // 3. Fetch Dropdown Options Dynamically with Natural Numerical Ordering
+    // 3. Fetch Dropdown Options Dynamically
     $raw_classes = $wpdb->get_results( "SELECT DISTINCT class_name FROM {$table_units} WHERE class_name IS NOT NULL AND class_name != '' ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC" );
     $available_classes = array();
     if ( ! empty( $raw_classes ) ) {
@@ -92,7 +100,6 @@ function educore_fees_list_view() {
         }
     }
 
-    // All academic units for dynamic section filtering via JS
     $all_units = $wpdb->get_results( "SELECT id, class_name, section_name FROM {$table_units} WHERE section_name != '' ORDER BY section_name ASC" );
 
     // 4. Construct SQL Query WHERE Conditions
@@ -109,6 +116,11 @@ function educore_fees_list_view() {
         $query_args[]    = $filter_section;
     }
 
+    if ( ! empty( $filter_shift ) ) {
+        $where_clauses[] = 's.shift = %s';
+        $query_args[]    = $filter_shift;
+    }
+
     if ( ! empty( $filter_student ) ) {
         $where_clauses[] = '(s.full_name LIKE %s OR s.student_id LIKE %s OR f.invoice_id LIKE %s)';
         $student_like    = '%' . $wpdb->esc_like( $filter_student ) . '%';
@@ -118,12 +130,12 @@ function educore_fees_list_view() {
     }
 
     if ( ! empty( $filter_date_from ) ) {
-        $where_clauses[] = 'DATE(f.created_at) >= %s';
+        $where_clauses[] = 'DATE(f.payment_date) >= %s';
         $query_args[]    = $filter_date_from;
     }
 
     if ( ! empty( $filter_date_to ) ) {
-        $where_clauses[] = 'DATE(f.created_at) <= %s';
+        $where_clauses[] = 'DATE(f.payment_date) <= %s';
         $query_args[]    = $filter_date_to;
     }
 
@@ -151,10 +163,11 @@ function educore_fees_list_view() {
         $totals = $wpdb->get_row( $totals_sql );
     }
 
-    // 6. Fetch Filtered Ledger Records
-    $query = "SELECT f.*, s.full_name, s.student_id as s_id, s.class_name, s.section_name 
+    // 6. Fetch Filtered Ledger Records with Student & Waiver Details
+    $query = "SELECT f.*, s.full_name, s.student_id as s_id, s.class_name, s.section_name, s.shift, s.waiver_percentage, st.full_name as ref_staff_name 
               FROM {$table_fees} f 
-              LEFT JOIN {$table_students} s ON f.student_id = s.id" . $where_sql . " 
+              LEFT JOIN {$table_students} s ON f.student_id = s.id
+              LEFT JOIN {$table_staff} st ON s.waiver_staff_id = st.id" . $where_sql . " 
               ORDER BY f.id DESC";
 
     if ( ! empty( $query_args ) ) {
@@ -165,16 +178,12 @@ function educore_fees_list_view() {
 
     $collect_url = admin_url( 'admin.php?page=school_management_system&tab=fees&sub=collect' );
     $page_url    = admin_url( 'admin.php?page=school_management_system&tab=fees' );
-
-    $months_list = array( 'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december' );
+    $months_list = array( 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December' );
     ?>
 
     <style>
-        /* ==========================================================================
-           FEES LEDGER - NEO-BENTO ARCHITECTURE
-           ========================================================================== */
         .dpt-fees-list-container {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+            font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             color: #0f172a;
             max-width: 1200px;
             margin: 0 auto;
@@ -183,7 +192,6 @@ function educore_fees_list_view() {
             gap: 20px;
         }
 
-        /* Notice Alert Banner */
         .dpt-notice-banner {
             padding: 14px 18px;
             margin-bottom: 5px;
@@ -274,7 +282,7 @@ function educore_fees_list_view() {
 
         .afdp-filter-form {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
             gap: 14px;
             align-items: flex-end;
         }
@@ -304,7 +312,7 @@ function educore_fees_list_view() {
             color: #0f172a;
             background-color: #f8fafc;
             transition: all 0.2s ease;
-            box-shadow: none !important;
+            box-sizing: border-box;
         }
 
         .afdp-filter-input:focus,
@@ -312,6 +320,7 @@ function educore_fees_list_view() {
             border-color: #006a4e;
             background-color: #ffffff;
             outline: none;
+            box-shadow: 0 0 0 3px rgba(0, 106, 78, 0.12);
         }
 
         .afdp-filter-actions {
@@ -327,7 +336,7 @@ function educore_fees_list_view() {
         .dpt-btn-filter-submit {
             height: 38px;
             padding: 0 18px;
-            background: #0f172a;
+            background: #006a4e;
             color: #ffffff;
             border: none;
             border-radius: 8px;
@@ -342,7 +351,7 @@ function educore_fees_list_view() {
         }
 
         .dpt-btn-filter-submit:hover {
-            background: #1e293b;
+            background: #00523c;
         }
 
         .dpt-btn-filter-reset {
@@ -485,6 +494,18 @@ function educore_fees_list_view() {
             border: 1px solid #fecaca;
         }
 
+        .dpt-waiver-tag {
+            background: #f0fdf4;
+            color: #15803d;
+            border: 1px solid #bbf7d0;
+            font-size: 10.5px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 4px;
+            display: inline-block;
+            margin-top: 3px;
+        }
+
         .dpt-action-group {
             display: flex;
             align-items: center;
@@ -537,7 +558,7 @@ function educore_fees_list_view() {
             background: #f0fdf4;
         }
 
-        /* Modal Backdrop & Card Engine */
+        /* Modal Backdrop */
         .dpt-modal-backdrop {
             position: fixed;
             top: 0;
@@ -563,7 +584,7 @@ function educore_fees_list_view() {
         .dpt-modal-card {
             background: #ffffff;
             width: 100%;
-            max-width: 500px;
+            max-width: 520px;
             border-radius: 16px;
             padding: 24px;
             box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);
@@ -631,21 +652,6 @@ function educore_fees_list_view() {
         .dpt-btn-cancel:hover {
             background: #e2e8f0;
         }
-
-        /* DataTables Custom Theme Fix */
-        .dataTables_wrapper .dataTables_filter input {
-            padding: 6px 12px;
-            border: 1px solid #cbd5e1;
-            border-radius: 6px;
-            outline: none;
-            margin-left: 8px;
-        }
-
-        .dataTables_wrapper .dataTables_length select {
-            padding: 6px 10px;
-            border: 1px solid #cbd5e1;
-            border-radius: 6px;
-        }
     </style>
 
     <div class="dpt-fees-list-container">
@@ -696,7 +702,7 @@ function educore_fees_list_view() {
                         <option value=""><?php esc_html_e( 'All Classes', 'ifsedu-sms' ); ?></option>
                         <?php if ( ! empty( $available_classes ) ) : foreach ( $available_classes as $class ) : ?>
                             <option value="<?php echo esc_attr( $class ); ?>" <?php selected( $filter_class, $class ); ?>>
-                                <?php echo esc_html( $class ); ?>
+                                <?php printf( esc_html__( 'Class %s', 'ifsedu-sms' ), esc_html( $class ) ); ?>
                             </option>
                         <?php endforeach; endif; ?>
                     </select>
@@ -707,6 +713,17 @@ function educore_fees_list_view() {
                     <label for="filter_section"><?php esc_html_e( 'Section', 'ifsedu-sms' ); ?></label>
                     <select name="filter_section" id="filter_section" class="afdp-filter-select">
                         <option value=""><?php esc_html_e( 'All Sections', 'ifsedu-sms' ); ?></option>
+                    </select>
+                </div>
+
+                <!-- Shift Filter -->
+                <div class="afdp-filter-group">
+                    <label for="filter_shift"><?php esc_html_e( 'Shift', 'ifsedu-sms' ); ?></label>
+                    <select name="filter_shift" id="filter_shift" class="afdp-filter-select">
+                        <option value=""><?php esc_html_e( 'All Shifts', 'ifsedu-sms' ); ?></option>
+                        <option value="No Shift" <?php selected( $filter_shift, 'No Shift' ); ?>><?php esc_html_e( 'No Shift', 'ifsedu-sms' ); ?></option>
+                        <option value="Morning Shift" <?php selected( $filter_shift, 'Morning Shift' ); ?>><?php esc_html_e( 'Morning Shift', 'ifsedu-sms' ); ?></option>
+                        <option value="Day Shift" <?php selected( $filter_shift, 'Day Shift' ); ?>><?php esc_html_e( 'Day Shift', 'ifsedu-sms' ); ?></option>
                     </select>
                 </div>
 
@@ -793,9 +810,10 @@ function educore_fees_list_view() {
                             $status_class = 'partial'; 
                         }
 
-                        $student_id_str = $fee->s_id ? $fee->s_id : 'Deleted';
+                        $student_id_str = $fee->s_id ? strtoupper( $fee->s_id ) : 'DELETED';
                         $class_str      = $fee->class_name ? $fee->class_name : 'Unassigned';
                         $section_str    = ! empty( $fee->section_name ) ? $fee->section_name : 'N/A';
+                        $shift_str      = ( ! empty( $fee->shift ) && $fee->shift !== 'No Shift' ) ? ' | ' . $fee->shift : '';
                     ?>
                     <tr data-fee-id="<?php echo esc_attr( $fee->id ); ?>">
                         <td>
@@ -804,8 +822,13 @@ function educore_fees_list_view() {
                         <td>
                             <strong style="color: #0f172a;" class="cell-student-name"><?php echo esc_html( $fee->full_name ? $fee->full_name : 'N/A Record' ); ?></strong><br>
                             <span style="font-size: 11.5px; color: #64748b;">
-                                <?php echo esc_html( sprintf( 'ID: %s | Class: %s | Section: %s', $student_id_str, $class_str, $section_str ) ); ?>
+                                <?php echo esc_html( sprintf( 'ID: %s | Class: %s (%s)%s', $student_id_str, $class_str, $section_str, $shift_str ) ); ?>
                             </span>
+                            <?php if ( ! empty( $fee->waiver_percentage ) && floatval( $fee->waiver_percentage ) > 0 ) : ?>
+                                <br><span class="dpt-waiver-tag">
+                                    <?php echo esc_html( floatval( $fee->waiver_percentage ) ); ?>% Waiver <?php echo ! empty( $fee->ref_staff_name ) ? esc_html( '[' . $fee->ref_staff_name . ']' ) : ''; ?>
+                                </span>
+                            <?php endif; ?>
                         </td>
                         <td>
                             <span style="background: #f1f5f9; border: 1px solid #e2e8f0; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 11.5px;" class="cell-month-year">
@@ -830,9 +853,13 @@ function educore_fees_list_view() {
                                         class="dpt-square-btn dpt-btn-edit btn-trigger-edit-fee" 
                                         data-id="<?php echo esc_attr( $fee->id ); ?>"
                                         data-invoice="<?php echo esc_attr( $fee->invoice_id ); ?>"
+                                        data-class="<?php echo esc_attr( $fee->class_name ); ?>"
                                         data-type="<?php echo esc_attr( $fee->fee_type ); ?>"
-                                        data-month="<?php echo esc_attr( strtolower( $fee->fee_month ) ); ?>"
+                                        data-month="<?php echo esc_attr( ucfirst( $fee->fee_month ) ); ?>"
                                         data-year="<?php echo esc_attr( $fee->fee_year ); ?>"
+                                        data-amount="<?php echo esc_attr( $fee->amount ); ?>"
+                                        data-fine="<?php echo esc_attr( $fee->late_fine ); ?>"
+                                        data-discount="<?php echo esc_attr( $fee->discount ); ?>"
                                         data-net="<?php echo esc_attr( $fee->net_payable ); ?>"
                                         data-paid="<?php echo esc_attr( $fee->paid_amount ); ?>"
                                         data-due="<?php echo esc_attr( $fee->due_amount ); ?>"
@@ -864,11 +891,18 @@ function educore_fees_list_view() {
             </div>
             <form id="dpt-edit-fee-form">
                 <input type="hidden" id="edit_fee_id" name="fee_id" value="">
+                <input type="hidden" id="edit_fee_class" name="fee_class" value="">
+                <input type="hidden" id="edit_fee_amount" name="amount" value="0.00">
+                <input type="hidden" id="edit_fee_fine" name="late_fine" value="0.00">
+                <input type="hidden" id="edit_fee_discount" name="discount" value="0.00">
+
                 <?php wp_nonce_field( 'dpt_edit_fee_nonce', 'edit_fee_nonce_field' ); ?>
 
                 <div class="afdp-filter-group" style="margin-bottom: 12px;">
-                    <label><?php esc_html_e( 'Fee Category', 'ifsedu-sms' ); ?> <span style="color:#dc2626;">*</span></label>
-                    <input type="text" id="edit_fee_type" name="fee_type" class="afdp-filter-input" required>
+                    <label><?php esc_html_e( 'Fee Category Type', 'ifsedu-sms' ); ?> <span style="color:#dc2626;">*</span></label>
+                    <select id="edit_fee_type" name="fee_type" class="afdp-filter-select" required>
+                        <option value=""><?php esc_html_e( '-- Choose Category --', 'ifsedu-sms' ); ?></option>
+                    </select>
                 </div>
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
@@ -876,7 +910,7 @@ function educore_fees_list_view() {
                         <label><?php esc_html_e( 'Fee Month', 'ifsedu-sms' ); ?> <span style="color:#dc2626;">*</span></label>
                         <select id="edit_fee_month" name="fee_month" class="afdp-filter-select" required>
                             <?php foreach ( $months_list as $m ) : ?>
-                                <option value="<?php echo esc_attr( $m ); ?>"><?php echo esc_html( ucfirst( $m ) ); ?></option>
+                                <option value="<?php echo esc_attr( $m ); ?>"><?php echo esc_html( $m ); ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -897,7 +931,7 @@ function educore_fees_list_view() {
                     </div>
                     <div class="afdp-filter-group">
                         <label><?php esc_html_e( 'Due Amount', 'ifsedu-sms' ); ?></label>
-                        <input type="number" step="0.01" id="edit_due_amount" name="due_amount" class="afdp-filter-input" required>
+                        <input type="number" step="0.01" id="edit_due_amount" name="due_amount" class="afdp-filter-input" readonly style="background:#fffbeb; color:#b45309; font-weight:800;">
                     </div>
                 </div>
 
@@ -973,9 +1007,9 @@ function educore_fees_list_view() {
         if (cancelModalBtn) cancelModalBtn.addEventListener('click', hideModal);
 
         // Auto-calculate Due Amount on Paid or Net input changes in Modal
-        const netInput  = document.getElementById('edit_net_payable');
-        const paidInput = document.getElementById('edit_paid_amount');
-        const dueInput  = document.getElementById('edit_due_amount');
+        const netInput     = document.getElementById('edit_net_payable');
+        const paidInput    = document.getElementById('edit_paid_amount');
+        const dueInput     = document.getElementById('edit_due_amount');
         const statusSelect = document.getElementById('edit_payment_status');
 
         function updateModalCalculations() {
@@ -999,29 +1033,81 @@ function educore_fees_list_view() {
             paidInput.addEventListener('input', updateModalCalculations);
         }
 
-        // Trigger Modal Open
+        // Trigger Modal Open & Load Class Specific Categories
         document.addEventListener('click', function(e) {
             const editBtn = e.target.closest('.btn-trigger-edit-fee');
             if (editBtn) {
-                const id     = editBtn.getAttribute('data-id');
-                const type   = editBtn.getAttribute('data-type');
-                const month  = editBtn.getAttribute('data-month');
-                const year   = editBtn.getAttribute('data-year');
-                const net    = editBtn.getAttribute('data-net');
-                const paid   = editBtn.getAttribute('data-paid');
-                const due    = editBtn.getAttribute('data-due');
-                const status = editBtn.getAttribute('data-status');
+                const id        = editBtn.getAttribute('data-id');
+                const className = editBtn.getAttribute('data-class');
+                const type      = editBtn.getAttribute('data-type');
+                const month     = editBtn.getAttribute('data-month');
+                const year      = editBtn.getAttribute('data-year');
+                const amount    = editBtn.getAttribute('data-amount');
+                const fine      = editBtn.getAttribute('data-fine');
+                const discount  = editBtn.getAttribute('data-discount');
+                const net       = editBtn.getAttribute('data-net');
+                const paid      = editBtn.getAttribute('data-paid');
+                const due       = editBtn.getAttribute('data-due');
+                const status    = editBtn.getAttribute('data-status');
 
                 document.getElementById('edit_fee_id').value         = id;
-                document.getElementById('edit_fee_type').value       = type;
+                document.getElementById('edit_fee_class').value      = className;
                 document.getElementById('edit_fee_month').value      = month;
                 document.getElementById('edit_fee_year').value       = year;
+                document.getElementById('edit_fee_amount').value     = amount;
+                document.getElementById('edit_fee_fine').value       = fine;
+                document.getElementById('edit_fee_discount').value   = discount;
                 document.getElementById('edit_net_payable').value    = net;
                 document.getElementById('edit_paid_amount').value    = paid;
                 document.getElementById('edit_due_amount').value     = due;
                 document.getElementById('edit_payment_status').value = status;
 
+                // Load Class-specific Fee Types
+                const $feeTypeSelect = jQuery('#edit_fee_type');
+                $feeTypeSelect.html('<option value=""><?php echo esc_js( __( '-- Loading Categories... --', 'ifsedu-sms' ) ); ?></option>');
+
+                jQuery.ajax({
+                    url: ajaxurl,
+                    type: 'POST',
+                    data: {
+                        action: 'educore_get_fee_types_by_class',
+                        security: '<?php echo esc_js( wp_create_nonce( "educore_fee_nonce" ) ); ?>',
+                        class_name: className
+                    },
+                    success: function(response) {
+                        if (response.success && response.data.length > 0) {
+                            let options = '<option value=""><?php echo esc_js( __( '-- Select Fee Category --', 'ifsedu-sms' ) ); ?></option>';
+                            let matched = false;
+                            response.data.forEach(function(item) {
+                                let isSelected = (item.fee_title === type) ? 'selected' : '';
+                                if (isSelected) matched = true;
+                                options += '<option value="' + item.fee_title + '" data-amount="' + item.amount + '" ' + isSelected + '>' + item.fee_title + ' (৳' + parseFloat(item.amount).toFixed(2) + ')</option>';
+                            });
+                            if (!matched && type) {
+                                options += '<option value="' + type + '" selected>' + type + ' (Custom/Legacy)</option>';
+                            }
+                            $feeTypeSelect.html(options);
+                        } else {
+                            $feeTypeSelect.html('<option value="' + type + '" selected>' + type + '</option>');
+                        }
+                    },
+                    error: function() {
+                        $feeTypeSelect.html('<option value="' + type + '" selected>' + type + '</option>');
+                    }
+                });
+
                 modal.classList.add('is-visible');
+            }
+        });
+
+        // When Fee Type changed in Edit Modal, update Net Payable accordingly
+        jQuery('#edit_fee_type').on('change', function() {
+            const opt = jQuery(this).find(':selected');
+            const newAmt = parseFloat(opt.data('amount'));
+            if (!isNaN(newAmt)) {
+                document.getElementById('edit_fee_amount').value = newAmt.toFixed(2);
+                document.getElementById('edit_net_payable').value = newAmt.toFixed(2);
+                updateModalCalculations();
             }
         });
 
@@ -1042,6 +1128,9 @@ function educore_fees_list_view() {
                 formData.append('fee_type', document.getElementById('edit_fee_type').value);
                 formData.append('fee_month', document.getElementById('edit_fee_month').value);
                 formData.append('fee_year', document.getElementById('edit_fee_year').value);
+                formData.append('amount', document.getElementById('edit_fee_amount').value);
+                formData.append('late_fine', document.getElementById('edit_fee_fine').value);
+                formData.append('discount', document.getElementById('edit_fee_discount').value);
                 formData.append('net_payable', document.getElementById('edit_net_payable').value);
                 formData.append('paid_amount', document.getElementById('edit_paid_amount').value);
                 formData.append('due_amount', document.getElementById('edit_due_amount').value);
@@ -1069,7 +1158,6 @@ function educore_fees_list_view() {
 
                     if (data && data.success) {
                         hideModal();
-                        // Reload with updated query flag to show the updated notice
                         const url = new URL(window.location.href);
                         url.searchParams.set('msg', 'updated');
                         window.location.href = url.toString();

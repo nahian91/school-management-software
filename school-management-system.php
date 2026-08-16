@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: IFSEdu - School Management System
- * Description: Standalone, high-performance management system for Schools featuring student admissions, attendance, fees, exams, and HR.
- * Version:     1.1.0
+ * Description: Standalone, high-performance management system for Schools featuring student admissions, attendance, fees, exams, results, and HR.
+ * Version:     1.2.0
  * Author:      DevNahian
  * Text Domain: ifsedu-sms
  */
@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * 1. Constants & Path Definitions
  */
-define( 'EDUCORE_VERSION', '1.1.0' );
+define( 'EDUCORE_VERSION', '1.2.0' );
 define( 'EDUCORE_PATH', plugin_dir_path( __FILE__ ) );
 define( 'EDUCORE_URL', plugin_dir_url( __FILE__ ) );
 
@@ -46,8 +46,8 @@ final class IFSEdu_School_Management_System {
     private function load_modular_dependencies() {
         $files = array(
             'dashboard', 'students', 'attendance', 'fees', 
-            'exams', 'staff', 'academics', 'communication', 
-            'reports', 'frontend-bridge', 'settings', 'notices', 'accounting'
+            'exams', 'results', 'staff', 'academics', 'communication', 
+            'reports', 'frontend-bridge', 'users', 'settings', 'notices', 'accounting'
         );
 
         foreach ( $files as $file ) {
@@ -96,13 +96,13 @@ final class IFSEdu_School_Management_System {
             return false;
         }
 
-        // Bypassing check if super-admin framework matching found
-        if ( in_array( 'administrator', $current_user->roles, true ) || current_user_can( 'manage_options' ) ) {
+        // Bypassing check if administrator
+        if ( in_array( 'administrator', (array) $current_user->roles, true ) || current_user_can( 'manage_options' ) ) {
             return true;
         }
 
         foreach ( $allowed_roles as $role ) {
-            if ( in_array( $role, $current_user->roles, true ) ) {
+            if ( in_array( $role, (array) $current_user->roles, true ) ) {
                 return true;
             }
         }
@@ -114,324 +114,307 @@ final class IFSEdu_School_Management_System {
      * Styles & Dynamic Assets Loading Processor
      */
     public function enqueue_admin_assets( $hook ) {
-        // Enqueue if it's our top level page or any corresponding dynamic submenus mapped to it
         if ( strpos( $hook, 'school_management_system' ) === false ) {
             return;
         }
 
-        // Stylesheets Registration
         wp_enqueue_style( 'bootstrap', EDUCORE_URL . 'assets/css/bootstrap.min.css', array(), EDUCORE_VERSION );
         wp_enqueue_style( 'datatables', EDUCORE_URL . 'assets/css/jquery.dataTables.min.css', array(), EDUCORE_VERSION );
         wp_enqueue_style( 'main-style', EDUCORE_URL . 'assets/css/style.css', array(), EDUCORE_VERSION );
         wp_enqueue_style( 'educore-admin-style', EDUCORE_URL . 'assets/css/admin-style.css', array(), EDUCORE_VERSION );
 
-        // JavaScript Injections
         wp_enqueue_script( 'jquery' );
         wp_enqueue_script( 'bootstrap', EDUCORE_URL . 'assets/js/bootstrap.bundle.min.js', array( 'jquery' ), EDUCORE_VERSION, true );
         wp_enqueue_script( 'datatables', EDUCORE_URL . 'assets/js/jquery.dataTables.min.js', array( 'jquery' ), EDUCORE_VERSION, true );
         wp_enqueue_script( 'datepicker', EDUCORE_URL . 'assets/js/bootstrap-datepicker.js', array( 'jquery' ), EDUCORE_VERSION, true );
         wp_enqueue_script( 'educore-main', EDUCORE_URL . 'assets/js/main.js', array( 'jquery' ), EDUCORE_VERSION, true );
     }
-/**
- * Global Database Migration & Update Engine (Strict dbDelta Compliant)
- */
-public function execute_database_migration() {
-    global $wpdb;
-    $charset_collate = $wpdb->get_charset_collate();
-    require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
-    // Schema Model 1: Students Base (Expanded for Multi-Step Form)
-    $table_students = $wpdb->prefix . 'sms_students';
-    $sql_students = "CREATE TABLE $table_students (
-        id bigint(20) NOT NULL AUTO_INCREMENT,
-        student_id varchar(50) NOT NULL,
-        full_name varchar(255) NOT NULL,
-        name_bn varchar(255) DEFAULT '' NOT NULL,
-        class_name varchar(50) NOT NULL,
-        section_name varchar(50) DEFAULT '' NOT NULL,
-        roll_no int(11) NOT NULL,
-        admission_date date DEFAULT '1970-01-01' NOT NULL,
-        birth_reg_no varchar(50) DEFAULT '' NOT NULL,
-        dob date DEFAULT '1970-01-01' NOT NULL,
-        birth_place varchar(100) DEFAULT '' NOT NULL,
-        gender varchar(20) DEFAULT 'Male' NOT NULL,
-        blood_group varchar(10) DEFAULT '' NOT NULL,
-        religion varchar(50) DEFAULT '' NOT NULL,
-        nationality varchar(50) DEFAULT 'Bangladeshi' NOT NULL,
-        student_email varchar(100) DEFAULT '' NOT NULL,
-        student_phone varchar(50) DEFAULT '' NOT NULL,
-        quota varchar(50) DEFAULT 'General' NOT NULL,
-        father_name varchar(255) DEFAULT '' NOT NULL,
-        father_name_bn varchar(255) DEFAULT '' NOT NULL,
-        father_nid varchar(50) DEFAULT '' NOT NULL,
-        father_phone varchar(50) DEFAULT '' NOT NULL,
-        father_profession varchar(100) DEFAULT '' NOT NULL,
-        mother_name varchar(255) DEFAULT '' NOT NULL,
-        mother_name_bn varchar(255) DEFAULT '' NOT NULL,
-        mother_nid varchar(50) DEFAULT '' NOT NULL,
-        mother_phone varchar(50) DEFAULT '' NOT NULL,
-        mother_profession varchar(100) DEFAULT '' NOT NULL,
-        guardian_name varchar(255) NOT NULL,
-        guardian_phone varchar(50) NOT NULL,
-        guardian_relation varchar(50) DEFAULT '' NOT NULL,
-        guardian_nid varchar(50) DEFAULT '' NOT NULL,
-        guardian_income varchar(50) DEFAULT '' NOT NULL,
-        prev_school_name varchar(255) DEFAULT '' NOT NULL,
-        prev_eiin varchar(50) DEFAULT '' NOT NULL,
-        prev_class varchar(50) DEFAULT '' NOT NULL,
-        prev_gpa varchar(20) DEFAULT '' NOT NULL,
-        address text NOT NULL,
-        permanent_address text NOT NULL,
-        residential_status varchar(50) DEFAULT '' NOT NULL,
-        co_curricular text NOT NULL,
-        photo_url varchar(255) DEFAULT '' NOT NULL,
-        status varchar(30) DEFAULT 'Active' NOT NULL,
-        PRIMARY KEY  (id),
-        UNIQUE KEY student_id (student_id)
-    ) $charset_collate;";
-    dbDelta( $sql_students );
+    /**
+     * Global Database Migration & Update Engine (Strict dbDelta Compliant)
+     */
+    public function execute_database_migration() {
+        global $wpdb;
+        $charset_collate = $wpdb->get_charset_collate();
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
-    // Schema Model 2: Staff Matrix (Full 36-Column Architecture)
-$table_staff = $wpdb->prefix . 'sms_staff';
-$sql_staff = "CREATE TABLE $table_staff (
+        // Schema Model 1: Students Base (Optimized for WordPress dbDelta)
+$table_students = $wpdb->prefix . 'sms_students';
+$sql_students = "CREATE TABLE $table_students (
     id bigint(20) NOT NULL AUTO_INCREMENT,
-    wp_user_id bigint(20) DEFAULT NULL,
+    student_id varchar(50) NOT NULL,
     full_name varchar(255) NOT NULL,
-    name_bn varchar(255) DEFAULT '' NOT NULL,
-    father_name varchar(255) DEFAULT '' NOT NULL,
-    mother_name varchar(255) DEFAULT '' NOT NULL,
-    designation varchar(100) NOT NULL,
-    staff_type varchar(50) DEFAULT '' NOT NULL,
-    pay_grade varchar(50) DEFAULT '' NOT NULL,
-    index_no varchar(50) DEFAULT '' NOT NULL,
-    nid_no varchar(50) DEFAULT '' NOT NULL,
+    class_name varchar(50) NOT NULL,
+    section_name varchar(50) DEFAULT '' NOT NULL,
+    shift varchar(50) DEFAULT 'No Shift' NOT NULL,
+    roll_no int(11) NOT NULL,
+    admission_date date DEFAULT '1970-01-01' NOT NULL,
+    fee_start_date date DEFAULT NULL,
+    birth_reg_no varchar(50) DEFAULT '' NOT NULL,
     dob date DEFAULT '1970-01-01' NOT NULL,
+    birth_place varchar(100) DEFAULT '' NOT NULL,
     gender varchar(20) DEFAULT 'Male' NOT NULL,
-    phone varchar(50) NOT NULL,
-    whatsapp_no varchar(50) DEFAULT '' NOT NULL,
-    email varchar(100) NOT NULL,
     blood_group varchar(10) DEFAULT '' NOT NULL,
-    quota_type varchar(50) DEFAULT 'General' NOT NULL,
-    joining_date date DEFAULT '1970-01-01' NOT NULL,
-    salary decimal(10,2) DEFAULT '0.00' NOT NULL,
-    subject_expert varchar(255) DEFAULT '' NOT NULL,
-    highest_degree varchar(255) DEFAULT '' NOT NULL,
-    emergency_name varchar(255) DEFAULT '' NOT NULL,
-    emergency_phone varchar(50) DEFAULT '' NOT NULL,
-    emergency_relation varchar(50) DEFAULT '' NOT NULL,
-    bank_name varchar(255) DEFAULT '' NOT NULL,
-    bank_acc_no varchar(100) DEFAULT '' NOT NULL,
-    bank_routing varchar(50) DEFAULT '' NOT NULL,
+    religion varchar(50) DEFAULT 'Islam' NOT NULL,
+    nationality varchar(50) DEFAULT 'Bangladeshi' NOT NULL,
+    student_email varchar(100) DEFAULT '' NOT NULL,
+    student_phone varchar(50) DEFAULT '' NOT NULL,
+    quota varchar(50) DEFAULT 'General' NOT NULL,
+    waiver_staff_id bigint(20) DEFAULT 0 NOT NULL,
+    waiver_percentage decimal(5,2) DEFAULT 0.00 NOT NULL,
+    father_name varchar(255) DEFAULT '' NOT NULL,
+    father_nid varchar(50) DEFAULT '' NOT NULL,
+    father_phone varchar(50) DEFAULT '' NOT NULL,
+    father_profession varchar(100) DEFAULT '' NOT NULL,
+    mother_name varchar(255) DEFAULT '' NOT NULL,
+    mother_nid varchar(50) DEFAULT '' NOT NULL,
+    mother_phone varchar(50) DEFAULT '' NOT NULL,
+    mother_profession varchar(100) DEFAULT '' NOT NULL,
+    guardian_name varchar(255) NOT NULL,
+    guardian_phone varchar(50) NOT NULL,
+    guardian_relation varchar(50) DEFAULT '' NOT NULL,
+    guardian_nid varchar(50) DEFAULT '' NOT NULL,
+    guardian_income varchar(50) DEFAULT '' NOT NULL,
+    prev_school_name varchar(255) DEFAULT '' NOT NULL,
+    prev_eiin varchar(50) DEFAULT '' NOT NULL,
+    prev_class varchar(50) DEFAULT '' NOT NULL,
+    prev_gpa varchar(20) DEFAULT '' NOT NULL,
     address text NOT NULL,
     permanent_address text NOT NULL,
-    linkedin_url varchar(255) DEFAULT '' NOT NULL,
-    facebook_url varchar(255) DEFAULT '' NOT NULL,
-    website_url varchar(255) DEFAULT '' NOT NULL,
-    profile_image varchar(255) DEFAULT '' NOT NULL,
-    order_number int(11) DEFAULT 0 NOT NULL,
+    residential_status varchar(50) DEFAULT 'Non-Residential' NOT NULL,
+    co_curricular text NOT NULL,
+    photo_url text,
     status varchar(30) DEFAULT 'Active' NOT NULL,
-    PRIMARY KEY  (id)
-) $charset_collate;";
-dbDelta( $sql_staff );
-
-    // Schema Model 3: Daily Attendance Logs
-    $table_attendance = $wpdb->prefix . 'sms_attendance';
-    $sql_attendance = "CREATE TABLE $table_attendance (
-        id bigint(20) NOT NULL AUTO_INCREMENT,
-        student_id bigint(20) NOT NULL,
-        attendance_date date NOT NULL,
-        status varchar(20) DEFAULT 'Present' NOT NULL,
-        remarks text NOT NULL,
-        recorded_by bigint(20) NOT NULL,
-        PRIMARY KEY  (id),
-        KEY student_date_idx (student_id, attendance_date)
-    ) $charset_collate;";
-    dbDelta( $sql_attendance );
-
-    // Schema Model: Accountancy Ledger Fees
-$table_fees = $wpdb->prefix . 'sms_fees';
-$sql_fees = "CREATE TABLE $table_fees (
-    id bigint(20) NOT NULL AUTO_INCREMENT,
-    invoice_id varchar(50) NOT NULL,
-    student_id bigint(20) NOT NULL,
-    fee_month varchar(20) NOT NULL,
-    fee_year varchar(10) NOT NULL,
-    fee_type varchar(50) DEFAULT 'Tuition Fee' NOT NULL,
-    amount decimal(10,2) DEFAULT '0.00' NOT NULL,
-    late_fine decimal(10,2) DEFAULT '0.00' NOT NULL,
-    discount decimal(10,2) DEFAULT '0.00' NOT NULL,
-    net_payable decimal(10,2) DEFAULT '0.00' NOT NULL,
-    paid_amount decimal(10,2) DEFAULT '0.00' NOT NULL,
-    due_amount decimal(10,2) DEFAULT '0.00' NOT NULL,
-    payment_status varchar(20) DEFAULT 'Unpaid' NOT NULL,
-    payment_method varchar(30) DEFAULT 'Cash' NOT NULL,
-    transaction_id varchar(100) DEFAULT '' NOT NULL,
-    remarks text,
-    payment_date datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    collected_by bigint(20) NOT NULL,
+    created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
     PRIMARY KEY  (id),
-    UNIQUE KEY invoice_id (invoice_id),
-    KEY student_id (student_id),
-    KEY payment_status (payment_status),
-    KEY payment_date (payment_date)
+    UNIQUE KEY student_id (student_id),
+    KEY class_section_idx (class_name, section_name),
+    KEY shift_idx (shift),
+    KEY waiver_staff_idx (waiver_staff_id),
+    KEY status_idx (status)
 ) $charset_collate;";
+dbDelta( $sql_students );
 
-require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-dbDelta( $sql_fees );
+        // Schema Model 2: Staff Matrix
+        $table_staff = $wpdb->prefix . 'sms_staff';
+        $sql_staff = "CREATE TABLE $table_staff (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            wp_user_id bigint(20) DEFAULT NULL,
+            full_name varchar(255) NOT NULL,
+            name_bn varchar(255) DEFAULT '' NOT NULL,
+            father_name varchar(255) DEFAULT '' NOT NULL,
+            mother_name varchar(255) DEFAULT '' NOT NULL,
+            designation varchar(100) NOT NULL,
+            staff_type varchar(50) DEFAULT '' NOT NULL,
+            pay_grade varchar(50) DEFAULT '' NOT NULL,
+            index_no varchar(50) DEFAULT '' NOT NULL,
+            nid_no varchar(50) DEFAULT '' NOT NULL,
+            dob date DEFAULT '1970-01-01' NOT NULL,
+            gender varchar(20) DEFAULT 'Male' NOT NULL,
+            phone varchar(50) NOT NULL,
+            whatsapp_no varchar(50) DEFAULT '' NOT NULL,
+            email varchar(100) NOT NULL,
+            blood_group varchar(10) DEFAULT '' NOT NULL,
+            quota_type varchar(50) DEFAULT 'General' NOT NULL,
+            joining_date date DEFAULT '1970-01-01' NOT NULL,
+            salary decimal(10,2) DEFAULT '0.00' NOT NULL,
+            subject_expert varchar(255) DEFAULT '' NOT NULL,
+            highest_degree varchar(255) DEFAULT '' NOT NULL,
+            emergency_name varchar(255) DEFAULT '' NOT NULL,
+            emergency_phone varchar(50) DEFAULT '' NOT NULL,
+            emergency_relation varchar(50) DEFAULT '' NOT NULL,
+            bank_name varchar(255) DEFAULT '' NOT NULL,
+            bank_acc_no varchar(100) DEFAULT '' NOT NULL,
+            bank_routing varchar(50) DEFAULT '' NOT NULL,
+            address text NOT NULL,
+            permanent_address text NOT NULL,
+            linkedin_url varchar(255) DEFAULT '' NOT NULL,
+            facebook_url varchar(255) DEFAULT '' NOT NULL,
+            website_url varchar(255) DEFAULT '' NOT NULL,
+            profile_image varchar(255) DEFAULT '' NOT NULL,
+            order_number int(11) DEFAULT 0 NOT NULL,
+            status varchar(30) DEFAULT 'Active' NOT NULL,
+            PRIMARY KEY  (id),
+            KEY status_idx (status),
+            KEY wp_user_idx (wp_user_id)
+        ) $charset_collate;";
+        dbDelta( $sql_staff );
 
-    // Schema Model 5: Examination Setup Scheme
-    $table_exams = $wpdb->prefix . 'sms_exams';
-    $sql_exams = "CREATE TABLE $table_exams (
-        id bigint(20) NOT NULL AUTO_INCREMENT,
-        exam_name varchar(255) NOT NULL,
-        class_name varchar(50) NOT NULL,
-        start_date date NOT NULL,
-        end_date date NOT NULL,
-        status varchar(30) DEFAULT 'Upcoming' NOT NULL,
-        PRIMARY KEY  (id)
-    ) $charset_collate;";
-    dbDelta( $sql_exams );
+        // Schema Model 3: Daily Attendance Logs
+        $table_attendance = $wpdb->prefix . 'sms_attendance';
+        $sql_attendance = "CREATE TABLE $table_attendance (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            student_id bigint(20) NOT NULL,
+            attendance_date date NOT NULL,
+            status varchar(20) DEFAULT 'Present' NOT NULL,
+            remarks text NOT NULL,
+            recorded_by bigint(20) NOT NULL,
+            PRIMARY KEY  (id),
+            KEY student_date_idx (student_id, attendance_date),
+            KEY date_status_idx (attendance_date, status)
+        ) $charset_collate;";
+        dbDelta( $sql_attendance );
 
-    // Schema Model 6: Academic Marksheets Archive
-    $table_results = $wpdb->prefix . 'sms_results';
-    $sql_results = "CREATE TABLE $table_results (
-        id bigint(20) NOT NULL AUTO_INCREMENT,
-        exam_id bigint(20) NOT NULL,
-        student_id bigint(20) NOT NULL,
-        subject_name varchar(100) NOT NULL,
-        total_marks decimal(5,2) DEFAULT '100.00' NOT NULL,
-        obtained_marks decimal(5,2) DEFAULT '0.00' NOT NULL,
-        grade varchar(10) DEFAULT '' NOT NULL,
-        gpa decimal(4,2) DEFAULT '0.00' NOT NULL,
-        evaluated_by bigint(20) NOT NULL,
-        PRIMARY KEY  (id),
-        KEY exam_student_idx (exam_id, student_id)
-    ) $charset_collate;";
-    dbDelta( $sql_results );
+        // Schema Model 4: Accountancy Ledger Fees
+        $table_fees = $wpdb->prefix . 'sms_fees';
+        $sql_fees = "CREATE TABLE $table_fees (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            invoice_id varchar(50) NOT NULL,
+            student_id bigint(20) NOT NULL,
+            fee_month varchar(20) NOT NULL,
+            fee_year varchar(10) NOT NULL,
+            fee_type varchar(50) DEFAULT 'Tuition Fee' NOT NULL,
+            amount decimal(10,2) DEFAULT '0.00' NOT NULL,
+            late_fine decimal(10,2) DEFAULT '0.00' NOT NULL,
+            discount decimal(10,2) DEFAULT '0.00' NOT NULL,
+            net_payable decimal(10,2) DEFAULT '0.00' NOT NULL,
+            paid_amount decimal(10,2) DEFAULT '0.00' NOT NULL,
+            due_amount decimal(10,2) DEFAULT '0.00' NOT NULL,
+            payment_status varchar(20) DEFAULT 'Unpaid' NOT NULL,
+            payment_method varchar(30) DEFAULT 'Cash' NOT NULL,
+            transaction_id varchar(100) DEFAULT '' NOT NULL,
+            remarks text,
+            payment_date datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+            collected_by bigint(20) NOT NULL,
+            PRIMARY KEY  (id),
+            UNIQUE KEY invoice_id (invoice_id),
+            KEY student_id (student_id),
+            KEY payment_status (payment_status),
+            KEY payment_date (payment_date)
+        ) $charset_collate;";
+        dbDelta( $sql_fees );
 
-    // Schema Model 7: Security Audit Core Ledger
-    $table_audit = $wpdb->prefix . 'sms_audit_logs';
-    $sql_audit = "CREATE TABLE $table_audit (
-        id bigint(20) NOT NULL AUTO_INCREMENT,
-        user_id bigint(20) NOT NULL,
-        user_role varchar(50) NOT NULL,
-        action_performed text NOT NULL,
-        ip_address varchar(45) NOT NULL,
-        timestamp datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
-        PRIMARY KEY  (id)
-    ) $charset_collate;";
-    dbDelta( $sql_audit );
+        // Schema Model 5: Examination Setup Scheme
+        $table_exams = $wpdb->prefix . 'sms_exams';
+        $sql_exams = "CREATE TABLE $table_exams (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            exam_name varchar(255) NOT NULL,
+            class_name varchar(50) NOT NULL,
+            start_date date NOT NULL,
+            end_date date NOT NULL,
+            status varchar(30) DEFAULT 'Upcoming' NOT NULL,
+            PRIMARY KEY  (id)
+        ) $charset_collate;";
+        dbDelta( $sql_exams );
 
-    // Schema Model 8: Academic Units Architecture
-    $table_academic_units = $wpdb->prefix . 'sms_academic_units';
-    $sql_academic_units = "CREATE TABLE $table_academic_units (
-        id bigint(20) NOT NULL AUTO_INCREMENT,
-        unit_type varchar(50) NOT NULL,
-        class_name varchar(100) NOT NULL,
-        section_name varchar(100) DEFAULT '' NOT NULL,
-        dept_name varchar(100) DEFAULT '' NOT NULL,
-        PRIMARY KEY  (id)
-    ) $charset_collate;";
-    dbDelta( $sql_academic_units );
+        // Schema Model 6: Academic Marksheets Archive
+        $table_results = $wpdb->prefix . 'sms_results';
+        $sql_results = "CREATE TABLE $table_results (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            exam_id bigint(20) NOT NULL,
+            student_id bigint(20) NOT NULL,
+            subject_name varchar(100) NOT NULL,
+            total_marks decimal(5,2) DEFAULT '100.00' NOT NULL,
+            obtained_marks decimal(5,2) DEFAULT '0.00' NOT NULL,
+            grade varchar(10) DEFAULT '' NOT NULL,
+            gpa decimal(4,2) DEFAULT '0.00' NOT NULL,
+            evaluated_by bigint(20) NOT NULL,
+            PRIMARY KEY  (id),
+            KEY exam_student_idx (exam_id, student_id)
+        ) $charset_collate;";
+        dbDelta( $sql_results );
 
-    // Schema Model 9: Academic Subjects
-    $table_subjects = $wpdb->prefix . 'sms_subjects';
-    $sql_subjects = "CREATE TABLE $table_subjects (
-        id bigint(20) NOT NULL AUTO_INCREMENT,
-        class_id bigint(20) NOT NULL,
-        subject_name varchar(150) NOT NULL,
-        subject_code varchar(50) DEFAULT '' NOT NULL,
-        subject_type varchar(20) DEFAULT 'Mandatory' NOT NULL,
-        PRIMARY KEY  (id),
-        KEY class_id_idx (class_id)
-    ) $charset_collate;";
-    dbDelta( $sql_subjects );
+        // Schema Model 7: Security Audit Core Ledger
+        $table_audit = $wpdb->prefix . 'sms_audit_logs';
+        $sql_audit = "CREATE TABLE $table_audit (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            user_id bigint(20) NOT NULL,
+            user_role varchar(50) NOT NULL,
+            action_performed text NOT NULL,
+            ip_address varchar(45) NOT NULL,
+            timestamp datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+            PRIMARY KEY  (id),
+            KEY user_id_idx (user_id)
+        ) $charset_collate;";
+        dbDelta( $sql_audit );
 
-    // Schema Model 10: Class Routine Management
-    $table_routine = $wpdb->prefix . 'sms_routine';
-    $sql_routine = "CREATE TABLE $table_routine (
-        id bigint(20) NOT NULL AUTO_INCREMENT,
-        class_id bigint(20) NOT NULL,
-        subject_id bigint(20) NOT NULL,
-        day_name varchar(20) NOT NULL,
-        start_time time NOT NULL,
-        end_time time NOT NULL,
-        room_no varchar(20) DEFAULT '' NOT NULL,
-        PRIMARY KEY  (id),
-        KEY class_id_idx (class_id),
-        KEY subject_id_idx (subject_id)
-    ) $charset_collate;";
-    dbDelta( $sql_routine );
+        // Schema Model 8: Academic Units
+        $table_academic_units = $wpdb->prefix . 'sms_academic_units';
+        $sql_academic_units = "CREATE TABLE $table_academic_units (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            unit_type varchar(50) NOT NULL,
+            class_name varchar(100) NOT NULL,
+            section_name varchar(100) DEFAULT '' NOT NULL,
+            dept_name varchar(100) DEFAULT '' NOT NULL,
+            PRIMARY KEY  (id)
+        ) $charset_collate;";
+        dbDelta( $sql_academic_units );
 
-    // Schema Model 11: Notice & Events Table
-    $table_notices = $wpdb->prefix . 'sms_notices';
-    $sql_notices = "CREATE TABLE $table_notices (
-        id bigint(20) NOT NULL AUTO_INCREMENT,
-        title varchar(255) NOT NULL,
-        notice_type varchar(50) DEFAULT 'Notice' NOT NULL,
-        priority varchar(20) DEFAULT 'Normal' NOT NULL,
-        target_audience varchar(50) DEFAULT 'All' NOT NULL,
-        description text NOT NULL,
-        event_date date DEFAULT NULL,
-        attachment_url varchar(255) DEFAULT '' NOT NULL,
-        featured_image varchar(255) DEFAULT '' NOT NULL,
-        created_by bigint(20) NOT NULL,
-        created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
-        status varchar(20) DEFAULT 'Published' NOT NULL,
-        PRIMARY KEY  (id)
-    ) $charset_collate;";
-    dbDelta( $sql_notices );
+        // Schema Model 9: Academic Subjects (BD NCTB Evaluation Standards Compliant)
+$table_subjects = $wpdb->prefix . 'sms_subjects';
+$sql_subjects = "CREATE TABLE $table_subjects (
+    id bigint(20) NOT NULL AUTO_INCREMENT,
+    class_id bigint(20) NOT NULL,
+    subject_name varchar(150) NOT NULL,
+    subject_code varchar(50) DEFAULT '' NOT NULL,
+    subject_type varchar(20) DEFAULT 'Mandatory' NOT NULL,
+    total_marks decimal(5,2) DEFAULT '100.00' NOT NULL,
+    pass_marks decimal(5,2) DEFAULT '33.00' NOT NULL,
+    cq_marks decimal(5,2) DEFAULT '70.00' NOT NULL,
+    cq_pass decimal(5,2) DEFAULT '23.00' NOT NULL,
+    mcq_marks decimal(5,2) DEFAULT '30.00' NOT NULL,
+    mcq_pass decimal(5,2) DEFAULT '10.00' NOT NULL,
+    practical_marks decimal(5,2) DEFAULT '0.00' NOT NULL,
+    practical_pass decimal(5,2) DEFAULT '0.00' NOT NULL,
+    PRIMARY KEY  (id),
+    KEY class_id_idx (class_id)
+) $charset_collate;";
+dbDelta( $sql_subjects );
 
-    // Schema Model 12: Photo Albums Table
-    $table_albums = $wpdb->prefix . 'sms_gallery_albums';
-    $sql_albums = "CREATE TABLE $table_albums (
-        id bigint(20) NOT NULL AUTO_INCREMENT,
-        title varchar(255) NOT NULL,
-        category varchar(100) DEFAULT 'General' NOT NULL,
-        event_date date DEFAULT NULL,
-        description text NOT NULL,
-        cover_image varchar(255) DEFAULT '' NOT NULL,
-        status varchar(20) DEFAULT 'Published' NOT NULL,
-        created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
-        PRIMARY KEY  (id)
-    ) $charset_collate;";
-    dbDelta( $sql_albums );
+        // Schema Model 10: Class Routine Management
+        $table_routine = $wpdb->prefix . 'sms_routine';
+        $sql_routine = "CREATE TABLE $table_routine (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            class_id bigint(20) NOT NULL,
+            subject_id bigint(20) NOT NULL,
+            day_name varchar(20) NOT NULL,
+            start_time time NOT NULL,
+            end_time time NOT NULL,
+            room_no varchar(20) DEFAULT '' NOT NULL,
+            PRIMARY KEY  (id),
+            KEY class_id_idx (class_id),
+            KEY subject_id_idx (subject_id)
+        ) $charset_collate;";
+        dbDelta( $sql_routine );
 
-    // Schema Model 13: Album Photos Table
-    $table_photos = $wpdb->prefix . 'sms_gallery_photos';
-    $sql_photos = "CREATE TABLE $table_photos (
-        id bigint(20) NOT NULL AUTO_INCREMENT,
-        album_id bigint(20) NOT NULL,
-        image_url varchar(255) NOT NULL,
-        caption varchar(255) DEFAULT '' NOT NULL,
-        created_at datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
-        PRIMARY KEY  (id),
-        KEY album_id_idx (album_id)
-    ) $charset_collate;";
-    dbDelta( $sql_photos );
+        // Schema Model 11: Teacher Subject Assignment Matrix
+        $table_teacher_subjects = $wpdb->prefix . 'sms_teacher_subjects';
+        $sql_teacher_subjects = "CREATE TABLE $table_teacher_subjects (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            teacher_id bigint(20) NOT NULL,
+            subject_id bigint(20) NOT NULL,
+            class_id bigint(20) NOT NULL,
+            assigned_date datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+            PRIMARY KEY (id),
+            KEY teacher_idx (teacher_id),
+            KEY subject_idx (subject_id),
+            KEY class_idx (class_id)
+        ) $charset_collate;";
+        dbDelta( $sql_teacher_subjects );
 
-    // Schema Model 20: Institutional General Accounting Ledger
-    $table_accounting = $wpdb->prefix . 'sms_accounting';
-    $sql_accounting = "CREATE TABLE $table_accounting (
-        id bigint(20) NOT NULL AUTO_INCREMENT,
-        voucher_no varchar(50) NOT NULL,
-        entry_type varchar(20) DEFAULT 'Income' NOT NULL,
-        category_name varchar(100) NOT NULL,
-        title varchar(255) NOT NULL,
-        amount decimal(10,2) DEFAULT '0.00' NOT NULL,
-        payment_method varchar(50) DEFAULT 'Cash' NOT NULL,
-        entry_date date NOT NULL,
-        note text NOT NULL,
-        created_by bigint(20) NOT NULL,
-        PRIMARY KEY  (id),
-        KEY entry_type_date_idx (entry_type, entry_date),
-        KEY entry_date_idx (entry_date)
-    ) $charset_collate;";
-    dbDelta( $sql_accounting );
+        // Schema Model 20: General Accounting Ledger
+        $table_accounting = $wpdb->prefix . 'sms_accounting';
+        $sql_accounting = "CREATE TABLE $table_accounting (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            voucher_no varchar(50) NOT NULL,
+            entry_type varchar(20) DEFAULT 'Income' NOT NULL,
+            category_name varchar(100) NOT NULL,
+            title varchar(255) NOT NULL,
+            party_name varchar(150) DEFAULT '' NOT NULL,
+            amount decimal(10,2) DEFAULT '0.00' NOT NULL,
+            payment_method varchar(50) DEFAULT 'Cash' NOT NULL,
+            entry_date date NOT NULL,
+            note text NOT NULL,
+            attachment_url text,
+            created_by bigint(20) NOT NULL,
+            PRIMARY KEY  (id),
+            KEY entry_type_date_idx (entry_type, entry_date),
+            KEY entry_date_idx (entry_date)
+        ) $charset_collate;";
+        dbDelta( $sql_accounting );
 
-    // Update Version Flag
-    update_option( 'educore_db_version', '1.0.0' );
-}
+        update_option( 'educore_db_version', EDUCORE_VERSION );
+    }
 
     /**
      * Security Action & Event Logging Engine
@@ -440,7 +423,7 @@ dbDelta( $sql_fees );
         global $wpdb;
         $current_user = wp_get_current_user();
         $user_id   = $current_user->exists() ? $current_user->ID : 0;
-        $user_role = $current_user->exists() ? implode( ', ', $current_user->roles ) : 'guest';
+        $user_role = $current_user->exists() ? implode( ', ', (array) $current_user->roles ) : 'guest';
         
         $ip_address = '0.0.0.0';
         if ( ! empty( $_SERVER['REMOTE_ADDR'] ) ) {
@@ -466,7 +449,7 @@ dbDelta( $sql_fees );
     /**
      * Data map engine providing uniform data arrays for both sidebars and WP hooks
      */
-private function get_tabs_config() {
+    private function get_tabs_config() {
         return array(
             'dashboard' => array(
                 'label' => __( 'Dashboard', 'ifsedu-sms' ),
@@ -489,13 +472,18 @@ private function get_tabs_config() {
                 'roles' => array( 'administrator', 'accountant' )
             ),
             'accounting' => array(
-                'label' => __( 'Accounting & Income', 'ifsedu-sms' ),
+                'label' => __( 'Accounting & Ledger', 'ifsedu-sms' ),
                 'svg'   => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M64 32C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64H448c35.3 0 64-28.7 64-64V96c0-35.3-28.7-64-64-64H64zM336 96c17.7 0 32 14.3 32 32s-14.3 32-32 32s-32-14.3-32-32s14.3-32 32-32zm0 128c17.7 0 32 14.3 32 32s-14.3 32-32 32s-32-14.3-32-32s14.3-32 32-32zM128 288h96c13.3 0 24 10.7 24 24s-10.7 24-24 24H128c-13.3 0-24-10.7-24-24s10.7-24 24-24zm0-96h96c13.3 0 24 10.7 24 24s-10.7 24-24 24H128c-13.3 0-24-10.7-24-24s10.7-24 24-24zm0-96h96c13.3 0 24 10.7 24 24s-10.7 24-24 24H128c-13.3 0-24-10.7-24-24s10.7-24 24-24z"/></svg>',
                 'roles' => array( 'administrator', 'accountant' )
             ),
             'exams' => array(
-                'label' => __( 'Exams & Results', 'ifsedu-sms' ),
+                'label' => __( 'Exams Setup', 'ifsedu-sms' ),
                 'svg'   => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M152.1 38.2c9.9 8.9 10.7 24 1.8 33.9l-72 80c-4.8 5.3-11.2 8.1-18.1 7.8s-13.1-3.6-17.5-9L14.4 115.1c-8.2-10-6.8-24.8 3.2-33s24.8-6.8 33 3.2l16 19.5 51.5-57.3c8.9-9.9 24-10.7 33.9-1.8zM416 128H256c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32zM152.1 198.2c9.9 8.9 10.7 24 1.8 33.9l-72 80c-4.8 5.3-11.2 8.1-18.1 7.8s-13.1-3.6-17.5-9L14.4 275.1c-8.2-10-6.8-24.8 3.2-33s24.8-6.8 33 3.2l16 19.5 51.5-57.3c8.9-9.9 24-10.7 33.9-1.8zM416 288H256c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32zM152.1 358.2c9.9 8.9 10.7 24 1.8 33.9l-72 80c-4.8 5.3-11.2 8.1-18.1 7.8s-13.1-3.6-17.5-9L14.4 435.1c-8.2-10-6.8-24.8 3.2-33s24.8-6.8 33 3.2l16 19.5 51.5-57.3c8.9-9.9 24-10.7 33.9-1.8zM416 448H256c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32z"/></svg>',
+                'roles' => array( 'administrator', 'teacher' )
+            ),
+            'results' => array(
+                'label' => __( 'Results & Marks', 'ifsedu-sms' ),
+                'svg'   => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><path d="M400 0H176c-26.5 0-48 21.5-48 48v416c0 26.5 21.5 48 48 48h224c26.5 0 48-21.5 48-48V48c0-26.5-21.5-48-48-48zm-16 416H192v-32h192v32zm0-96H192v-32h192v32zm0-96H192v-32h192v32zm0-96H192V96h192v32zM547.6 156.4L502.2 111c-12.5-12.5-32.8-12.5-45.3 0l-26.9 26.9 71.9 71.9 26.9-26.9c12.5-12.5 12.5-32.8-1.2-46.5zM28.4 156.4l45.4-45.4c12.5-12.5 32.8-12.5 45.3 0l26.9 26.9-71.9 71.9-26.9-26.9c-12.5-12.5-12.5-32.8 1.2-46.5z"/></svg>',
                 'roles' => array( 'administrator', 'teacher' )
             ),
             'staff' => array(
@@ -508,15 +496,20 @@ private function get_tabs_config() {
                 'svg'   => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M96 0C43 0 0 43 0 96V416c0 53 43 96 96 96H384h32c17.7 0 32-14.3 32-32s-14.3-32-32-32V384c17.7 0 32-14.3 32-32V32c0-17.7-14.3-32-32-32H384 96zm0 384H352v64H96c-17.7 0-32-14.3-32-32s14.3-32 32-32zm32-240c0-8.8 7.2-16 16-16H336c8.8 0 16 7.2 16 16s-7.2 16-16 16H144c-8.8 0-16-7.2-16-16zm16 48H336c8.8 0 16 7.2 16 16s-7.2 16-16 16H144c-8.8 0-16-7.2-16-16s7.2-16 16-16z"/></svg>',
                 'roles' => array( 'administrator' )
             ),
-            'notice' => array(
+            'notices' => array(
                 'label' => __( 'Notices & Events', 'ifsedu-sms' ),
                 'svg'   => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M160 368c26.5 0 48 21.5 48 48v16l72.5-54.4c8.3-6.2 18.4-9.6 28.8-9.6H448c8.8 0 16-7.2 16-16V64c0-8.8-7.2-16-16-16H64c-8.8 0-16 7.2-16 16V352c0 8.8 7.2 16 16 16h96zm48 124l-.2 .2-5.1 3.8-17.1 12.8c-4.8 3.6-11.3 4.2-16.8 1.5s-8.8-8.2-8.8-14.3V474.7v-4.5V416H160c-53 0-96-43-96-96V64C64 11 107-32 160-32H448c53 0 96 43 96 96V352c0 53-43 96-96 96H309.3L208 504z"/></svg>',
-                'roles' => array( 'administrator' )
+                'roles' => array( 'administrator', 'teacher', 'accountant' )
             ),
             'reports' => array(
                 'label' => __( 'Reports', 'ifsedu-sms' ),
                 'svg'   => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><path d="M336 0H48C21.5 0 0 21.5 0 48v416c0 26.5 21.5 48 48 48h288c26.5 0 48-21.5 48-48V48c0-26.5-21.5-48-48-48zM144 432H96v-48h48v48zm0-96H96v-48h48v48zm0-96H96v-48h48v48zm144 192H176v-48h112v48zm0-96H176v-48h112v48zm0-96H176v-48h112v48zm0-112H96V80h192v48z"/></svg>',
-                'roles' => array( 'administrator', 'accountant' )
+                'roles' => array( 'administrator', 'teacher', 'accountant' )
+            ),
+            'users' => array(
+                'label' => __( 'Users & Roles', 'ifsedu-sms' ),
+                'svg'   => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><path d="M144 0a80 80 0 1 1 0 160A80 80 0 1 1 144 0zM512 0a80 80 0 1 1 0 160A80 80 0 1 1 512 0zM0 298.7C0 239.8 47.8 192 106.7 192h74.7c58.9 0 106.7 47.8 106.7 106.7V352H0v-53.3zM352 352v-53.3c0-58.9 47.8-106.7 106.7-106.7h74.7c58.9 0 106.7 47.8 106.7 106.7V352H352zM320 256a64 64 0 1 0 0-128 64 64 0 1 0 0 128zm-96 160c0-35.3 28.7-64 64-64h64c35.3 0 64 28.7 64 64v32H224v-32z"/></svg>',
+                'roles' => array( 'administrator' )
             ),
             'settings' => array(
                 'label' => __( 'Settings', 'ifsedu-sms' ),
@@ -535,7 +528,6 @@ private function get_tabs_config() {
      * Mount Core Dashboard Admin Navigation Routing Nodes
      */
     public function mount_core_erp_menu() {
-        // Main ERP Dashboard entry point
         add_menu_page(
             __( 'EduCore - School Management System', 'ifsedu-sms' ),
             __( 'School ERP', 'ifsedu-sms' ),
@@ -548,16 +540,13 @@ private function get_tabs_config() {
 
         $tabs = $this->get_tabs_config();
 
-        // Dynamically append sub-menus under our core tree to sync WP admin nodes natively
         foreach ( $tabs as $slug => $config ) {
-            // Skip logout action link as a standalone physical submenu framework layout page
             if ( 'logout' === $slug ) {
                 continue;
             }
 
-            // Enforce custom internal capability filter based on configurations
             $cap = 'read';
-            if ( in_array( 'administrator', $config['roles'], true ) ) {
+            if ( in_array( 'administrator', (array) $config['roles'], true ) ) {
                 $cap = 'manage_options';
             }
 
@@ -573,7 +562,7 @@ private function get_tabs_config() {
     }
 
     /**
-     * Component Render Router Module Interface
+     * Component Render Router Module Interface with Sidebar Toggle
      */
     public function render_dynamic_router_interface() {
         $all_tabs = $this->get_tabs_config();
@@ -584,13 +573,12 @@ private function get_tabs_config() {
         }
 
         if ( ! self::has_access( $all_tabs[ $active_tab ]['roles'] ) ) {
-            echo '<div class="notice notice-error"><p>' . esc_html__( 'Access Denied: You do not possess the required privilege level for this module.', 'ifsedu-sms' ) . '</p></div>';
+            echo '<div class="notice notice-error" style="margin:20px 20px 20px 0;"><p>' . esc_html__( 'Access Denied: You do not possess the required privilege level for this module.', 'ifsedu-sms' ) . '</p></div>';
             return;
         }
 
-        $is_print_mode = ( isset( $_GET['action'] ) && 'print' === $_GET['action'] );
+        $is_print_mode = ( isset( $_GET['action'] ) && 'print' === $_GET['action'] ) || ( isset( $_GET['sub'] ) && in_array( $_GET['sub'], array( 'print', 'id_card', 'admit_card' ), true ) && isset( $_GET['print_mode'] ) );
 
-        // Pull contextual user configurations
         global $wpdb;
         $user_id       = get_current_user_id();
         $display_name  = '';
@@ -609,50 +597,39 @@ private function get_tabs_config() {
             $display_name = $current_user->display_name ? $current_user->display_name : __( 'Staff Member', 'ifsedu-sms' );
         }
         if ( empty( $designation ) ) {
-            $designation = __( 'School Faculty', 'ifsedu-sms' );
+            $designation = __( 'School Administrator', 'ifsedu-sms' );
         }
         ?>
 
         <div id="educore-wrapper" class="school-management-system <?php echo $is_print_mode ? 'educore-print' : ''; ?>">
             
             <?php if ( ! $is_print_mode ) : ?>
-                <div class="educore-sidebar-container">
+                <!-- Collapsible Sidebar Container -->
+                <aside class="educore-sidebar-container" id="educoreSidebar">
                     
+                    <!-- Pinned Profile Card with Toggle Button -->
                     <div class="educore-author-profile">
                         <div class="profile-avatar">
-    <?php 
-    // যদি ইউজারের কাস্টম ছবি থাকে, তবে সেটি দেখাবে
-    if ( ! empty( $custom_avatar ) ) {
-        echo '<img src="' . esc_url( $custom_avatar ) . '" alt="' . esc_attr( $display_name ) . '" width="64" height="64" style="border-radius: 50%; object-fit: cover; border: 3px solid #006a4e;" />';
-    } else {
-        // কাস্টম ছবি না থাকলে প্লাগিন ফোল্ডার থেকে ডিফল্ট ছবি লোড হবে
-        $default_avatar_url = EDUCORE_URL . 'assets/img/logo.png'; 
-        echo '<img src="' . esc_url( $default_avatar_url ) . '" alt="' . esc_attr( $display_name ) . '" width="64" height="64" style="border-radius: 50%; object-fit: cover; border: 3px solid #006a4e;" />'; 
-    }
-    ?>
-</div>
-                        <?php
-if ( is_user_logged_in() ) : 
-    $current_user = wp_get_current_user();
-    
-    // Resolve Display Name (Falls back to display_name or user_login)
-    $display_name = ! empty( $current_user->display_name ) ? $current_user->display_name : $current_user->user_login;
-    
-    // Resolve Designation / Role
-    // Checks custom user meta 'designation' first, otherwise grabs the user's primary WP Role
-    $designation = get_user_meta( $current_user->ID, 'designation', true );
-    
-    if ( empty( $designation ) && ! empty( $current_user->roles ) ) {
-        $designation = ucfirst( $current_user->roles[0] );
-    }
-    ?>
-    <div class="profile-meta">
-        <h4 class="profile-name"><?php echo esc_html( $display_name ); ?></h4>
-        <span class="profile-designation"><?php echo esc_html( $designation ); ?></span>
-    </div>
-<?php endif; ?>
+                            <?php 
+                            if ( ! empty( $custom_avatar ) ) {
+                                echo '<img src="' . esc_url( $custom_avatar ) . '" alt="' . esc_attr( $display_name ) . '" />';
+                            } else {
+                                $default_avatar_url = EDUCORE_URL . 'assets/img/logo.png'; 
+                                echo '<img src="' . esc_url( $default_avatar_url ) . '" alt="' . esc_attr( $display_name ) . '" />'; 
+                            }
+                            ?>
+                        </div>
+                        <div class="profile-meta">
+                            <h4 class="profile-name" title="<?php echo esc_attr( $display_name ); ?>"><?php echo esc_html( $display_name ); ?></h4>
+                            <span class="profile-designation"><?php echo esc_html( $designation ); ?></span>
+                        </div>
+                        <!-- Collapse Trigger Button -->
+                        <button type="button" class="educore-sidebar-toggle-btn" id="educoreToggleSidebar" title="<?php esc_attr_e( 'Toggle Sidebar Width', 'ifsedu-sms' ); ?>">
+                            <span class="dashicons dashicons-menu-alt3"></span>
+                        </button>
                     </div>
 
+                    <!-- Scrollable Navigation Tabs -->
                     <ul class="educore-left-tabs">
                         <?php 
                         foreach ( $all_tabs as $slug => $config ) : 
@@ -663,275 +640,274 @@ if ( is_user_logged_in() ) :
                             $target_url   = ( 'logout' === $slug ) ? wp_logout_url( admin_url( 'admin.php?page=school_management_system' ) ) : admin_url( 'admin.php?page=school_management_system&tab=' . $slug );
                             ?>
                             <li class="<?php echo esc_attr( 'tab-' . $slug ); ?>">
-                                <a class="<?php echo esc_attr( $active_class ); ?>" href="<?php echo esc_url( $target_url ); ?>">
-                                    <?php echo $config['svg']; // Escaping skipped for trustful core localized SVG vectors ?>
-                                    <span><?php echo esc_html( $config['label'] ); ?></span>
+                                <a class="<?php echo esc_attr( $active_class ); ?>" href="<?php echo esc_url( $target_url ); ?>" title="<?php echo esc_attr( $config['label'] ); ?>">
+                                    <?php echo $config['svg']; ?>
+                                    <span class="educore-tab-label"><?php echo esc_html( $config['label'] ); ?></span>
                                 </a>
                             </li>
                         <?php endforeach; ?>
                     </ul>
-                </div>
+                </aside>
             <?php endif; ?>
 
-            <div class="educore-right-box">
+            <!-- Main Interactive Component Workspace -->
+            <main class="educore-right-box">
                 <?php
-                // Dynamic Component Controller Trigger
                 $callback = 'educore_' . $active_tab . '_tab';
                 if ( function_exists( $callback ) ) {
                     call_user_func( $callback );
+                } else {
+                    $alt_callback = 'educore_' . $active_tab . '_view';
+                    if ( function_exists( $alt_callback ) ) {
+                        call_user_func( $alt_callback );
+                    }
                 }
                 ?>
-            </div>
+            </main>
         </div>
+
+        <!-- Sidebar Collapse & Retention State Script -->
+        <script type="text/javascript">
+        document.addEventListener('DOMContentLoaded', function() {
+            const sidebar = document.getElementById('educoreSidebar');
+            const toggleBtn = document.getElementById('educoreToggleSidebar');
+            
+            if (sidebar && toggleBtn) {
+                if (localStorage.getItem('educore_sidebar_collapsed') === 'true') {
+                    sidebar.classList.add('collapsed');
+                }
+
+                toggleBtn.addEventListener('click', function() {
+                    sidebar.classList.toggle('collapsed');
+                    localStorage.setItem('educore_sidebar_collapsed', sidebar.classList.contains('collapsed'));
+                });
+            }
+        });
+        </script>
         <?php
     }
 
     /**
-     * Dashboard Shell Custom Interceptor Injection Setup
+     * Dashboard Shell Custom Layout Injection
      */
     public function inject_dashboard_white_label_layout() {
         $screen = get_current_screen();
         if ( $screen && strpos( $screen->id, 'school_management_system' ) !== false ) {
             ?>
             <style>
-    /* ==========================================================================
-       1. GLOBAL WP-ADMIN OVERRIDES & RESET
-       ========================================================================== */
-    #wpadminbar, 
-    #adminmenu, 
-    #adminmenuback, 
-    #adminmenuwrap, 
-    #wpfooter { 
-        display: none !important; 
-    }
+            /* Reset Default WordPress Admin Chrome */
+            #wpadminbar, #adminmenu, #adminmenuback, #adminmenuwrap, #wpfooter { 
+                display: none !important; 
+            }
+            #wpcontent, #wpbody-content { 
+                margin-left: 0 !important; 
+                padding: 0 !important; 
+                width: 100% !important; 
+            }
+            body.wp-admin { 
+                background: #f8fafc; 
+                overflow-x: hidden; 
+                font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            }
 
-    #wpcontent, 
-    #wpbody-content { 
-        margin-left: 0 !important; 
-        padding: 0 !important; 
-        width: 100% !important; 
-    }
+            .school-management-system { 
+                display: flex; 
+                position: relative; 
+                min-height: 100vh; 
+                width: 100%;
+            }
 
-    body.wp-admin { 
-        background: #f8fafc; 
-        overflow-x: hidden; 
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    }
+            /* Sidebar & Collapsed Engine */
+            .educore-sidebar-container { 
+                width: 250px; 
+                flex-shrink: 0; 
+                background: #ffffff; 
+                border-right: 1px solid #e2e8f0; 
+                position: sticky;
+                top: 0;
+                height: 100vh;
+                display: flex;
+                flex-direction: column;
+                box-sizing: border-box;
+                z-index: 99;
+                transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            }
 
-    /* System Root Wrapper */
-    .school-management-system { 
-        display: flex; 
-        position: relative; 
-        min-height: 100vh; 
-        width: 100%;
-    }
+            .educore-sidebar-container.collapsed {
+                width: 78px;
+            }
 
-    /* ==========================================================================
-       2. FIXED SIDEBAR CONTAINER
-       ========================================================================== */
-    .educore-sidebar-container { 
-        width: 250px; 
-        flex-shrink: 0; 
-        background: #ffffff; 
-        border-right: 1px solid #e2e8f0; 
-        position: sticky;
-        top: 0;
-        height: 100vh; /* Pinned full viewport height */
-        display: flex;
-        flex-direction: column;
-        box-sizing: border-box;
-        z-index: 99;
-    }
+            .educore-author-profile { 
+                width: 100%;
+                display: flex; 
+                align-items: center; 
+                gap: 12px; 
+                padding: 18px 16px; 
+                border-bottom: 1px solid #e2e8f0; 
+                box-sizing: border-box;
+                flex-shrink: 0;
+                background: #ffffff;
+                position: relative;
+            }
 
-    /* Pinned Profile Header (Does not scroll away) */
-    .educore-author-profile { 
-        width: 100%;
-        display: flex; 
-        align-items: center; 
-        gap: 14px; 
-        padding: 20px 18px; 
-        border-bottom: 1px solid #e2e8f0; 
-        box-sizing: border-box;
-        flex-shrink: 0; /* Keeps profile fixed at top */
-        background: #ffffff;
-    }
+            .educore-author-profile .profile-avatar img { 
+                width: 44px; 
+                height: 44px; 
+                border-radius: 50%; 
+                border: 2px solid #006a4e; 
+                object-fit: cover;
+                flex-shrink: 0;
+            }
 
-    .educore-author-profile .profile-avatar img { 
-        width: 52px !important; 
-        height: 52px; 
-        border-radius: 50%; 
-        border: 2.5px solid #006a4e; 
-        object-fit: cover;
-    }
+            .educore-author-profile .profile-meta { 
+                display: flex; 
+                flex-direction: column; 
+                gap: 2px; 
+                overflow: hidden; 
+                transition: opacity 0.2s ease, width 0.2s ease; 
+                white-space: nowrap; 
+            }
 
-    .educore-author-profile .profile-meta {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-    }
+            .educore-author-profile .profile-name { 
+                margin: 0; 
+                font-size: 14px; 
+                font-weight: 800; 
+                color: #0f172a;
+                overflow: hidden; 
+                text-overflow: ellipsis; 
+            }
 
-    .educore-author-profile .profile-name { 
-        margin: 0; 
-        font-size: 15px; 
-        font-weight: 800; 
-        color: #0f172a;
-        line-height: 1.2;
-    }
+            .educore-author-profile .profile-designation { 
+                font-size: 11.5px; 
+                font-weight: 600; 
+                color: #64748b;
+                overflow: hidden; 
+                text-overflow: ellipsis; 
+            }
 
-    .educore-author-profile .profile-designation { 
-        font-size: 12px; 
-        font-weight: 600; 
-        color: #64748b;
-    }
+            .educore-sidebar-toggle-btn { 
+                background: transparent; 
+                border: none; 
+                color: #64748b; 
+                cursor: pointer; 
+                padding: 4px; 
+                border-radius: 6px; 
+                display: flex; 
+                align-items: center; 
+                justify-content: center; 
+                margin-left: auto; 
+                transition: background-color 0.2s, color 0.2s; 
+            }
+            .educore-sidebar-toggle-btn:hover { 
+                background: #f1f5f9; 
+                color: #006a4e; 
+            }
 
-    /* ==========================================================================
-       3. SCROLLABLE NAVIGATION MENU TABS
-       ========================================================================== */
-    .educore-left-tabs { 
-        width: 100%;
-        margin: 0; 
-        padding: 12px 10px;
-        list-style: none; 
-        flex: 1; /* Fills remaining sidebar vertical space */
-        overflow-y: auto; /* Enables independent vertical scroll */
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        box-sizing: border-box;
-    }
+            .educore-sidebar-container.collapsed .profile-meta,
+            .educore-sidebar-container.collapsed .educore-tab-label { 
+                display: none !important; 
+            }
 
-    .educore-left-tabs li {
-        margin: 0;
-    }
+            .educore-sidebar-container.collapsed .educore-author-profile { 
+                justify-content: center; 
+                padding: 16px 8px; 
+            }
+            .educore-sidebar-container.collapsed .educore-sidebar-toggle-btn { 
+                position: absolute; 
+                bottom: -14px; 
+                right: 50%; 
+                transform: translateX(50%); 
+                background: #ffffff; 
+                border: 1px solid #cbd5e1; 
+                border-radius: 50%; 
+                width: 26px; 
+                height: 26px; 
+                box-shadow: 0 2px 6px rgba(0,0,0,0.08); 
+            }
 
-    .educore-left-tabs li a { 
-        display: flex; 
-        align-items: center; 
-        gap: 12px;
-        padding: 11px 16px; 
-        color: #475569; 
-        text-decoration: none; 
-        font-weight: 700; 
-        font-size: 14px; 
-        border-radius: 10px;
-        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); 
-        white-space: nowrap;
-    }
+            .educore-left-tabs { 
+                width: 100%;
+                margin: 0; 
+                padding: 12px 8px;
+                list-style: none; 
+                flex: 1;
+                overflow-y: auto;
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                box-sizing: border-box;
+                scrollbar-width: thin;
+                scrollbar-color: #cbd5e1 transparent;
+            }
 
-    .educore-left-tabs li a svg { 
-        width: 18px; 
-        height: 18px; 
-        fill: #64748b; 
-        transition: fill 0.2s ease; 
-        flex-shrink: 0; 
-    }
+            .educore-left-tabs li a { 
+                display: flex; 
+                align-items: center; 
+                gap: 12px;
+                padding: 10px 14px; 
+                color: #475569; 
+                text-decoration: none; 
+                font-weight: 700; 
+                font-size: 13.5px; 
+                border-radius: 10px;
+                transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); 
+                white-space: nowrap;
+            }
 
-    /* Hover States */
-    .educore-left-tabs li a:hover { 
-        background: #f0fdf4; 
-        color: #065f46; 
-    }
+            .educore-sidebar-container.collapsed .educore-left-tabs li a {
+                justify-content: center;
+                padding: 10px;
+            }
 
-    .educore-left-tabs li a:hover svg { 
-        fill: #006a4e; 
-    }
+            .educore-left-tabs li a svg { 
+                width: 18px; 
+                height: 18px; 
+                fill: #64748b; 
+                flex-shrink: 0; 
+                transition: fill 0.2s ease; 
+            }
 
-    /* Active State (EduCore Primary Emerald Accent) */
-    .educore-left-tabs li a.active { 
-        background: #006a4e; 
-        color: #ffffff; 
-        font-weight: 700; 
-        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
-    }
+            .educore-left-tabs li a:hover { 
+                background: #f0fdf4; 
+                color: #065f46; 
+            }
+            .educore-left-tabs li a:hover svg { fill: #006a4e; }
 
-    .educore-left-tabs li a.active svg { 
-        fill: #ffffff; 
-    }
+            .educore-left-tabs li a.active { 
+                background: #006a4e; 
+                color: #ffffff; 
+                box-shadow: 0 4px 12px rgba(0, 106, 78, 0.2);
+            }
+            .educore-left-tabs li a.active svg { fill: #ffffff; }
 
-    /* Special Logout Styling */
-    .educore-left-tabs li.tab-logout a:hover {
-        background: #fef2f2;
-        color: #dc2626;
-    }
+            .educore-left-tabs li.tab-logout a:hover { 
+                background: #fef2f2; 
+                color: #dc2626; 
+            }
+            .educore-left-tabs li.tab-logout a:hover svg { fill: #dc2626; }
 
-    .educore-left-tabs li.tab-logout a:hover svg {
-        fill: #dc2626;
-    }
+            .educore-right-box { 
+                flex: 1; 
+                background: #f8fafc; 
+                padding: 30px 34px; 
+                min-width: 0;
+                box-sizing: border-box;
+            }
 
-    /* ==========================================================================
-       4. ULTRA-SMOOTH MODERN SCROLLBAR ENGINE
-       ========================================================================== */
-    /* Firefox Support */
-    .educore-left-tabs {
-        scrollbar-width: thin;
-        scrollbar-color: #cbd5e1 transparent;
-        scroll-behavior: smooth;
-    }
-
-    /* Webkit Engine (Chrome, Edge, Safari, Opera) */
-    .educore-left-tabs::-webkit-scrollbar {
-        width: 6px; /* Sleek thickness */
-    }
-
-    .educore-left-tabs::-webkit-scrollbar-track {
-        background: transparent;
-        margin: 6px 0; /* Breathing gap at top and bottom */
-    }
-
-    .educore-left-tabs::-webkit-scrollbar-thumb {
-        background-color: #cbd5e1;
-        border-radius: 20px; /* Smooth pill shape */
-        border: 2px solid transparent; /* Smooth inset effect */
-        background-clip: content-box;
-        transition: background-color 0.25s ease;
-    }
-
-    .educore-left-tabs::-webkit-scrollbar-thumb:hover {
-        background-color: #006a4e; /* Emerald highlight on hover */
-    }
-
-    .educore-left-tabs::-webkit-scrollbar-thumb:active {
-        background-color: #059669;
-    }
-
-    /* ==========================================================================
-       5. MAIN WORKSPACE CONTENT CONTAINER
-       ========================================================================== */
-    .educore-right-box { 
-        flex: 1; 
-        background: #f8fafc; 
-        padding: 32px 36px; 
-        min-width: 0; /* Prevents flex children blowout */
-        box-sizing: border-box;
-    }
-
-    /* Print View Clean-up */
-    @media print {
-        .educore-sidebar-container, 
-        .no-print { 
-            display: none !important; 
-        }
-        .educore-right-box { 
-            padding: 0 !important; 
-            background: #ffffff !important; 
-        }
-    }
-</style>
+            @media print {
+                .educore-sidebar-container, .no-print { display: none !important; }
+                .educore-right-box { padding: 0 !important; background: #ffffff !important; }
+            }
+            </style>
             <?php
         }
     }
 
-    /**
-     * Terminate Sessions and Redirect Safely
-     */
     public function handle_secure_logout_redirection() {
         wp_safe_redirect( home_url() );
         exit;
     }
 
-    /**
-     * White-Label Branding Overrides for the Login Form Panel
-     */
     public function apply_white_label_login_styles() {
         $custom_logo_url = plugin_dir_url( __FILE__ ) . 'assets/img/logo.png';
         ?>
@@ -943,20 +919,13 @@ if ( is_user_logged_in() ) :
                 background-size: contain !important;
                 background-position: center !important;
                 margin-bottom: 25px !important;
-                border: 1px solid #ddd;
-                background-color: #fff;
+                background-color: transparent;
             }
-            .wp-core-ui .button-group.button-large .button, .wp-core-ui .button.button-large { background-color: #006a4e !important; }
-            body.login { background: #f0fdf4 !important; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important; }
-            #login { padding: 6% 0 0 !important; width: 360px !important; }
-            .login form { background: #ffffff !important; border: 1px solid #e1e8ed !important; box-shadow: 0 10px 25px rgba(16, 185, 129, 0.1) !important; border-radius: 8px !important; padding: 30px !important; }
-            .login label { color: #4a5568 !important; font-weight: 500 !important; }
-            .login input[type="text"], .login input[type="password"] { border: 1px solid #cbd5e1 !important; border-radius: 6px !important; padding: 8px 12px !important; background: #f8fafc !important; box-shadow: none !important; }
-            .wp-core-ui .button-primary { background: #006a4e !important; border: none !important; border-radius: 6px !important; box-shadow: none !important; font-weight: 600 !important; height: 40px !important; width: 100% !important; margin-top: 15px !important; }
-            .wp-core-ui .button-primary:hover { background: #059669 !important; }
+            .wp-core-ui .button-primary { background: #006a4e !important; border: none !important; border-radius: 8px !important; height: 40px !important; }
+            body.login { background: #f8fafc !important; font-family: Inter, -apple-system, sans-serif !important; }
+            #login { padding: 5% 0 0 !important; width: 360px !important; }
+            .login form { background: #ffffff !important; border: 1px solid #e2e8f0 !important; box-shadow: 0 10px 25px rgba(0,0,0,0.05) !important; border-radius: 12px !important; padding: 28px !important; }
             .login #backtoblog, .login #nav, .privacy-policy-page-link { display: none !important; }
-            .educore-captcha-container { margin: 15px 0; }
-            .educore-captcha-label { display: block; margin-bottom: 5px; font-weight: bold; }
         </style>
         <?php
     }
@@ -969,38 +938,32 @@ if ( is_user_logged_in() ) :
         return get_bloginfo( 'name' );
     }
 
-    /**
-     * Display Mathematical Security Verification
-     */
     public function display_mathematical_captcha() {
         $num1 = rand( 1, 9 );
         $num2 = rand( 1, 9 );
-        $captcha_token = md5( uniqid( rand(), true ) );
+        $captcha_token = md5( uniqid( (string) rand(), true ) );
         set_transient( 'educore_captcha_' . $captcha_token, ( $num1 + $num2 ), 300 );
         ?>
-        <div class="educore-captcha-container">
-            <label class="educore-captcha-label" for="educore_captcha_answer"><?php esc_html_e( 'Security Verification', 'ifsedu-sms' ); ?></label>
-            <p style="margin: 0 0 8px 0; color: #718096; font-size: 13px;">
-                <?php printf( esc_html__( 'Please solve: %1$d + %2$d = ?', 'ifsedu-sms' ), $num1, $num2 ); ?>
+        <div class="educore-captcha-container" style="margin: 15px 0;">
+            <label for="educore_captcha_answer" style="display: block; margin-bottom: 4px; font-weight: bold; color: #475569;">
+                <?php esc_html_e( 'Security Question', 'ifsedu-sms' ); ?>
+            </label>
+            <p style="margin: 0 0 6px 0; color: #64748b; font-size: 13px;">
+                <?php printf( esc_html__( 'Calculate: %1$d + %2$d = ?', 'ifsedu-sms' ), $num1, $num2 ); ?>
             </p>
-            <input type="text" name="educore_captcha_answer" id="educore_captcha_answer" class="input" value="" size="4" autocomplete="off" required />
+            <input type="text" name="educore_captcha_answer" id="educore_captcha_answer" class="input" style="width: 100%; border-radius: 6px; border: 1px solid #cbd5e1; padding: 6px 10px;" autocomplete="off" required />
             <input type="hidden" name="educore_captcha_token" value="<?php echo esc_attr( $captcha_token ); ?>" />
         </div>
         <?php
     }
 
-    /**
-     * Validate Captcha Computations on Log In Process
-     */
     public function validate_mathematical_captcha( $user, $username, $password ) {
-        // Bypass if it's already an error or if it isn't an interactive POST request submission
         if ( is_wp_error( $user ) || 'POST' !== $_SERVER['REQUEST_METHOD'] || empty( $_POST['log'] ) ) { 
             return $user; 
         }
 
-        // Processing variables safely
-        $user_answer = isset( $_POST['educore_captcha_answer'] ) ? sanitize_text_field( $_POST['educore_captcha_answer'] ) : '';
-        $token       = isset( $_POST['educore_captcha_token'] ) ? sanitize_text_field( $_POST['educore_captcha_token'] ) : '';
+        $user_answer = isset( $_POST['educore_captcha_answer'] ) ? sanitize_text_field( wp_unslash( $_POST['educore_captcha_answer'] ) ) : '';
+        $token       = isset( $_POST['educore_captcha_token'] ) ? sanitize_text_field( wp_unslash( $_POST['educore_captcha_token'] ) ) : '';
         
         $correct_answer = get_transient( 'educore_captcha_' . $token );
         delete_transient( 'educore_captcha_' . $token );
@@ -1012,14 +975,12 @@ if ( is_user_logged_in() ) :
     }
 }
 
-// Fire up the Engine Instantiation Loop
+// Instantiate Engine
 IFSEdu_School_Management_System::get_instance();
 
-
+// Custom Login Redirect
 function educore_custom_login_redirect( $redirect_to, $request, $user ) {
-    // Check if the user is successfully logged in and has a role
     if ( isset( $user->roles ) && is_array( $user->roles ) ) {
-        // Redirect directly to the dashboard tab
         return admin_url( 'admin.php?page=school_management_system&tab=dashboard' );
     }
     return $redirect_to;

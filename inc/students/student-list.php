@@ -26,17 +26,33 @@ function educore_students_list_view() {
         "SELECT * FROM {$table_students} WHERE status = 'Active' ORDER BY id DESC" 
     );
 
-    // 3. Fetch Classes from Academic Units Table with Natural Numeric Sorting
-    $raw_classes = $wpdb->get_results( "SELECT DISTINCT class_name FROM {$table_units} WHERE class_name != '' ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC" );
-    $available_classes = array();
+    // 3. Fetch Classes & Sections Map with Natural Numeric Sorting (1, 2, 3 ... 10)
+    $raw_units = $wpdb->get_results( "SELECT class_name, section_name, dept_name FROM {$table_units} WHERE class_name != ''" );
+    $class_section_map = array();
+    $available_classes  = array();
 
-    if ( ! empty( $raw_classes ) ) {
-        usort( $raw_classes, function( $a, $b ) {
-            return strnatcasecmp( $a->class_name, $b->class_name );
-        });
-        foreach ( $raw_classes as $cls_obj ) {
-            $available_classes[] = $cls_obj->class_name;
+    if ( ! empty( $raw_units ) ) {
+        foreach ( $raw_units as $unit ) {
+            $c_name = trim( $unit->class_name );
+            if ( ! isset( $class_section_map[ $c_name ] ) ) {
+                $class_section_map[ $c_name ] = array();
+                $available_classes[] = $c_name;
+            }
+            if ( ! empty( $unit->section_name ) ) {
+                $class_section_map[ $c_name ][] = trim( $unit->section_name );
+            }
+            if ( ! empty( $unit->dept_name ) ) {
+                $class_section_map[ $c_name ][] = trim( $unit->dept_name );
+            }
         }
+
+        foreach ( $class_section_map as $c_name => $secs ) {
+            $class_section_map[ $c_name ] = array_values( array_unique( array_filter( $secs ) ) );
+            usort( $class_section_map[ $c_name ], 'strnatcasecmp' );
+        }
+
+        $available_classes = array_values( array_unique( $available_classes ) );
+        usort( $available_classes, 'strnatcasecmp' );
     }
     ?>
 
@@ -322,12 +338,12 @@ function educore_students_list_view() {
             </thead>
             <tbody>
                 <?php if ( ! empty( $students_records ) ) : foreach ( $students_records as $student ) : 
-                    $view_url     = admin_url( 'admin.php?page=school_management_system&tab=students&sub=view&id=' . absint( $student->id ) );
-                    $edit_url     = admin_url( 'admin.php?page=school_management_system&tab=students&sub=edit&id=' . absint( $student->id ) );
-                    $delete_url   = wp_nonce_url( admin_url( 'admin.php?page=school_management_system&tab=students&sub=delete&id=' . absint( $student->id ) ), 'delete_student_' . $student->id );
-                    $gender_style = ( strtolower( trim( $student->gender ) ) === 'male' ) ? 'gender-male' : 'gender-female';
-                    $phone_display= ! empty( $student->student_phone ) ? $student->student_phone : $student->guardian_phone;
-                    $first_letter = mb_substr( $student->full_name, 0, 1 );
+                    $view_url      = admin_url( 'admin.php?page=school_management_system&tab=students&sub=view&id=' . absint( $student->id ) );
+                    $edit_url      = admin_url( 'admin.php?page=school_management_system&tab=students&sub=edit&id=' . absint( $student->id ) );
+                    $delete_url    = wp_nonce_url( admin_url( 'admin.php?page=school_management_system&tab=students&sub=delete&id=' . absint( $student->id ) ), 'delete_student_' . $student->id );
+                    $gender_style  = ( strtolower( trim( $student->gender ) ) === 'male' ) ? 'gender-male' : 'gender-female';
+                    $phone_display = ! empty( $student->student_phone ) ? $student->student_phone : $student->guardian_phone;
+                    $first_letter  = mb_substr( $student->full_name, 0, 1 );
                 ?>
                     <tr data-class="<?php echo esc_attr( trim( $student->class_name ) ); ?>" data-section="<?php echo esc_attr( trim( $student->section_name ) ); ?>" data-id="<?php echo esc_attr( $student->id ); ?>">
                         <td><code style="background:#f1f5f9; padding:2px 6px; border-radius:4px; border:1px solid #cbd5e1; font-weight:700; color:#0f172a;"><?php echo esc_html( $student->student_id ); ?></code></td>
@@ -340,9 +356,6 @@ function educore_students_list_view() {
                                 <?php endif; ?>
                                 <div>
                                     <div style="font-weight: 700; color: #0f172a;"><?php echo esc_html( $student->full_name ); ?></div>
-                                    <?php if ( ! empty( $student->name_bn ) ) : ?>
-                                        <small style="color: #64748b; font-size: 11.5px;"><?php echo esc_html( $student->name_bn ); ?></small>
-                                    <?php endif; ?>
                                 </div>
                             </div>
                         </td>
@@ -393,6 +406,8 @@ function educore_students_list_view() {
     jQuery(document).ready(function($) {
         if ($.fn.DataTable) {
 
+            var classSectionMap = <?php echo wp_json_encode( $class_section_map ); ?>;
+
             // Custom Filtering Logic
             $.fn.dataTable.ext.search.push(
                 function(settings, data, dataIndex) {
@@ -410,12 +425,12 @@ function educore_students_list_view() {
                 }
             );
 
-            // Instantiate DataTable (order: [] preserves the HTML table ORDER BY id DESC)
+            // Instantiate DataTable
             var tableInstance = $('#educoreStudentsMainTable').DataTable({
                 "pageLength": 20,
                 "lengthMenu": [10, 20, 50, 100],
                 "ordering": true,
-                "order": [], // Preserves the exact server-side ORDER BY id DESC
+                "order": [], // Preserves server-side ORDER BY id DESC
                 "responsive": true,
                 "dom": 'f t <"educore-dt-footer-internal"lip>',
                 "language": {
@@ -424,39 +439,28 @@ function educore_students_list_view() {
                 }
             });
 
-            // Dynamic Section Filter Population
+            // Dynamic Section Filter Population based on Academic Units Mapping
             $('#educoreClassCustomFilter').on('change', function() {
                 var selectedClass = $.trim($(this).val());
                 var sectionFilter = $('#educoreSectionCustomFilter');
 
-                sectionFilter.val('').empty().append('<option value="">All Sections</option>');
+                sectionFilter.empty();
 
-                if (selectedClass !== '') {
-                    var uniqueSections = [];
-
-                    tableInstance.rows().every(function() {
-                        var node       = this.node();
-                        var rowClass   = $.trim($(node).attr('data-class') || '');
-                        var rowSection = $.trim($(node).attr('data-section') || '');
-
-                        if (rowClass === selectedClass && rowSection !== '' && $.inArray(rowSection, uniqueSections) === -1) {
-                            uniqueSections.push(rowSection);
-                        }
+                if (selectedClass !== '' && classSectionMap[selectedClass] && classSectionMap[selectedClass].length > 0) {
+                    sectionFilter.append('<option value="">All Sections</option>');
+                    $.each(classSectionMap[selectedClass], function(index, secName) {
+                        sectionFilter.append('<option value="' + secName + '">' + secName + '</option>');
                     });
-
-                    if (uniqueSections.length > 0) {
-                        uniqueSections.sort();
-                        $.each(uniqueSections, function(index, value) {
-                            sectionFilter.append('<option value="' + value + '">' + value + '</option>');
-                        });
-                        sectionFilter.prop('disabled', false);
-                    } else {
-                        sectionFilter.prop('disabled', true);
-                    }
+                    sectionFilter.prop('disabled', false);
+                } else if (selectedClass !== '') {
+                    sectionFilter.append('<option value="">No Sections Available</option>');
+                    sectionFilter.prop('disabled', true);
                 } else {
-                    sectionFilter.empty().append('<option value="">Select Class First</option>').prop('disabled', true);
+                    sectionFilter.append('<option value="">Select Class First</option>');
+                    sectionFilter.prop('disabled', true);
                 }
 
+                sectionFilter.val('');
                 tableInstance.draw();
             });
 

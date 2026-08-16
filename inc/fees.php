@@ -14,6 +14,7 @@ $fee_files = array(
     'fees-list.php',
     'fees-collect.php', 
     'fees-invoice-print.php', 
+    'fees-settings.php', 
 );
 
 foreach ( $fee_files as $file ) {

@@ -6,7 +6,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Render Core Student Comprehensive Profile Single View
  * Architecture: Neo-Bento Dashboard with Interactive Tab Matrix
- * Database Scope: sms_students, sms_results, sms_exams, sms_fees, sms_attendance
+ * Database Scope: sms_students, sms_results, sms_exams, sms_fees, sms_attendance, sms_staff
  * File: student-profile-view.php
  */
 function educore_student_profile_view() {
@@ -26,12 +26,22 @@ function educore_student_profile_view() {
     $exams_table      = $wpdb->prefix . 'sms_exams';
     $fees_table       = $wpdb->prefix . 'sms_fees';
     $attendance_table = $wpdb->prefix . 'sms_attendance';
+    $staff_table      = $wpdb->prefix . 'sms_staff';
 
     $student = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table_students} WHERE id = %d", $student_id ) );
 
     if ( ! $student ) {
         echo '<div style="background:#fef2f2; border:1px solid #fecaca; color:#dc2626; padding:16px; border-radius:12px; margin:20px 20px 20px 0; font-weight:700;">' . esc_html__( 'Student record not found in system database.', 'ifsedu-sms' ) . '</div>';
         return;
+    }
+
+    // Query Referred Staff Member for Financial Waiver if assigned
+    $referred_staff_name = '—';
+    if ( ! empty( $student->waiver_staff_id ) && $student->waiver_staff_id > 0 ) {
+        $staff_row = $wpdb->get_row( $wpdb->prepare( "SELECT full_name, designation, staff_type FROM {$staff_table} WHERE id = %d", $student->waiver_staff_id ) );
+        if ( $staff_row ) {
+            $referred_staff_name = $staff_row->full_name . ' (' . $staff_row->designation . ' - ' . $staff_row->staff_type . ')';
+        }
     }
 
     // Query exam results, fee ledgers, and attendance records
@@ -76,8 +86,8 @@ function educore_student_profile_view() {
     $total_days = $total_present + $total_absent + $total_late;
     $attendance_ratio = $total_days > 0 ? round( ( $total_present / $total_days ) * 100, 1 ) : 0;
 
-    $back_url  = admin_url( 'admin.php?page=school_management_system&tab=students&sub=list' );
-    $edit_url  = admin_url( 'admin.php?page=school_management_system&tab=students&sub=edit&id=' . absint( $student->id ) );
+    $back_url = admin_url( 'admin.php?page=school_management_system&tab=students&sub=list' );
+    $edit_url = admin_url( 'admin.php?page=school_management_system&tab=students&sub=edit&id=' . absint( $student->id ) );
 
     $first_letter = mb_substr( $student->full_name ?? 'S', 0, 1, 'utf-8' );
     ?>
@@ -190,6 +200,7 @@ function educore_student_profile_view() {
             gap: 8px;
             font-size: 13px;
             color: #ffffff;
+            text-transform: uppercase;
         }
 
         /* Metric Bento Grid */
@@ -438,23 +449,22 @@ function educore_student_profile_view() {
                 </div>
 
                 <div>
-                    <div style="display:flex; align-items:center; gap:12px; margin-bottom:6px;">
+                    <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px;">
                         <h2 style="margin:0; font-size:26px; font-weight:800; color:#ffffff;"><?php echo esc_html( $student->full_name ); ?></h2>
                         <span style="background:#ffffff; color:#0f172a; padding:3px 12px; border-radius:20px; font-size:12px; font-weight:800;">
                             <?php echo esc_html( ucfirst( $student->status ) ); ?>
                         </span>
                     </div>
 
-                    <?php if ( ! empty( $student->name_bn ) ) : ?>
-                        <div style="font-size:16px; opacity:0.85; margin-bottom:12px;"><?php echo esc_html( $student->name_bn ); ?></div>
-                    <?php endif; ?>
-
                     <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                        <div class="glass-id-badge"><strong>ID:</strong> <?php echo esc_html( $student->student_id ); ?></div>
+                        <div class="glass-id-badge"><strong>ID:</strong> <?php echo esc_html( strtoupper( $student->student_id ) ); ?></div>
                         <div class="glass-id-badge"><strong>Class:</strong> <?php echo esc_html( $student->class_name ); ?></div>
                         <div class="glass-id-badge"><strong>Roll:</strong> #<?php echo esc_html( $student->roll_no ); ?></div>
                         <?php if ( ! empty( $student->section_name ) ) : ?>
                             <div class="glass-id-badge"><strong>Section:</strong> <?php echo esc_html( $student->section_name ); ?></div>
+                        <?php endif; ?>
+                        <?php if ( ! empty( $student->shift ) && $student->shift !== 'No Shift' ) : ?>
+                            <div class="glass-id-badge"><strong>Shift:</strong> <?php echo esc_html( $student->shift ); ?></div>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -509,6 +519,10 @@ function educore_student_profile_view() {
                 <span class="dashicons dashicons-groups"></span>
                 <?php esc_html_e( 'Parents & Guardian', 'ifsedu-sms' ); ?>
             </button>
+            <button class="nav-link" onclick="educoreSwitchProfileTab(event, 'dpt-waiver-tab')">
+                <span class="dashicons dashicons-tag"></span>
+                <?php esc_html_e( 'Financial Waiver', 'ifsedu-sms' ); ?>
+            </button>
             <button class="nav-link" onclick="educoreSwitchProfileTab(event, 'dpt-history-tab')">
                 <span class="dashicons dashicons-welcome-learn-more"></span>
                 <?php esc_html_e( 'Previous History & Misc', 'ifsedu-sms' ); ?>
@@ -536,11 +550,13 @@ function educore_student_profile_view() {
                     <div>
                         <div class="dpt-section-title"><span class="dashicons dashicons-welcome-learn-more"></span> <?php esc_html_e( 'Academic Information', 'ifsedu-sms' ); ?></div>
                         <table class="dpt-profile-table">
-                            <tr><td class="dpt-label-bg">Student Unique ID</td><td style="font-weight:700; color:#0f172a;"><?php echo esc_html( $student->student_id ); ?></td></tr>
+                            <tr><td class="dpt-label-bg">Student Unique ID</td><td style="font-weight:700; color:#0f172a;"><?php echo esc_html( strtoupper( $student->student_id ) ); ?></td></tr>
                             <tr><td class="dpt-label-bg">Academic Class</td><td style="font-weight:700; color:#006a4e;"><?php echo esc_html( $student->class_name ); ?></td></tr>
                             <tr><td class="dpt-label-bg">Section / Group</td><td><?php echo ! empty( $student->section_name ) ? esc_html( $student->section_name ) : '—'; ?></td></tr>
+                            <tr><td class="dpt-label-bg">Academic Shift</td><td><span style="font-weight:700; color:#006a4e;"><?php echo ! empty( $student->shift ) ? esc_html( $student->shift ) : 'No Shift'; ?></span></td></tr>
                             <tr><td class="dpt-label-bg">Roll Number</td><td style="font-weight:700;">#<?php echo esc_html( $student->roll_no ); ?></td></tr>
-                            <tr><td class="dpt-label-bg">Admission Date</td><td><?php echo ( ! empty( $student->admission_date ) && $student->admission_date !== '0000-00-00' ) ? esc_html( date_i18n( 'd M Y', strtotime( $student->admission_date ) ) ) : '—'; ?></td></tr>
+                            <tr><td class="dpt-label-bg">Admission Date</td><td><?php echo ( ! empty( $student->admission_date ) && $student->admission_date !== '0000-00-00' && $student->admission_date !== '1970-01-01' ) ? esc_html( date_i18n( 'd M Y', strtotime( $student->admission_date ) ) ) : '—'; ?></td></tr>
+                            <tr><td class="dpt-label-bg">Fee Start Date</td><td style="font-weight:700; color:#2563eb;"><?php echo ( ! empty( $student->fee_start_date ) && $student->fee_start_date !== '0000-00-00' ) ? esc_html( date_i18n( 'd M Y', strtotime( $student->fee_start_date ) ) ) : 'From Admission'; ?></td></tr>
                             <tr><td class="dpt-label-bg">Residential Status</td><td><?php echo ! empty( $student->residential_status ) ? esc_html( $student->residential_status ) : 'Non-Residential'; ?></td></tr>
                             <tr><td class="dpt-label-bg">Status</td><td><span style="font-weight:700; color:<?php echo ( strtolower($student->status) === 'active' ) ? '#059669' : '#dc2626'; ?>;"><?php echo esc_html( ucfirst( $student->status ) ); ?></span></td></tr>
                         </table>
@@ -550,9 +566,8 @@ function educore_student_profile_view() {
                         <div class="dpt-section-title"><span class="dashicons dashicons-id-alt"></span> <?php esc_html_e( 'Basic Identity Profile', 'ifsedu-sms' ); ?></div>
                         <table class="dpt-profile-table">
                             <tr><td class="dpt-label-bg">Full Name (English)</td><td style="font-weight:700;"><?php echo esc_html( $student->full_name ); ?></td></tr>
-                            <tr><td class="dpt-label-bg">শিক্ষার্থীর নাম (বাংলায়)</td><td><?php echo ! empty( $student->name_bn ) ? esc_html( $student->name_bn ) : '—'; ?></td></tr>
                             <tr><td class="dpt-label-bg">Birth Reg. Number</td><td><?php echo ! empty( $student->birth_reg_no ) ? esc_html( $student->birth_reg_no ) : '—'; ?></td></tr>
-                            <tr><td class="dpt-label-bg">Date of Birth</td><td><?php echo ( ! empty( $student->dob ) && $student->dob !== '0000-00-00' ) ? esc_html( date_i18n( 'd M Y', strtotime( $student->dob ) ) ) : '—'; ?></td></tr>
+                            <tr><td class="dpt-label-bg">Date of Birth</td><td><?php echo ( ! empty( $student->dob ) && $student->dob !== '0000-00-00' && $student->dob !== '1970-01-01' ) ? esc_html( date_i18n( 'd M Y', strtotime( $student->dob ) ) ) : '—'; ?></td></tr>
                             <tr><td class="dpt-label-bg">Birth District</td><td><?php echo ! empty( $student->birth_place ) ? esc_html( $student->birth_place ) : '—'; ?></td></tr>
                             <tr><td class="dpt-label-bg">Gender</td><td><?php echo esc_html( ucfirst( $student->gender ) ); ?></td></tr>
                             <tr><td class="dpt-label-bg">Blood Group</td><td><strong style="color:#dc2626;"><?php echo ! empty( $student->blood_group ) ? esc_html( $student->blood_group ) : '—'; ?></strong></td></tr>
@@ -567,13 +582,13 @@ function educore_student_profile_view() {
 
                 <div class="dpt-grid-2col" style="margin-bottom: 0;">
                     <div>
-                        <div class="dpt-section-title"><span class="dashicons dashicons-location"></span> <?php esc_html_e( 'Present Address (বর্তমান ঠিকানা)', 'ifsedu-sms' ); ?></div>
+                        <div class="dpt-section-title"><span class="dashicons dashicons-location"></span> <?php esc_html_e( 'Present Address', 'ifsedu-sms' ); ?></div>
                         <div style="padding:16px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; color:#334155; font-size:13.5px; line-height:1.6; min-height:60px;">
                             <?php echo ! empty( $student->address ) ? nl2br( esc_html( $student->address ) ) : esc_html__( 'No registered present address found.', 'ifsedu-sms' ); ?>
                         </div>
                     </div>
                     <div>
-                        <div class="dpt-section-title"><span class="dashicons dashicons-admin-home"></span> <?php esc_html_e( 'Permanent Address (স্থায়ী ঠিকানা)', 'ifsedu-sms' ); ?></div>
+                        <div class="dpt-section-title"><span class="dashicons dashicons-admin-home"></span> <?php esc_html_e( 'Permanent Address', 'ifsedu-sms' ); ?></div>
                         <div style="padding:16px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; color:#334155; font-size:13.5px; line-height:1.6; min-height:60px;">
                             <?php echo ! empty( $student->permanent_address ) ? nl2br( esc_html( $student->permanent_address ) ) : esc_html__( 'Same as present address or not provided.', 'ifsedu-sms' ); ?>
                         </div>
@@ -589,7 +604,6 @@ function educore_student_profile_view() {
                         <div class="dpt-section-title"><span class="dashicons dashicons-businessman"></span> <?php esc_html_e( 'Father Information', 'ifsedu-sms' ); ?></div>
                         <table class="dpt-profile-table">
                             <tr><td class="dpt-label-bg">Father Name (English)</td><td style="font-weight:700;"><?php echo ! empty( $student->father_name ) ? esc_html( $student->father_name ) : '—'; ?></td></tr>
-                            <tr><td class="dpt-label-bg">পিতার নাম (বাংলায়)</td><td><?php echo ! empty( $student->father_name_bn ) ? esc_html( $student->father_name_bn ) : '—'; ?></td></tr>
                             <tr><td class="dpt-label-bg">Father NID</td><td><?php echo ! empty( $student->father_nid ) ? esc_html( $student->father_nid ) : '—'; ?></td></tr>
                             <tr><td class="dpt-label-bg">Father Phone</td><td><?php echo ! empty( $student->father_phone ) ? esc_html( $student->father_phone ) : '—'; ?></td></tr>
                             <tr><td class="dpt-label-bg">Father Profession</td><td><?php echo ! empty( $student->father_profession ) ? esc_html( $student->father_profession ) : '—'; ?></td></tr>
@@ -601,7 +615,6 @@ function educore_student_profile_view() {
                         <div class="dpt-section-title"><span class="dashicons dashicons-businesswoman"></span> <?php esc_html_e( 'Mother Information', 'ifsedu-sms' ); ?></div>
                         <table class="dpt-profile-table">
                             <tr><td class="dpt-label-bg">Mother Name (English)</td><td style="font-weight:700;"><?php echo ! empty( $student->mother_name ) ? esc_html( $student->mother_name ) : '—'; ?></td></tr>
-                            <tr><td class="dpt-label-bg">মাতার নাম (বাংলায়)</td><td><?php echo ! empty( $student->mother_name_bn ) ? esc_html( $student->mother_name_bn ) : '—'; ?></td></tr>
                             <tr><td class="dpt-label-bg">Mother NID</td><td><?php echo ! empty( $student->mother_nid ) ? esc_html( $student->mother_nid ) : '—'; ?></td></tr>
                             <tr><td class="dpt-label-bg">Mother Phone</td><td><?php echo ! empty( $student->mother_phone ) ? esc_html( $student->mother_phone ) : '—'; ?></td></tr>
                             <tr><td class="dpt-label-bg">Mother Profession</td><td><?php echo ! empty( $student->mother_profession ) ? esc_html( $student->mother_profession ) : '—'; ?></td></tr>
@@ -621,7 +634,40 @@ function educore_student_profile_view() {
                 </div>
             </div>
 
-            <!-- 3. Previous History & Misc Tab -->
+            <!-- 3. Financial Waiver Tab -->
+            <div id="dpt-waiver-tab" class="dpt-tab-content-block" style="display:none;">
+                <div class="dpt-section-title"><span class="dashicons dashicons-tag"></span> <?php esc_html_e( 'Financial Waiver & Faculty Reference Details', 'ifsedu-sms' ); ?></div>
+                
+                <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:12px; padding:24px; margin-bottom:20px;">
+                    <table class="dpt-profile-table">
+                        <tr>
+                            <td class="dpt-label-bg">All-Time Waiver / Discount</td>
+                            <td>
+                                <span style="font-size:22px; font-weight:800; color:#006a4e;">
+                                    <?php echo esc_html( number_format( (float) ( $student->waiver_percentage ?? 0 ), 2 ) ); ?>%
+                                </span>
+                                <small style="color:#166534; font-weight:600; display:block; margin-top:2px;">
+                                    <?php esc_html_e( 'Automatically applied to all monthly tuition fee invoices.', 'ifsedu-sms' ); ?>
+                                </small>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="dpt-label-bg">Referred Teacher / Staff</td>
+                            <td style="font-weight:700; color:#0f172a; font-size:14px;">
+                                <?php echo esc_html( $referred_staff_name ); ?>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="dpt-label-bg">Fee Effective Start Date</td>
+                            <td style="font-weight:700; color:#2563eb;">
+                                <?php echo ( ! empty( $student->fee_start_date ) && $student->fee_start_date !== '0000-00-00' ) ? esc_html( date_i18n( 'd F, Y', strtotime( $student->fee_start_date ) ) ) : esc_html__( 'From Admission Date', 'ifsedu-sms' ); ?>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 4. Previous History & Misc Tab -->
             <div id="dpt-history-tab" class="dpt-tab-content-block" style="display:none;">
                 <div class="dpt-grid-2col">
                     <div>
@@ -655,7 +701,7 @@ function educore_student_profile_view() {
                 </div>
             </div>
 
-            <!-- 4. Results Tab -->
+            <!-- 5. Results Tab -->
             <div id="dpt-results-tab" class="dpt-tab-content-block" style="display:none;">
                 <div class="dpt-section-title"><?php esc_html_e( 'Academic Marks Matrix', 'ifsedu-sms' ); ?></div>
                 
@@ -685,7 +731,7 @@ function educore_student_profile_view() {
                         
                         $sub_count = count($results);
                         $avg_gpa = $sub_count > 0 ? ($sum_gpa / $sub_count) : 0;
-                        $final_gpa = $has_failed ? 0.00 : number_format($avg_gpa, 2);
+                        $final_gpa = $has_failed ? '0.00' : number_format($avg_gpa, 2);
                         $pass_status = $has_failed ? 'Failed' : 'Passed';
                         $status_color = $has_failed ? '#dc2626' : '#059669';
                 ?>
@@ -753,7 +799,7 @@ function educore_student_profile_view() {
                 <?php endif; ?>
             </div>
 
-            <!-- 5. Payments Tab -->
+            <!-- 6. Payments Tab -->
             <div id="dpt-payments-tab" class="dpt-tab-content-block" style="display:none;">
                 <div class="dpt-section-title"><?php esc_html_e( 'Fee Payment History & Invoices', 'ifsedu-sms' ); ?></div>
                 <div style="overflow-x:auto;">
@@ -791,7 +837,7 @@ function educore_student_profile_view() {
                 </div>
             </div>
 
-            <!-- 6. Attendance Tab -->
+            <!-- 7. Attendance Tab -->
             <div id="dpt-attendance-tab" class="dpt-tab-content-block" style="display:none;">
                 <div class="dpt-section-title"><?php esc_html_e( 'Daily Attendance Audit Logs (Recent 30 Days)', 'ifsedu-sms' ); ?></div>
                 <div style="overflow-x:auto;">

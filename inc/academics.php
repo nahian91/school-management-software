@@ -16,7 +16,7 @@ function educore_academics_tab() {
     }
 
     // 2. Set Base Router Variables
-    $current_subtab = isset( $_GET['subtab'] ) ? sanitize_text_field( $_GET['subtab'] ) : 'units';
+    $current_subtab = isset( $_GET['subtab'] ) ? sanitize_text_field( wp_unslash( $_GET['subtab'] ) ) : 'units';
     $base_url       = admin_url( 'admin.php?page=school_management_system&tab=academics' );
 
     // 3. Include Shared Academic Header, Styles & Subtab Navigation
@@ -31,6 +31,10 @@ function educore_academics_tab() {
 
         case 'subjects':
             require_once plugin_dir_path( __FILE__ ) . 'academics/academic-subjects.php';
+            break;
+
+        case 'teacher_subjects':
+            require_once plugin_dir_path( __FILE__ ) . 'academics/academic-teacher-subjects.php';
             break;
 
         case 'routine':

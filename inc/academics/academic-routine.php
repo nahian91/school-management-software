@@ -4,9 +4,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 global $wpdb;
-$table_routine  = $wpdb->prefix . 'sms_routine';
-$table_units    = $wpdb->prefix . 'sms_academic_units';
-$table_subjects = $wpdb->prefix . 'sms_subjects';
+$table_routine          = $wpdb->prefix . 'sms_routine';
+$table_units            = $wpdb->prefix . 'sms_academic_units';
+$table_subjects         = $wpdb->prefix . 'sms_subjects';
+$table_teacher_subjects = $wpdb->prefix . 'sms_teacher_subjects';
+$table_staff            = $wpdb->prefix . 'sms_staff';
 
 // Dynamic Base URL preservation from current URI without action state params
 $current_uri = remove_query_arg( array( 'action', 'id', '_wpnonce', 'status', 'msg' ), $_SERVER['REQUEST_URI'] );
@@ -96,7 +98,6 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' && isset( $_POST['save_routine'] ) ) 
             }
             exit;
         } else {
-            // Capture exact MySQL error for debugging
             $db_error = $wpdb->last_error;
             $redirect_target = add_query_arg( array( 'status' => 'db_error', 'msg' => urlencode( $db_error ) ), $base_url );
             echo '<script type="text/javascript">window.location.href="' . esc_url_raw( $redirect_target ) . '";</script>';
@@ -109,7 +110,7 @@ if ( $_SERVER['REQUEST_METHOD'] === 'POST' && isset( $_POST['save_routine'] ) ) 
     }
 }
 
-// Fetch Classes with Natural Numeric Sorting (1, 2, 3, 7, 8, 9, 10...)
+// Fetch Classes with Natural Numeric Sorting
 $classes = $wpdb->get_results( 
     "SELECT id, class_name FROM {$table_units} 
      WHERE class_name IS NOT NULL AND class_name != '' 
@@ -140,11 +141,13 @@ $days = array( 'Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday
 $filter_class = isset( $_GET['filter_class'] ) ? sanitize_text_field( $_GET['filter_class'] ) : '';
 $filter_sec   = isset( $_GET['filter_section'] ) ? absint( $_GET['filter_section'] ) : 0;
 
-// Fetch Routines with Natural Class Name Sorting
-$query = "SELECT r.*, u.class_name, u.section_name, s.subject_name 
+// Fetch Routines with Assigned Teacher Resolution
+$query = "SELECT r.*, u.class_name, u.section_name, s.subject_name, st.full_name as teacher_name, st.designation 
           FROM {$table_routine} r 
           LEFT JOIN {$table_units} u ON r.class_id = u.id 
-          LEFT JOIN {$table_subjects} s ON r.subject_id = s.id";
+          LEFT JOIN {$table_subjects} s ON r.subject_id = s.id
+          LEFT JOIN {$table_teacher_subjects} ts ON (ts.subject_id = r.subject_id AND ts.class_id = r.class_id)
+          LEFT JOIN {$table_staff} st ON ts.teacher_id = st.id";
 
 $where = array();
 if ( ! empty( $filter_class ) ) {
@@ -190,9 +193,6 @@ if ( ! empty( $routines ) ) {
 ?>
 
 <style>
-    /* ==========================================================================
-       ACADEMIC ROUTINE & PREVIEW ARCHITECTURE
-       ========================================================================== */
     .dpt-routine-container {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
         color: #0f172a;
@@ -238,7 +238,6 @@ if ( ! empty( $routines ) ) {
         height: 20px;
     }
 
-    /* Filter Controls */
     .dpt-filter-bar {
         display: flex;
         gap: 12px;
@@ -419,6 +418,18 @@ if ( ! empty( $routines ) ) {
         justify-content: space-between;
     }
 
+    .dpt-slot-teacher {
+        font-size: 11px;
+        font-weight: 700;
+        color: #006a4e;
+        margin-top: 5px;
+        padding-top: 4px;
+        border-top: 1px dashed #e2e8f0;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
     .dpt-responsive-datatable {
         width: 100%;
         overflow-x: auto;
@@ -532,7 +543,6 @@ if ( ! empty( $routines ) ) {
         gap: 8px;
     }
 
-    /* Print View Styling Overrides */
     @media print {
         #wpadminbar, #adminmenumain, #adminmenuback, #adminmenuwrap, #wpfooter, .no-print {
             display: none !important;
@@ -544,7 +554,7 @@ if ( ! empty( $routines ) ) {
         .dpt-day-header { background: #000 !important; color: #fff !important; font-size: 10px !important; padding: 4px !important; }
         .dpt-slot-card { border: 1px solid #666 !important; padding: 4px !important; }
         .dpt-slot-subject { font-size: 10px !important; }
-        .dpt-slot-time, .dpt-slot-meta { font-size: 8px !important; }
+        .dpt-slot-time, .dpt-slot-meta, .dpt-slot-teacher { font-size: 8px !important; }
     }
 </style>
 
@@ -616,7 +626,6 @@ if ( ! empty( $routines ) ) {
                     <label class="dpt-form-label"><?php esc_html_e( 'Academic Subject', 'ifsedu-sms' ); ?></label>
                     <select name="subject_id" id="dpt_subject_select" class="dpt-field-select" required>
                         <option value=""><?php esc_html_e( 'Select Subject...', 'ifsedu-sms' ); ?></option>
-                        <!-- Options will load dynamically based on class & section selection -->
                     </select>
                 </div>
 
@@ -666,9 +675,6 @@ if ( ! empty( $routines ) ) {
                 <span class="dashicons dashicons-visibility"></span>
                 <?php esc_html_e( 'Weekly Timetable Preview', 'ifsedu-sms' ); ?>
             </h5>
-
-            <div class="no-print" style="display: flex; gap: 8px;">
-            </div>
         </div>
 
         <!-- Filter Bar -->
@@ -727,6 +733,12 @@ if ( ! empty( $routines ) ) {
                                         <span>Cls: <strong><?php echo esc_html( $slot->class_name ); ?></strong> <?php echo ! empty( $slot->section_name ) ? '(' . esc_html( $slot->section_name ) . ')' : ''; ?></span>
                                         <span>Rm: <strong><?php echo esc_html( $slot->room_no ? $slot->room_no : 'N/A' ); ?></strong></span>
                                     </div>
+                                    <?php if ( ! empty( $slot->teacher_name ) ) : ?>
+                                        <div class="dpt-slot-teacher">
+                                            <span class="dashicons dashicons-businessman" style="font-size:12px; width:12px; height:12px;"></span>
+                                            <span><?php echo esc_html( $slot->teacher_name ); ?></span>
+                                        </div>
+                                    <?php endif; ?>
                                 </div>
                             <?php endforeach; ?>
                         <?php else : ?>
@@ -760,6 +772,7 @@ if ( ! empty( $routines ) ) {
                         <th><?php esc_html_e( 'Class', 'ifsedu-sms' ); ?></th>
                         <th><?php esc_html_e( 'Section', 'ifsedu-sms' ); ?></th>
                         <th><?php esc_html_e( 'Subject', 'ifsedu-sms' ); ?></th>
+                        <th><?php esc_html_e( 'Assigned Teacher', 'ifsedu-sms' ); ?></th>
                         <th><?php esc_html_e( 'Timeline', 'ifsedu-sms' ); ?></th>
                         <th><?php esc_html_e( 'Room No', 'ifsedu-sms' ); ?></th>
                         <th style="text-align: right; width: 60px;"><?php esc_html_e( 'Action', 'ifsedu-sms' ); ?></th>
@@ -785,6 +798,16 @@ if ( ! empty( $routines ) ) {
                         </td>
                         <td style="font-weight: 600; color: #334155;"><?php echo esc_html( $r->subject_name ); ?></td>
                         <td>
+                            <?php if ( ! empty( $r->teacher_name ) ) : ?>
+                                <strong style="color: #006a4e;"><?php echo esc_html( $r->teacher_name ); ?></strong>
+                                <?php if ( ! empty( $r->designation ) ) : ?>
+                                    <small style="display: block; color: #64748b; font-size: 11px;"><?php echo esc_html( $r->designation ); ?></small>
+                                <?php endif; ?>
+                            <?php else : ?>
+                                <span style="color: #94a3b8; font-style: italic;"><?php esc_html_e( 'Unassigned', 'ifsedu-sms' ); ?></span>
+                            <?php endif; ?>
+                        </td>
+                        <td>
                             <span class="dpt-timeline-badge">
                                 <span class="dashicons dashicons-clock" style="font-size:12px; width:12px; height:12px;"></span>
                                 <?php echo esc_html( date( 'g:i A', strtotime( $r->start_time ) ) . ' - ' . date( 'g:i A', strtotime( $r->end_time ) ) ); ?>
@@ -799,7 +822,7 @@ if ( ! empty( $routines ) ) {
                     </tr>
                     <?php endforeach; else : ?>
                     <tr>
-                        <td colspan="7" style="text-align: center; padding: 40px; color: #94a3b8;">
+                        <td colspan="8" style="text-align: center; padding: 40px; color: #94a3b8;">
                             <?php esc_html_e( 'No routine slots configured yet.', 'ifsedu-sms' ); ?>
                         </td>
                     </tr>
@@ -852,15 +875,11 @@ document.addEventListener('DOMContentLoaded', function() {
         let filteredSubjects = [];
 
         if (selectedUnitId) {
-            // Filter strictly by the selected academic unit (class + section)
             filteredSubjects = subjectsMap.filter(item => String(item.class_id) === String(selectedUnitId));
-            
-            // Fallback: if no subjects configured specifically for this unit ID, show class subjects
             if (filteredSubjects.length === 0) {
                 filteredSubjects = subjectsMap.filter(item => item.class_name === selectedClass);
             }
         } else {
-            // Show all subjects for this class_name
             filteredSubjects = subjectsMap.filter(item => item.class_name === selectedClass);
         }
 
@@ -896,7 +915,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const filterClassSelect = document.getElementById('dpt_filter_class');
     const filterSecSelect   = document.getElementById('dpt_filter_section');
     if (filterClassSelect && filterSecSelect) {
-        // Initial setup on page load
         populateSections(filterClassSelect, filterSecSelect, currentFilterSection);
 
         filterClassSelect.addEventListener('change', function() {

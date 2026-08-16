@@ -21,7 +21,7 @@ function educore_student_certificate_view() {
     $student_id = isset( $_GET['student_id'] ) ? absint( $_GET['student_id'] ) : 0;
     $doc_type   = isset( $_GET['doc_type'] ) ? sanitize_text_field( wp_unslash( $_GET['doc_type'] ) ) : 'certificate';
 
-    $school_name    = get_option( 'educore_school_name', get_bloginfo( 'name' ) );
+    $school_name = get_option( 'educore_school_name', get_bloginfo( 'name' ) );
     if ( empty( $school_name ) || $school_name === 'WordPress' ) {
         $school_name = 'Green Gems International School & College';
     }
@@ -50,6 +50,7 @@ function educore_student_certificate_view() {
 
         $guardian_display = ! empty( $student->father_name ) ? $student->father_name : ( ! empty( $student->guardian_name ) ? $student->guardian_name : '—' );
         $mother_display   = ! empty( $student->mother_name ) ? $student->mother_name : '—';
+        $student_uid      = strtoupper( $student->student_id );
         ?>
 
         <style>
@@ -251,10 +252,10 @@ function educore_student_certificate_view() {
                     display: none !important; 
                 }
                 
-                .cert-print-container {
-                    margin: 0 !important;
-                    max-width: none !important;
-                    width: 100% !important;
+                .cert-print-container { 
+                    margin: 0 !important; 
+                    max-width: none !important; 
+                    width: 100% !important; 
                 }
 
                 .cert-print-wrapper { 
@@ -265,9 +266,9 @@ function educore_student_certificate_view() {
                     height: 98vh !important;
                     margin: 0 !important; 
                     box-shadow: none !important; 
-                    border-width: 10px !important;
-                    outline-offset: -16px !important;
-                    padding: 30px 40px !important;
+                    border-width: 10px !important; 
+                    outline-offset: -16px !important; 
+                    padding: 30px 40px !important; 
                     page-break-after: avoid !important;
                     page-break-before: avoid !important;
                 }
@@ -301,7 +302,7 @@ function educore_student_certificate_view() {
                             This is to certify that <span class="highlight"><?php echo esc_html( $student->full_name ); ?></span>, 
                             son/daughter of <span class="highlight"><?php echo esc_html( $guardian_display ); ?></span> 
                             and <span class="highlight"><?php echo esc_html( $mother_display ); ?></span>, 
-                            bearing Student ID <span class="highlight"><?php echo esc_html( $student->student_id ); ?></span>, 
+                            bearing Student ID <span class="highlight"><?php echo esc_html( $student_uid ); ?></span>, 
                             is/was a bonafide student of this institution in Class <span class="highlight"><?php echo esc_html( $student->class_name ); ?></span> 
                             (Section: <span class="highlight"><?php echo esc_html( ! empty( $student->section_name ) ? $student->section_name : 'N/A' ); ?></span>, 
                             Roll No: <span class="highlight">#<?php echo esc_html( $student->roll_no ); ?></span>). 
@@ -313,14 +314,14 @@ function educore_student_certificate_view() {
                             This is to certify that <span class="highlight"><?php echo esc_html( $student->full_name ); ?></span>, 
                             son/daughter of <span class="highlight"><?php echo esc_html( $guardian_display ); ?></span>, 
                             was a registered regular student of this institution in Class <span class="highlight"><?php echo esc_html( $student->class_name ); ?></span> 
-                            under Student ID <span class="highlight"><?php echo esc_html( $student->student_id ); ?></span>. 
+                            under Student ID <span class="highlight"><?php echo esc_html( $student_uid ); ?></span>. 
                             He/She has paid all institutional dues up to the month of <span class="highlight"><?php echo esc_html( date_i18n( 'F Y' ) ); ?></span>. 
                             He/She is granted this Transfer Certificate on personal grounds/guardian's formal request. His/Her conduct and character during the academic stay were satisfactory.
 
                         <?php else : ?>
                             <!-- GENERAL ACHIEVEMENT CERTIFICATE -->
                             This Certificate of Academic Excellence is proudly presented to <span class="highlight"><?php echo esc_html( $student->full_name ); ?></span> 
-                            (Student ID: <span class="highlight"><?php echo esc_html( $student->student_id ); ?></span>, Roll No: <span class="highlight">#<?php echo esc_html( $student->roll_no ); ?></span>) 
+                            (Student ID: <span class="highlight"><?php echo esc_html( $student_uid ); ?></span>, Roll No: <span class="highlight">#<?php echo esc_html( $student->roll_no ); ?></span>) 
                             in recognition of exemplary discipline, dedication, and commendable performance in 
                             Class <span class="highlight"><?php echo esc_html( $student->class_name ); ?></span> during the academic session. 
                             We appreciate the outstanding efforts and wish for continued academic distinction.
@@ -345,32 +346,33 @@ function educore_student_certificate_view() {
     // =========================================================================
     // 2. FORM FILTER VIEW (DEFAULT)
     // =========================================================================
-    $academic_units = $wpdb->get_results( "SELECT class_name, section_name FROM {$table_units} ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC, section_name ASC" );
+    $raw_units = $wpdb->get_results( "SELECT class_name, section_name, dept_name FROM {$table_units} WHERE class_name != ''" );
     
     $unique_classes    = array();
-    $unique_sections   = array();
     $class_section_map = array();
     
-    if ( ! empty( $academic_units ) ) {
-        foreach ( $academic_units as $unit ) {
+    if ( ! empty( $raw_units ) ) {
+        foreach ( $raw_units as $unit ) {
             $c = trim( $unit->class_name );
-            $s = trim( $unit->section_name );
-            
-            if ( ! empty( $c ) && ! in_array( $c, $unique_classes, true ) ) {
-                $unique_classes[] = $c;
-            }
-            if ( ! empty( $s ) && ! in_array( $s, $unique_sections, true ) ) {
-                $unique_sections[] = $s;
-            }
             if ( ! isset( $class_section_map[ $c ] ) ) {
                 $class_section_map[ $c ] = array();
+                $unique_classes[] = $c;
             }
-            if ( ! empty( $s ) && ! in_array( $s, $class_section_map[ $c ], true ) ) {
-                $class_section_map[ $c ][] = $s;
+            if ( ! empty( $unit->section_name ) ) {
+                $class_section_map[ $c ][] = trim( $unit->section_name );
+            }
+            if ( ! empty( $unit->dept_name ) ) {
+                $class_section_map[ $c ][] = trim( $unit->dept_name );
             }
         }
+
+        foreach ( $class_section_map as $c => $secs ) {
+            $class_section_map[ $c ] = array_values( array_unique( array_filter( $secs ) ) );
+            usort( $class_section_map[ $c ], 'strnatcasecmp' );
+        }
+
+        $unique_classes = array_values( array_unique( $unique_classes ) );
         usort( $unique_classes, 'strnatcasecmp' );
-        usort( $unique_sections, 'strnatcasecmp' );
     }
 
     $students = $wpdb->get_results( "SELECT id, full_name, student_id, class_name, section_name, roll_no FROM {$table_students} WHERE status='Active' ORDER BY CAST(roll_no AS UNSIGNED) ASC, roll_no ASC" );
@@ -400,7 +402,7 @@ function educore_student_certificate_view() {
         .cert-form-header h2 {
             font-size: 22px;
             font-weight: 800;
-            color: #0f172a;
+            color: #006a4e;
             margin: 10px 0 4px 0;
         }
 
@@ -453,6 +455,12 @@ function educore_student_certificate_view() {
             background: #ffffff;
             outline: none;
             box-shadow: 0 0 0 3px rgba(0, 106, 78, 0.12);
+        }
+
+        .cert-select-input:disabled {
+            background-color: #f1f5f9;
+            color: #94a3b8;
+            cursor: not-allowed;
         }
 
         .cert-submit-btn {
@@ -509,7 +517,7 @@ function educore_student_certificate_view() {
                     <select id="cert_class" class="cert-select-input">
                         <option value=""><?php esc_html_e( '-- All Classes --', 'ifsedu-sms' ); ?></option>
                         <?php foreach ( $unique_classes as $cls ) : ?>
-                            <option value="<?php echo esc_attr( $cls ); ?>"><?php echo esc_html( 'Class ' . $cls ); ?></option>
+                            <option value="<?php echo esc_attr( $cls ); ?>"><?php echo esc_html( $cls ); ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
@@ -517,11 +525,8 @@ function educore_student_certificate_view() {
                 <!-- 3. Section -->
                 <div class="cert-field-group">
                     <label class="cert-field-label"><?php esc_html_e( '3. Filter By Section', 'ifsedu-sms' ); ?></label>
-                    <select id="cert_section" class="cert-select-input">
-                        <option value=""><?php esc_html_e( '-- All Sections --', 'ifsedu-sms' ); ?></option>
-                        <?php foreach ( $unique_sections as $sec ) : ?>
-                            <option value="<?php echo esc_attr( $sec ); ?>"><?php echo esc_html( $sec ); ?></option>
-                        <?php endforeach; ?>
+                    <select id="cert_section" class="cert-select-input" disabled>
+                        <option value=""><?php esc_html_e( 'Select Class First', 'ifsedu-sms' ); ?></option>
                     </select>
                 </div>
 
@@ -534,7 +539,7 @@ function educore_student_certificate_view() {
                             <option value="<?php echo esc_attr( $s->id ); ?>" 
                                     data-class="<?php echo esc_attr( $s->class_name ); ?>" 
                                     data-section="<?php echo esc_attr( $s->section_name ); ?>">
-                                <?php echo esc_html( '[Roll: ' . $s->roll_no . '] ' . $s->full_name . ' (' . $s->class_name . ')' ); ?>
+                                <?php echo esc_html( '[Roll: ' . $s->roll_no . '] ' . $s->full_name . ' (' . strtoupper( $s->student_id ) . ' - ' . $s->class_name . ')' ); ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
@@ -556,25 +561,27 @@ function educore_student_certificate_view() {
         
         const allStudents       = Array.from(studentSelect.options).slice(1);
         const classSectionMap   = <?php echo wp_json_encode( $class_section_map ); ?>;
-        const allUniqueSections = <?php echo wp_json_encode( $unique_sections ); ?>;
 
         function updateSections() {
             const selectedClass = classSelect.value;
-            sectionSelect.innerHTML = '<option value=""><?php echo esc_js( __( '-- All Sections --', 'ifsedu-sms' ) ); ?></option>';
+            sectionSelect.innerHTML = '';
             
-            let sectionsToLoad = [];
-            if (selectedClass && classSectionMap[selectedClass]) {
-                sectionsToLoad = classSectionMap[selectedClass];
-            } else if (!selectedClass) {
-                sectionsToLoad = allUniqueSections;
+            if (selectedClass && classSectionMap[selectedClass] && classSectionMap[selectedClass].length > 0) {
+                sectionSelect.innerHTML = '<option value=""><?php echo esc_js( __( '-- All Sections --', 'ifsedu-sms' ) ); ?></option>';
+                classSectionMap[selectedClass].forEach(sec => {
+                    let opt = document.createElement('option');
+                    opt.value = sec;
+                    opt.textContent = sec;
+                    sectionSelect.appendChild(opt);
+                });
+                sectionSelect.disabled = false;
+            } else if (selectedClass) {
+                sectionSelect.innerHTML = '<option value=""><?php echo esc_js( __( 'No Sections Available', 'ifsedu-sms' ) ); ?></option>';
+                sectionSelect.disabled = true;
+            } else {
+                sectionSelect.innerHTML = '<option value=""><?php echo esc_js( __( 'Select Class First', 'ifsedu-sms' ) ); ?></option>';
+                sectionSelect.disabled = true;
             }
-            
-            sectionsToLoad.forEach(sec => {
-                let opt = document.createElement('option');
-                opt.value = sec;
-                opt.textContent = sec;
-                sectionSelect.appendChild(opt);
-            });
             
             filterStudents();
         }
