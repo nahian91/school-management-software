@@ -5,18 +5,45 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * Enterprise Accounting & General Ledger Transaction Module (Institutional Grade)
- * File: accounting-add-edit.php
+ * File: inc/accounting/accounting-add.php (or accounting-add-edit.php)
  */
 function educore_accounting_add_edit_view() {
-    if ( ! current_user_can( 'manage_options' ) ) {
-        wp_die( esc_html__( 'You do not have sufficient administrative permissions to manage accounting records.', 'ifsedu-sms' ) );
+    global $wpdb;
+    $current_user = wp_get_current_user();
+    $table_staff  = $wpdb->prefix . 'sms_staff';
+
+    // --------------------------------------------------------------------------
+    // 0. CAPABILITY & ROLE PERMISSION VALIDATION
+    // --------------------------------------------------------------------------
+    $is_admin = current_user_can( 'manage_options' ) || in_array( 'administrator', (array) $current_user->roles, true );
+    
+    $is_accountant = false;
+    if ( function_exists( 'educore_has_access' ) ) {
+        $is_accountant = educore_has_access( array( 'accountant', 'accounts_officer', 'finance', 'staff' ) );
     }
 
-    global $wpdb;
+    if ( ! $is_admin && ! $is_accountant ) {
+        $staff_row = $wpdb->get_row( $wpdb->prepare(
+            "SELECT designation, staff_type FROM {$table_staff} WHERE wp_user_id = %d OR email = %s LIMIT 1",
+            $current_user->ID,
+            $current_user->user_email
+        ) );
+        if ( $staff_row ) {
+            $desig = strtolower( $staff_row->designation . ' ' . $staff_row->staff_type );
+            if ( strpos( $desig, 'account' ) !== false || strpos( $desig, 'finance' ) !== false || strpos( $desig, 'cash' ) !== false ) {
+                $is_accountant = true;
+            }
+        }
+    }
+
+    if ( ! $is_admin && ! $is_accountant ) {
+        wp_die( esc_html__( 'You do not have sufficient permissions to manage accounting records.', 'ifsedu-sms' ) );
+    }
+
     $table_accounting = $wpdb->prefix . 'sms_accounting';
 
     // --------------------------------------------------------------------------
-    // 0. AUTO-SCHEMA CHECK (Ensures missing columns exist for professional auditing)
+    // 1. AUTO-SCHEMA CHECK (Ensures missing columns exist for auditing)
     // --------------------------------------------------------------------------
     $check_party = $wpdb->get_results( "SHOW COLUMNS FROM `{$table_accounting}` LIKE 'party_name'" );
     if ( empty( $check_party ) ) {
@@ -53,10 +80,10 @@ function educore_accounting_add_edit_view() {
         $wpdb->query( "ALTER TABLE `{$table_accounting}` ADD `project_tag` varchar(150) DEFAULT 'General Operations' NOT NULL AFTER `department`" );
     }
 
-    // Advanced Institutional Compliance Fields
+    $current_yr = intval( current_time( 'Y' ) );
     $check_fiscal = $wpdb->get_results( "SHOW COLUMNS FROM `{$table_accounting}` LIKE 'fiscal_year'" );
     if ( empty( $check_fiscal ) ) {
-        $wpdb->query( "ALTER TABLE `{$table_accounting}` ADD `fiscal_year` varchar(20) DEFAULT '" . date('Y') . "-" . (date('Y') + 1) . "' NOT NULL AFTER `entry_date`" );
+        $wpdb->query( "ALTER TABLE `{$table_accounting}` ADD `fiscal_year` varchar(20) DEFAULT '" . $current_yr . '-' . ($current_yr + 1) . "' NOT NULL AFTER `entry_date`" );
     }
 
     $check_cost_center = $wpdb->get_results( "SHOW COLUMNS FROM `{$table_accounting}` LIKE 'cost_center_code'" );
@@ -79,7 +106,7 @@ function educore_accounting_add_edit_view() {
     $back_url = admin_url( 'admin.php?page=school_management_system&tab=accounting&sub=list' );
 
     // --------------------------------------------------------------------------
-    // 1. FORM SUBMISSION ENGINE WITH STRICT SANITIZATION
+    // 2. FORM SUBMISSION ENGINE WITH STRICT SANITIZATION
     // --------------------------------------------------------------------------
     if ( isset( $_POST['educore_save_accounting_entry'] ) && isset( $_POST['educore_acct_nonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['educore_acct_nonce'] ) ), 'save_acct_action' ) ) {
         
@@ -88,7 +115,7 @@ function educore_accounting_add_edit_view() {
         $department       = isset( $_POST['department'] ) ? sanitize_text_field( wp_unslash( $_POST['department'] ) ) : 'General Administration';
         $cost_center_code = isset( $_POST['cost_center_code'] ) ? sanitize_text_field( wp_unslash( $_POST['cost_center_code'] ) ) : 'CC-ADMIN-01';
         $project_tag      = isset( $_POST['project_tag'] ) ? sanitize_text_field( wp_unslash( $_POST['project_tag'] ) ) : 'General Operations';
-        $fiscal_year      = isset( $_POST['fiscal_year'] ) ? sanitize_text_field( wp_unslash( $_POST['fiscal_year'] ) ) : date('Y') . '-' . (date('Y') + 1);
+        $fiscal_year      = isset( $_POST['fiscal_year'] ) ? sanitize_text_field( wp_unslash( $_POST['fiscal_year'] ) ) : $current_yr . '-' . ($current_yr + 1);
         $title            = isset( $_POST['title'] ) ? sanitize_text_field( wp_unslash( $_POST['title'] ) ) : '';
         $party_name       = isset( $_POST['party_name'] ) ? sanitize_text_field( wp_unslash( $_POST['party_name'] ) ) : '';
         $amount           = isset( $_POST['amount'] ) ? max( 0, floatval( $_POST['amount'] ) ) : 0;
@@ -102,7 +129,7 @@ function educore_accounting_add_edit_view() {
         
         $attachment_url = $entry && ! empty( $entry->attachment_url ) ? $entry->attachment_url : '';
 
-        // Handle File Upload securely
+        // Secure file upload handler
         if ( ! empty( $_FILES['voucher_attachment']['name'] ) ) {
             require_once ABSPATH . 'wp-admin/includes/file.php';
             $uploaded_file = wp_handle_upload( $_FILES['voucher_attachment'], array( 'test_form' => false ) );
@@ -142,8 +169,8 @@ function educore_accounting_add_edit_view() {
             }
 
             if ( false !== $result ) {
-                if ( class_exists( 'IFSEdu_School_Management_System' ) ) {
-                    IFSEdu_School_Management_System::log_activity( sprintf( "Processed Institutional Ledger Entry: (%s) %s - Amount: %.2f", $voucher_no, $title, $amount ) );
+                if ( function_exists( 'educore_log_activity' ) ) {
+                    educore_log_activity( sprintf( "Processed Ledger Entry: (%s) %s - Amount: %.2f", $voucher_no, $title, $amount ) );
                 }
 
                 $redirect_url = add_query_arg(
@@ -162,7 +189,7 @@ function educore_accounting_add_edit_view() {
                 $db_error = $wpdb->last_error ? $wpdb->last_error : __( 'Database query execution failed.', 'ifsedu-sms' );
             }
         } else {
-            $db_error = __( 'Please enter a valid title and a gross amount greater than 0.00', 'ifsedu-sms' );
+            $db_error = __( 'Please enter a valid title and an amount greater than 0.00', 'ifsedu-sms' );
         }
     }
     ?>
@@ -520,7 +547,6 @@ function educore_accounting_add_edit_view() {
                         <label class="dpt-form-label"><?php esc_html_e( 'Fiscal Year', 'ifsedu-sms' ); ?></label>
                         <select name="fiscal_year" class="dpt-select-field">
                             <?php 
-                            $current_yr = intval( date('Y') );
                             $saved_fiscal = ( $entry && isset( $entry->fiscal_year ) ) ? $entry->fiscal_year : $current_yr . '-' . ($current_yr + 1);
                             for ( $y = $current_yr - 2; $y <= $current_yr + 2; $y++ ) {
                                 $f_val = $y . '-' . ($y + 1);
@@ -533,7 +559,7 @@ function educore_accounting_add_edit_view() {
                     <!-- Payer / Payee Identity -->
                     <div class="dpt-form-group">
                         <label class="dpt-form-label" id="educore_party_label"><?php esc_html_e( 'Received From (Payer)', 'ifsedu-sms' ); ?></label>
-                        <input type="text" name="party_name" class="dpt-input-field" placeholder="e.g. Bangladesh Education Board / Vendor Name" value="<?php echo ( $entry && isset( $entry->party_name ) ) ? esc_attr( $entry->party_name ) : ''; ?>">
+                        <input type="text" name="party_name" class="dpt-input-field" placeholder="e.g. Education Board / Vendor Name" value="<?php echo ( $entry && isset( $entry->party_name ) ) ? esc_attr( $entry->party_name ) : ''; ?>">
                     </div>
 
                     <!-- Payment Method -->

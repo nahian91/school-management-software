@@ -22,11 +22,24 @@ function educore_exam_attendance_view() {
     $table_staff            = $wpdb->prefix . 'sms_staff';
     $table_teacher_subjects = $wpdb->prefix . 'sms_teacher_subjects';
 
-    // Capability Validation
-    $is_admin = current_user_can( 'manage_options' );
-    $is_staff = class_exists( 'IFSEdu_School_Management_System' ) 
-        ? IFSEdu_School_Management_System::has_access( array( 'teacher', 'staff', 'operator', 'instructor' ) ) 
-        : current_user_can( 'edit_posts' );
+    // 1. Procedural Role & Capability Validation
+    $is_admin = current_user_can( 'manage_options' ) || in_array( 'administrator', (array) $current_user->roles, true );
+    
+    $is_staff = false;
+    if ( function_exists( 'educore_has_access' ) ) {
+        $is_staff = educore_has_access( array( 'teacher', 'staff', 'operator', 'instructor', 'editor', 'author', 'contributor', 'subscriber' ) );
+    }
+
+    if ( ! $is_staff && ! $is_admin ) {
+        $staff_exists = $wpdb->get_var( $wpdb->prepare(
+            "SELECT id FROM {$table_staff} WHERE wp_user_id = %d OR email = %s LIMIT 1",
+            $current_user->ID,
+            $current_user->user_email
+        ) );
+        if ( $staff_exists ) {
+            $is_staff = true;
+        }
+    }
 
     if ( ! $is_admin && ! $is_staff ) {
         wp_die( esc_html__( 'You do not have sufficient permissions to view examination hall attendance.', 'ifsedu-sms' ) );
@@ -76,7 +89,8 @@ function educore_exam_attendance_view() {
 
     if ( ! $is_admin ) {
         $teacher_id = $wpdb->get_var( $wpdb->prepare(
-            "SELECT id FROM {$table_staff} WHERE email = %s OR full_name = %s LIMIT 1",
+            "SELECT id FROM {$table_staff} WHERE wp_user_id = %d OR email = %s OR full_name = %s LIMIT 1",
+            $current_user->ID,
             $current_user->user_email,
             $current_user->display_name
         ) );
@@ -106,8 +120,8 @@ function educore_exam_attendance_view() {
     if ( $_SERVER['REQUEST_METHOD'] === 'POST' && isset( $_POST['educore_save_exam_attendance'] ) ) {
         if ( isset( $_POST['educore_exam_att_nonce_field'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['educore_exam_att_nonce_field'] ) ), 'save_exam_attendance_action' ) ) {
             
-            // Boundary check: Non-admin teacher can only submit for their assigned class and subject
-            if ( ! $is_admin && ( ! in_array( $filter_class, $teacher_assigned_classes, true ) || ! in_array( $filter_subject, (array) ( $teacher_assigned_subs[ $filter_class ] ?? array() ), true ) ) ) {
+            // Boundary check: Non-admin teacher can only submit for their assigned class and subject if allocations exist
+            if ( ! $is_admin && ! empty( $teacher_assigned_classes ) && ( ! in_array( $filter_class, $teacher_assigned_classes, true ) || ! in_array( $filter_subject, (array) ( $teacher_assigned_subs[ $filter_class ] ?? array() ), true ) ) ) {
                 wp_die( esc_html__( 'Security Check: You are not authorized to submit examination attendance for this allocation.', 'ifsedu-sms' ) );
             }
 
@@ -168,8 +182,8 @@ function educore_exam_attendance_view() {
         foreach ( $raw_units as $unit ) {
             $c_name = trim( $unit->class_name );
 
-            // If teacher mode, skip unassigned classes
-            if ( ! $is_admin && ! in_array( $c_name, $teacher_assigned_classes, true ) ) {
+            // If teacher mode and has assigned classes, filter dropdowns accordingly
+            if ( ! $is_admin && ! empty( $teacher_assigned_classes ) && ! in_array( $c_name, $teacher_assigned_classes, true ) ) {
                 continue;
             }
 
@@ -185,9 +199,9 @@ function educore_exam_attendance_view() {
                 $class_section_map[ $c_name ][] = trim( $unit->dept_name );
             }
 
-            // Fetch subjects mapped strictly class-wise with full marks distribution
+            // Fetch subjects mapped strictly class-wise
             $clean_c = trim( str_ireplace( 'Class ', '', $c_name ) );
-            if ( ! $is_admin && isset( $teacher_id ) ) {
+            if ( ! $is_admin && isset( $teacher_id ) && ! empty( $teacher_id ) ) {
                 $subs = $wpdb->get_results( $wpdb->prepare( 
                     "SELECT DISTINCT s.subject_name, s.subject_code, s.total_marks, s.pass_marks, s.cq_marks, s.cq_pass, s.mcq_marks, s.mcq_pass, s.practical_marks, s.practical_pass 
                      FROM {$table_teacher_subjects} ts
@@ -236,8 +250,8 @@ function educore_exam_attendance_view() {
             $class_subject_map[ $c_name ] = array_values( $unique_subs );
         }
 
-        // Global fallback if specific mapping is empty (Admin only)
-        if ( $is_admin ) {
+        // Global fallback if specific mapping is empty
+        if ( $is_admin || empty( $teacher_assigned_classes ) ) {
             $all_global_subs = $wpdb->get_results( "SELECT subject_name, subject_code, total_marks, pass_marks, cq_marks, cq_pass, mcq_marks, mcq_pass, practical_marks, practical_pass FROM {$table_subjects} ORDER BY subject_name ASC" );
             foreach ( $academic_classes as $c_name ) {
                 if ( empty( $class_subject_map[ $c_name ] ) && ! empty( $all_global_subs ) ) {

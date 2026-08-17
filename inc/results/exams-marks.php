@@ -64,19 +64,33 @@ add_action( 'wp_ajax_educore_get_sections_by_class_marks', 'educore_get_sections
 function educore_get_sections_by_class_marks_handler() {
     check_ajax_referer( 'educore_marks_nonce', 'security' );
 
-    $is_admin = current_user_can( 'manage_options' );
-    $is_staff = class_exists( 'IFSEdu_School_Management_System' ) 
-        ? IFSEdu_School_Management_System::has_access( array( 'teacher', 'staff', 'operator', 'instructor' ) ) 
-        : current_user_can( 'edit_posts' );
+    $current_user = wp_get_current_user();
+    $is_admin     = current_user_can( 'manage_options' ) || in_array( 'administrator', (array) $current_user->roles, true );
+    $is_staff     = false;
+
+    if ( function_exists( 'educore_has_access' ) ) {
+        $is_staff = educore_has_access( array( 'teacher', 'staff', 'operator', 'instructor', 'editor', 'author' ) );
+    }
+
+    global $wpdb;
+    $table_staff = $wpdb->prefix . 'sms_staff';
+
+    if ( ! $is_admin && ! $is_staff ) {
+        $staff_exists = $wpdb->get_var( $wpdb->prepare(
+            "SELECT id FROM {$table_staff} WHERE wp_user_id = %d OR email = %s LIMIT 1",
+            $current_user->ID,
+            $current_user->user_email
+        ) );
+        if ( $staff_exists ) {
+            $is_staff = true;
+        }
+    }
 
     if ( ! $is_admin && ! $is_staff ) {
         wp_send_json_error( array( 'message' => __( 'Permission denied.', 'ifsedu-sms' ) ) );
     }
 
-    global $wpdb;
-    $current_user           = wp_get_current_user();
     $table_units            = $wpdb->prefix . 'sms_academic_units';
-    $table_staff            = $wpdb->prefix . 'sms_staff';
     $table_teacher_subjects = $wpdb->prefix . 'sms_teacher_subjects';
     $class_name             = isset( $_POST['class_name'] ) ? sanitize_text_field( wp_unslash( $_POST['class_name'] ) ) : '';
 
@@ -86,7 +100,8 @@ function educore_get_sections_by_class_marks_handler() {
 
     if ( ! $is_admin ) {
         $teacher_id = $wpdb->get_var( $wpdb->prepare(
-            "SELECT id FROM {$table_staff} WHERE email = %s OR full_name = %s LIMIT 1",
+            "SELECT id FROM {$table_staff} WHERE wp_user_id = %d OR email = %s OR full_name = %s LIMIT 1",
+            $current_user->ID,
             $current_user->user_email,
             $current_user->display_name
         ) );
@@ -117,20 +132,34 @@ add_action( 'wp_ajax_educore_get_subjects_by_class_marks', 'educore_get_subjects
 function educore_get_subjects_by_class_marks_handler() {
     check_ajax_referer( 'educore_marks_nonce', 'security' );
 
-    $is_admin = current_user_can( 'manage_options' );
-    $is_staff = class_exists( 'IFSEdu_School_Management_System' ) 
-        ? IFSEdu_School_Management_System::has_access( array( 'teacher', 'staff', 'operator', 'instructor' ) ) 
-        : current_user_can( 'edit_posts' );
+    $current_user = wp_get_current_user();
+    $is_admin     = current_user_can( 'manage_options' ) || in_array( 'administrator', (array) $current_user->roles, true );
+    $is_staff     = false;
+
+    if ( function_exists( 'educore_has_access' ) ) {
+        $is_staff = educore_has_access( array( 'teacher', 'staff', 'operator', 'instructor', 'editor', 'author' ) );
+    }
+
+    global $wpdb;
+    $table_staff = $wpdb->prefix . 'sms_staff';
+
+    if ( ! $is_admin && ! $is_staff ) {
+        $staff_exists = $wpdb->get_var( $wpdb->prepare(
+            "SELECT id FROM {$table_staff} WHERE wp_user_id = %d OR email = %s LIMIT 1",
+            $current_user->ID,
+            $current_user->user_email
+        ) );
+        if ( $staff_exists ) {
+            $is_staff = true;
+        }
+    }
 
     if ( ! $is_admin && ! $is_staff ) {
         wp_send_json_error( array( 'message' => __( 'Permission denied.', 'ifsedu-sms' ) ) );
     }
 
-    global $wpdb;
-    $current_user           = wp_get_current_user();
     $table_subjects         = $wpdb->prefix . 'sms_subjects';
     $table_units            = $wpdb->prefix . 'sms_academic_units';
-    $table_staff            = $wpdb->prefix . 'sms_staff';
     $table_teacher_subjects = $wpdb->prefix . 'sms_teacher_subjects';
     $class_name             = isset( $_POST['class_name'] ) ? sanitize_text_field( wp_unslash( $_POST['class_name'] ) ) : '';
 
@@ -140,7 +169,8 @@ function educore_get_subjects_by_class_marks_handler() {
 
     if ( ! $is_admin ) {
         $teacher_id = $wpdb->get_var( $wpdb->prepare(
-            "SELECT id FROM {$table_staff} WHERE email = %s OR full_name = %s LIMIT 1",
+            "SELECT id FROM {$table_staff} WHERE wp_user_id = %d OR email = %s OR full_name = %s LIMIT 1",
+            $current_user->ID,
             $current_user->user_email,
             $current_user->display_name
         ) );
@@ -213,11 +243,24 @@ function educore_exams_marks_view() {
     $table_staff            = $wpdb->prefix . 'sms_staff';
     $table_teacher_subjects = $wpdb->prefix . 'sms_teacher_subjects';
 
-    // Capability Validation
-    $is_admin = current_user_can( 'manage_options' );
-    $is_staff = class_exists( 'IFSEdu_School_Management_System' ) 
-        ? IFSEdu_School_Management_System::has_access( array( 'teacher', 'staff', 'operator', 'instructor' ) ) 
-        : current_user_can( 'edit_posts' );
+    // 1. Procedural Capability Validation
+    $is_admin = current_user_can( 'manage_options' ) || in_array( 'administrator', (array) $current_user->roles, true );
+    $is_staff = false;
+
+    if ( function_exists( 'educore_has_access' ) ) {
+        $is_staff = educore_has_access( array( 'teacher', 'staff', 'operator', 'instructor', 'editor', 'author' ) );
+    }
+
+    if ( ! $is_staff && ! $is_admin ) {
+        $staff_exists = $wpdb->get_var( $wpdb->prepare(
+            "SELECT id FROM {$table_staff} WHERE wp_user_id = %d OR email = %s LIMIT 1",
+            $current_user->ID,
+            $current_user->user_email
+        ) );
+        if ( $staff_exists ) {
+            $is_staff = true;
+        }
+    }
 
     if ( ! $is_admin && ! $is_staff ) {
         wp_die( esc_html__( 'You do not have sufficient permissions to enter examination marks.', 'ifsedu-sms' ) );
@@ -238,10 +281,12 @@ function educore_exams_marks_view() {
     // --------------------------------------------------------------------------
     $teacher_assigned_classes = array();
     $teacher_assigned_subs    = array();
+    $teacher_id               = 0;
 
     if ( ! $is_admin ) {
         $teacher_id = $wpdb->get_var( $wpdb->prepare(
-            "SELECT id FROM {$table_staff} WHERE email = %s OR full_name = %s LIMIT 1",
+            "SELECT id FROM {$table_staff} WHERE wp_user_id = %d OR email = %s OR full_name = %s LIMIT 1",
+            $current_user->ID,
             $current_user->user_email,
             $current_user->display_name
         ) );
@@ -272,7 +317,7 @@ function educore_exams_marks_view() {
         if ( isset( $_POST['educore_marks_nonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['educore_marks_nonce'] ) ), 'save_marks_action' ) ) {
             
             // Boundary check: Non-admin teacher can only submit for their assigned class and subject
-            if ( ! $is_admin && ( ! in_array( $filter_class, $teacher_assigned_classes, true ) || ! in_array( $filter_subject, (array) ( $teacher_assigned_subs[ $filter_class ] ?? array() ), true ) ) ) {
+            if ( ! $is_admin && ! empty( $teacher_assigned_classes ) && ( ! in_array( $filter_class, $teacher_assigned_classes, true ) || ! in_array( $filter_subject, (array) ( $teacher_assigned_subs[ $filter_class ] ?? array() ), true ) ) ) {
                 wp_die( esc_html__( 'Security Check: You are not authorized to submit marks for this class/subject allocation.', 'ifsedu-sms' ) );
             }
 
@@ -376,7 +421,7 @@ function educore_exams_marks_view() {
     // Pre-populate Available Sections for Selected Class
     $available_sections = array();
     if ( ! empty( $filter_class ) ) {
-        if ( ! $is_admin && isset( $teacher_id ) ) {
+        if ( ! $is_admin && ! empty( $teacher_id ) ) {
             $available_sections = $wpdb->get_col( $wpdb->prepare(
                 "SELECT DISTINCT u.section_name 
                  FROM {$table_teacher_subjects} ts
@@ -399,7 +444,7 @@ function educore_exams_marks_view() {
     $active_subject_obj = null;
 
     if ( ! empty( $filter_class ) ) {
-        if ( ! $is_admin && isset( $teacher_id ) ) {
+        if ( ! $is_admin && ! empty( $teacher_id ) ) {
             $available_subjects = $wpdb->get_results( $wpdb->prepare(
                 "SELECT DISTINCT s.* 
                  FROM {$table_teacher_subjects} ts
@@ -444,7 +489,7 @@ function educore_exams_marks_view() {
         }
 
         $st_sql .= " ORDER BY CAST(roll_no AS UNSIGNED) ASC, roll_no ASC";
-        $students_list = $wpdb->get_results( $wpdb->prepare( $st_sql, ...$st_params ) );
+        $students_list = $wpdb->get_results( $wpdb->prepare( $st_sql, $st_params ) );
 
         $existing_results = $wpdb->get_results( $wpdb->prepare(
             "SELECT student_id, cq_marks, mcq_marks, practical_marks, obtained_marks, grade, gpa 
@@ -716,9 +761,11 @@ function educore_exams_marks_view() {
                         <label class="dpt-form-label"><?php esc_html_e( '2. Class Name', 'ifsedu-sms' ); ?> <span style="color:#ef4444;">*</span></label>
                         <select name="class_name" id="educore_marks_class_select" class="dpt-select" required>
                             <option value=""><?php esc_html_e( '-- Choose Class --', 'ifsedu-sms' ); ?></option>
-                            <?php foreach ( $academic_classes as $cls_name ) : ?>
+                            <?php foreach ( $academic_classes as $cls_name ) : 
+                                $display_class_name = preg_match( '/^class\s+/i', $cls_name ) ? $cls_name : 'Class ' . $cls_name;
+                            ?>
                                 <option value="<?php echo esc_attr( $cls_name ); ?>" <?php selected( $filter_class, $cls_name ); ?>>
-                                    <?php printf( esc_html__( 'Class %s', 'ifsedu-sms' ), esc_html( $cls_name ) ); ?>
+                                    <?php echo esc_html( $display_class_name ); ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>

@@ -15,11 +15,32 @@ add_action( 'wp_ajax_educore_get_sections_by_class', 'educore_get_sections_by_cl
 function educore_get_sections_by_class_report_handler() {
     check_ajax_referer( 'educore_report_nonce', 'security' );
 
-    if ( ! current_user_can( 'manage_options' ) ) {
-        wp_send_json_error( array( 'message' => __( 'Permission denied.', 'ifsedu-sms' ) ) );
+    $current_user = wp_get_current_user();
+    $is_admin     = current_user_can( 'manage_options' ) || in_array( 'administrator', (array) $current_user->roles, true );
+    $is_staff     = false;
+
+    if ( function_exists( 'educore_has_access' ) ) {
+        $is_staff = educore_has_access( array( 'teacher', 'staff', 'operator', 'instructor', 'editor', 'author' ) );
     }
 
     global $wpdb;
+    $table_staff = $wpdb->prefix . 'sms_staff';
+
+    if ( ! $is_admin && ! $is_staff ) {
+        $staff_exists = $wpdb->get_var( $wpdb->prepare(
+            "SELECT id FROM {$table_staff} WHERE wp_user_id = %d OR email = %s LIMIT 1",
+            $current_user->ID,
+            $current_user->user_email
+        ) );
+        if ( $staff_exists ) {
+            $is_staff = true;
+        }
+    }
+
+    if ( ! $is_admin && ! $is_staff ) {
+        wp_send_json_error( array( 'message' => __( 'Permission denied.', 'ifsedu-sms' ) ) );
+    }
+
     $table_units = $wpdb->prefix . 'sms_academic_units';
     $class_name  = isset( $_POST['class_name'] ) ? sanitize_text_field( wp_unslash( $_POST['class_name'] ) ) : '';
 
@@ -27,9 +48,12 @@ function educore_get_sections_by_class_report_handler() {
         wp_send_json_success( array() );
     }
 
+    $clean_class = trim( str_ireplace( 'Class ', '', $class_name ) );
+
     $sections = $wpdb->get_col( $wpdb->prepare(
-        "SELECT DISTINCT section_name FROM {$table_units} WHERE class_name = %s AND section_name != '' ORDER BY section_name ASC",
-        $class_name
+        "SELECT DISTINCT section_name FROM {$table_units} WHERE (class_name = %s OR class_name = %s) AND section_name != '' ORDER BY section_name ASC",
+        $class_name,
+        $clean_class
     ) );
 
     wp_send_json_success( $sections );
@@ -40,11 +64,32 @@ add_action( 'wp_ajax_educore_get_students_by_class', 'educore_get_students_by_cl
 function educore_get_students_by_class_handler() {
     check_ajax_referer( 'educore_report_nonce', 'security' );
 
-    if ( ! current_user_can( 'manage_options' ) ) {
-        wp_send_json_error( array( 'message' => __( 'Permission denied.', 'ifsedu-sms' ) ) );
+    $current_user = wp_get_current_user();
+    $is_admin     = current_user_can( 'manage_options' ) || in_array( 'administrator', (array) $current_user->roles, true );
+    $is_staff     = false;
+
+    if ( function_exists( 'educore_has_access' ) ) {
+        $is_staff = educore_has_access( array( 'teacher', 'staff', 'operator', 'instructor', 'editor', 'author' ) );
     }
 
     global $wpdb;
+    $table_staff = $wpdb->prefix . 'sms_staff';
+
+    if ( ! $is_admin && ! $is_staff ) {
+        $staff_exists = $wpdb->get_var( $wpdb->prepare(
+            "SELECT id FROM {$table_staff} WHERE wp_user_id = %d OR email = %s LIMIT 1",
+            $current_user->ID,
+            $current_user->user_email
+        ) );
+        if ( $staff_exists ) {
+            $is_staff = true;
+        }
+    }
+
+    if ( ! $is_admin && ! $is_staff ) {
+        wp_send_json_error( array( 'message' => __( 'Permission denied.', 'ifsedu-sms' ) ) );
+    }
+
     $table_students = $wpdb->prefix . 'sms_students';
     $class_name     = isset( $_POST['class_name'] ) ? sanitize_text_field( wp_unslash( $_POST['class_name'] ) ) : '';
     $section_name   = isset( $_POST['section_name'] ) ? sanitize_text_field( wp_unslash( $_POST['section_name'] ) ) : '';
@@ -53,8 +98,10 @@ function educore_get_students_by_class_handler() {
         wp_send_json_success( array() );
     }
 
-    $sql = "SELECT id, full_name, student_id, roll_no FROM {$table_students} WHERE status = 'Active' AND class_name = %s";
-    $params = array( $class_name );
+    $clean_class = trim( str_ireplace( 'Class ', '', $class_name ) );
+
+    $sql = "SELECT id, full_name, student_id, roll_no FROM {$table_students} WHERE status = 'Active' AND (class_name = %s OR class_name = %s)";
+    $params = array( $class_name, $clean_class );
 
     if ( ! empty( $section_name ) ) {
         $sql .= " AND section_name = %s";
@@ -63,7 +110,7 @@ function educore_get_students_by_class_handler() {
 
     $sql .= " ORDER BY CAST(roll_no AS UNSIGNED) ASC, roll_no ASC";
 
-    $students = $wpdb->get_results( $wpdb->prepare( $sql, ...$params ) );
+    $students = $wpdb->get_results( $wpdb->prepare( $sql, $params ) );
 
     $data = array();
     if ( ! empty( $students ) ) {
@@ -82,13 +129,34 @@ function educore_get_students_by_class_handler() {
 
 function educore_exams_report_view() {
     global $wpdb;
+    $current_user = wp_get_current_user();
+
     $table_students = $wpdb->prefix . 'sms_students';
     $table_exams    = $wpdb->prefix . 'sms_exams';
     $table_results  = $wpdb->prefix . 'sms_results';
     $table_units    = $wpdb->prefix . 'sms_academic_units';
+    $table_staff    = $wpdb->prefix . 'sms_staff';
 
-    // Strict Security Control: Capability Check
-    if ( ! current_user_can( 'manage_options' ) ) {
+    // 1. Procedural Security Validation
+    $is_admin = current_user_can( 'manage_options' ) || in_array( 'administrator', (array) $current_user->roles, true );
+    $is_staff = false;
+
+    if ( function_exists( 'educore_has_access' ) ) {
+        $is_staff = educore_has_access( array( 'teacher', 'staff', 'operator', 'instructor', 'editor', 'author' ) );
+    }
+
+    if ( ! $is_admin && ! $is_staff ) {
+        $staff_exists = $wpdb->get_var( $wpdb->prepare(
+            "SELECT id FROM {$table_staff} WHERE wp_user_id = %d OR email = %s LIMIT 1",
+            $current_user->ID,
+            $current_user->user_email
+        ) );
+        if ( $staff_exists ) {
+            $is_staff = true;
+        }
+    }
+
+    if ( ! $is_admin && ! $is_staff ) {
         wp_die( esc_html__( 'You do not have sufficient permissions to generate academic reports.', 'ifsedu-sms' ) );
     }
 
@@ -112,6 +180,7 @@ function educore_exams_report_view() {
     // Global classes fallback
     $all_classes_raw = $wpdb->get_col( "SELECT DISTINCT class_name FROM {$table_units} WHERE class_name != '' ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC" );
     if ( ! empty( $all_classes_raw ) ) {
+        $all_classes_raw = array_values( array_unique( $all_classes_raw ) );
         usort( $all_classes_raw, 'strnatcasecmp' );
     }
 
@@ -125,9 +194,11 @@ function educore_exams_report_view() {
     // Fetch available sections for selected class if present
     $available_sections = array();
     if ( ! empty( $filter_class ) ) {
+        $clean_class = trim( str_ireplace( 'Class ', '', $filter_class ) );
         $available_sections = $wpdb->get_col( $wpdb->prepare(
-            "SELECT DISTINCT section_name FROM {$table_units} WHERE class_name = %s AND section_name != '' ORDER BY section_name ASC",
-            $filter_class
+            "SELECT DISTINCT section_name FROM {$table_units} WHERE (class_name = %s OR class_name = %s) AND section_name != '' ORDER BY section_name ASC",
+            $filter_class,
+            $clean_class
         ) );
     }
 
@@ -136,7 +207,7 @@ function educore_exams_report_view() {
         $school_name = 'Green Gems International School & College';
     }
 
-    $back_url = add_query_arg( array( 'sub' => 'list' ), $base_url );
+    $back_url = add_query_arg( array( 'sub' => 'marks' ), $base_url );
     ?>
 
     <style>
@@ -174,7 +245,6 @@ function educore_exams_report_view() {
             margin-bottom: 24px;
         }
 
-        /* Filter Console Grid Layout */
         .dpt-filter-grid {
             display: grid;
             grid-template-columns: 2fr 1.5fr 1.5fr 1.5fr 2fr 1.2fr;
@@ -380,7 +450,6 @@ function educore_exams_report_view() {
             margin-bottom: 24px;
         }
 
-        /* Responsive Scrollable Container with Custom Modern Scrollbar */
         .dpt-tabulation-scroll-wrapper {
             width: 100%;
             overflow-x: auto;
@@ -462,7 +531,7 @@ function educore_exams_report_view() {
             </h2>
             <a href="<?php echo esc_url( $back_url ); ?>" class="dpt-btn-secondary">
                 <span class="dashicons dashicons-arrow-left-alt" style="font-size:14px; width:14px; height:14px;"></span>
-                <?php esc_html_e( 'Back to Exams Directory', 'ifsedu-sms' ); ?>
+                <?php esc_html_e( 'Back to Marks Entry', 'ifsedu-sms' ); ?>
             </a>
         </div>
 
@@ -532,8 +601,9 @@ function educore_exams_report_view() {
                             <option value=""><?php esc_html_e( '-- Choose Student --', 'ifsedu-sms' ); ?></option>
                             <?php 
                             if ( ! empty( $filter_class ) ) {
-                                $sql = "SELECT id, full_name, student_id, roll_no FROM {$table_students} WHERE status = 'Active' AND class_name = %s";
-                                $params = array( $filter_class );
+                                $clean_class = trim( str_ireplace( 'Class ', '', $filter_class ) );
+                                $sql = "SELECT id, full_name, student_id, roll_no FROM {$table_students} WHERE status = 'Active' AND (class_name = %s OR class_name = %s)";
+                                $params = array( $filter_class, $clean_class );
 
                                 if ( ! empty( $filter_section ) ) {
                                     $sql .= " AND section_name = %s";
@@ -541,13 +611,15 @@ function educore_exams_report_view() {
                                 }
 
                                 $sql .= " ORDER BY CAST(roll_no AS UNSIGNED) ASC, roll_no ASC";
-                                $student_list = $wpdb->get_results( $wpdb->prepare( $sql, ...$params ) );
+                                $student_list = $wpdb->get_results( $wpdb->prepare( $sql, $params ) );
 
-                                foreach ( $student_list as $s ) : ?>
-                                    <option value="<?php echo intval( $s->id ); ?>" <?php selected( $filter_student, $s->id ); ?>>
-                                        <?php printf( esc_html__( 'Roll %1$s: %2$s (%3$s)', 'ifsedu-sms' ), esc_html( $s->roll_no ), esc_html( $s->full_name ), esc_html( $s->student_id ) ); ?>
-                                    </option>
-                                <?php endforeach;
+                                if ( ! empty( $student_list ) ) {
+                                    foreach ( $student_list as $s ) : ?>
+                                        <option value="<?php echo intval( $s->id ); ?>" <?php selected( $filter_student, $s->id ); ?>>
+                                            <?php printf( esc_html__( 'Roll %1$s: %2$s (%3$s)', 'ifsedu-sms' ), esc_html( $s->roll_no ), esc_html( $s->full_name ), esc_html( $s->student_id ) ); ?>
+                                        </option>
+                                    <?php endforeach;
+                                }
                             }
                             ?>
                         </select>
@@ -600,7 +672,8 @@ function educore_exams_report_view() {
 
                 $.each(classesToLoad, function(i, cls) {
                     var sel = (cls === selectedClass) ? 'selected' : '';
-                    $classSelect.append('<option value="' + cls + '" ' + sel + '>' + cls + '</option>');
+                    var displayCls = (/^class\s+/i.test(cls)) ? cls : 'Class ' + cls;
+                    $classSelect.append('<option value="' + cls + '" ' + sel + '>' + displayCls + '</option>');
                 });
             }
 
@@ -844,9 +917,10 @@ function educore_exams_report_view() {
         // ==========================================================================
         elseif ( $filter_exam > 0 && 'tabulation' === $report_type && ! empty( $filter_class ) ) {
             $exam = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table_exams} WHERE id = %d", $filter_exam ) );
+            $clean_class = trim( str_ireplace( 'Class ', '', $filter_class ) );
             
-            $sql = "SELECT * FROM {$table_students} WHERE status = 'Active' AND class_name = %s";
-            $params = array( $filter_class );
+            $sql = "SELECT * FROM {$table_students} WHERE status = 'Active' AND (class_name = %s OR class_name = %s)";
+            $params = array( $filter_class, $clean_class );
 
             if ( ! empty( $filter_section ) ) {
                 $sql .= " AND section_name = %s";
@@ -854,14 +928,14 @@ function educore_exams_report_view() {
             }
 
             $sql .= " ORDER BY CAST(roll_no AS UNSIGNED) ASC, roll_no ASC";
-            $students = $wpdb->get_results( $wpdb->prepare( $sql, ...$params ) );
+            $students = $wpdb->get_results( $wpdb->prepare( $sql, $params ) );
 
-            $subjects = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT subject_name FROM {$table_results} WHERE exam_id = %d ORDER BY subject_name ASC", $filter_exam ) );
+            $subjects = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT subject_name FROM {$table_results} WHERE exam_id = %d AND (class_name = %s OR class_name = %s) ORDER BY subject_name ASC", $filter_exam, $filter_class, $clean_class ) );
 
             if ( ! $students || ! $subjects ) {
                 $sec_label = ! empty( $filter_section ) ? ' (' . esc_html( $filter_section ) . ')' : '';
                 $empty_tab_notice = sprintf(
-                    esc_html__( 'No evaluated marks or subject entries found for Class %1$s%2$s in this exam.', 'ifsedu-sms' ),
+                    esc_html__( 'No evaluated marks or subject entries found for %1$s%2$s in this exam.', 'ifsedu-sms' ),
                     '<strong>' . esc_html( $filter_class ) . '</strong>',
                     '<strong>' . esc_html( $sec_label ) . '</strong>'
                 );
@@ -883,7 +957,7 @@ function educore_exams_report_view() {
                     <h3 style="margin: 0; font-weight: 800; color: #006a4e; text-transform: uppercase; font-size: 20px;"><?php echo esc_html( $school_name ); ?></h3>
                     <h5 style="margin: 6px 0 0 0; font-weight: 700; color: #1e293b; font-size: 14px;"><?php echo esc_html( $exam->exam_name ); ?> &mdash; <?php esc_html_e( 'Academic Tabulation Sheet', 'ifsedu-sms' ); ?></h5>
                     <span style="display: inline-block; background: #f1f5f9; color: #475569; padding: 3px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; margin-top: 6px; border: 1px solid #cbd5e1;">
-                        <?php esc_html_e( 'Class:', 'ifsedu-sms' ); ?> <?php echo esc_html( $filter_class ); ?>
+                        <?php echo esc_html( preg_match('/^class\s+/i', $filter_class) ? $filter_class : 'Class ' . $filter_class ); ?>
                         <?php if ( ! empty( $filter_section ) ) : ?>
                             (<?php esc_html_e( 'Section:', 'ifsedu-sms' ); ?> <?php echo esc_html( $filter_section ); ?>)
                         <?php endif; ?>

@@ -4,83 +4,113 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Teacher-Specific Attendance View (Only Assigned Class & Section)
- * File: inc/attendance/attendance-tab.php
+ * Teacher & Staff Attendance View
+ * File: inc/attendance.php (or inc/attendance/attendance-tab.php)
  */
 function educore_attendance_tab() {
     global $wpdb;
 
     $current_user = wp_get_current_user();
     $table_units  = $wpdb->prefix . 'sms_academic_units';
+    $table_staff  = $wpdb->prefix . 'sms_staff';
+    $table_assign = $wpdb->prefix . 'sms_teacher_subjects';
 
-    // 1. Role & Capability Checks
-    $is_admin = current_user_can( 'manage_options' );
-    $is_staff = class_exists( 'IFSEdu_School_Management_System' ) 
-        ? IFSEdu_School_Management_System::has_access( array( 'teacher', 'staff', 'operator', 'instructor' ) )
-        : current_user_can( 'edit_posts' );
+    // 1. Role & Capability Checks (Checks Admin, Procedural Helper, and SMS Staff Table)
+    $is_admin = current_user_can( 'manage_options' ) || in_array( 'administrator', (array) $current_user->roles, true );
+    
+    // Check if user has teacher/staff role or exists in staff table
+    $is_staff = false;
+    if ( function_exists( 'educore_has_access' ) ) {
+        $is_staff = educore_has_access( array( 'teacher', 'staff', 'operator', 'instructor', 'editor', 'author', 'contributor', 'subscriber' ) );
+    }
+
+    if ( ! $is_staff && ! $is_admin ) {
+        $staff_exists = $wpdb->get_var( $wpdb->prepare(
+            "SELECT id FROM {$table_staff} WHERE wp_user_id = %d OR email = %s LIMIT 1",
+            $current_user->ID,
+            $current_user->user_email
+        ) );
+        if ( $staff_exists ) {
+            $is_staff = true;
+        }
+    }
 
     if ( ! $is_admin && ! $is_staff ) {
         wp_die( esc_html__( 'You do not have sufficient permissions to access the attendance module.', 'ifsedu-sms' ) );
     }
 
-    $sub_tab = isset( $_GET['sub'] ) ? sanitize_text_field( wp_unslash( $_GET['sub'] ) ) : 'daily';
+    $sub_tab = isset( $_GET['sub'] ) ? sanitize_key( $_GET['sub'] ) : 'daily';
 
-    // Restrict teachers to specific allowed tabs
+    // Allowed sub-tabs for teachers & staff
     $teacher_allowed_tabs = array( 'daily', 'roster', 'exam', 'monthly' );
     if ( ! $is_admin && ! in_array( $sub_tab, $teacher_allowed_tabs, true ) ) {
         $sub_tab = 'daily';
     }
 
-    $filter_class   = isset( $_REQUEST['class_name'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['class_name'] ) ) : '';
-    $filter_section = isset( $_REQUEST['section_name'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['section_name'] ) ) : '';
-    $filter_date    = isset( $_REQUEST['attendance_date'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['attendance_date'] ) ) : current_time( 'Y-m-d' );
+    $filter_class    = isset( $_REQUEST['class_name'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['class_name'] ) ) : '';
+    $filter_section  = isset( $_REQUEST['section_name'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['section_name'] ) ) : '';
+    $filter_date     = isset( $_REQUEST['attendance_date'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['attendance_date'] ) ) : current_time( 'Y-m-d' );
+    $filter_exam_id  = isset( $_REQUEST['exam_id'] ) ? absint( $_REQUEST['exam_id'] ) : 0;
 
     // 2. Fetch Assigned Classes & Sections
     $classes  = array();
     $sections = array();
 
     if ( ! $is_admin ) {
-        // Teacher Scope: Check assignment from teachers table or user meta
-        $table_teachers = $wpdb->prefix . 'sms_teachers';
-        $assigned_data  = $wpdb->get_row( $wpdb->prepare(
-            "SELECT assigned_class, assigned_section FROM {$table_teachers} WHERE email = %s OR full_name = %s LIMIT 1",
-            $current_user->user_email,
-            $current_user->display_name
+        $teacher = $wpdb->get_row( $wpdb->prepare(
+            "SELECT id FROM {$table_staff} WHERE wp_user_id = %d OR email = %s LIMIT 1",
+            $current_user->ID,
+            $current_user->user_email
         ) );
 
-        if ( $assigned_data && ! empty( $assigned_data->assigned_class ) ) {
-            $assigned_classes = array_map( 'trim', explode( ',', $assigned_data->assigned_class ) );
-            $classes          = array_values( array_filter( $assigned_classes ) );
+        if ( $teacher ) {
+            $assigned_units = $wpdb->get_results( $wpdb->prepare(
+                "SELECT DISTINCT u.class_name, u.section_name 
+                 FROM {$table_assign} ts
+                 INNER JOIN {$table_units} u ON ts.class_id = u.id
+                 WHERE ts.teacher_id = %d
+                 ORDER BY CAST(u.class_name AS UNSIGNED) ASC, u.class_name ASC, u.section_name ASC",
+                $teacher->id
+            ) );
 
-            if ( empty( $filter_class ) && ! empty( $classes[0] ) ) {
-                $filter_class = $classes[0];
-            }
-
-            if ( ! empty( $assigned_data->assigned_section ) ) {
-                $assigned_sections = array_map( 'trim', explode( ',', $assigned_data->assigned_section ) );
-                $sections          = array_values( array_filter( $assigned_sections ) );
-                
-                if ( empty( $filter_section ) && ! empty( $sections[0] ) ) {
-                    $filter_section = $sections[0];
+            if ( ! empty( $assigned_units ) ) {
+                foreach ( $assigned_units as $unit ) {
+                    if ( ! in_array( $unit->class_name, $classes, true ) ) {
+                        $classes[] = $unit->class_name;
+                    }
+                    if ( ! empty( $unit->section_name ) && ! in_array( $unit->section_name, $sections, true ) ) {
+                        $sections[] = $unit->section_name;
+                    }
                 }
             }
         }
-    }
 
-    // Admin fallback: Retrieve full institutional classes & sections
-    if ( empty( $classes ) ) {
+        // Fallback: If no specific units assigned, allow all active classes
+        if ( empty( $classes ) ) {
+            $raw_classes = $wpdb->get_results( "SELECT DISTINCT class_name FROM {$table_units} WHERE class_name != '' ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC" );
+            if ( ! empty( $raw_classes ) ) {
+                foreach ( $raw_classes as $cls_obj ) {
+                    $classes[] = $cls_obj->class_name;
+                }
+            }
+        }
+
+        if ( empty( $filter_class ) && ! empty( $classes[0] ) ) {
+            $filter_class = $classes[0];
+        }
+        if ( empty( $filter_section ) && ! empty( $sections[0] ) ) {
+            $filter_section = $sections[0];
+        }
+    } else {
         $raw_classes = $wpdb->get_results( "SELECT DISTINCT class_name FROM {$table_units} WHERE class_name != '' ORDER BY CAST(class_name AS UNSIGNED) ASC, class_name ASC" );
         if ( ! empty( $raw_classes ) ) {
-            usort( $raw_classes, function( $a, $b ) {
-                return strnatcasecmp( $a->class_name, $b->class_name );
-            });
             foreach ( $raw_classes as $cls_obj ) {
                 $classes[] = $cls_obj->class_name;
             }
         }
     }
 
-    if ( $is_admin && ! empty( $filter_class ) ) {
+    if ( ! empty( $filter_class ) && empty( $sections ) ) {
         $raw_sections = $wpdb->get_results( $wpdb->prepare(
             "SELECT DISTINCT section_name FROM {$table_units} WHERE class_name = %s AND section_name != '' ORDER BY section_name ASC",
             $filter_class
@@ -92,7 +122,7 @@ function educore_attendance_tab() {
         }
     }
 
-    // Navigation URLs
+    // Dynamic Navigation URLs
     $daily_url   = admin_url( 'admin.php?page=school_management_system&tab=attendance&sub=daily' );
     $exam_url    = admin_url( 'admin.php?page=school_management_system&tab=attendance&sub=exam' );
     $monthly_url = admin_url( 'admin.php?page=school_management_system&tab=attendance&sub=monthly' );
@@ -228,16 +258,16 @@ function educore_attendance_tab() {
 
         <div class="dpt-module-viewport-container">
             <?php
-            $attendance_dir = plugin_dir_path( __FILE__ );
+            $attendance_dir = EDUCORE_PATH . 'inc/attendance/';
 
             switch ( $sub_tab ) {
                 case 'exam':
                     $exam_file = $attendance_dir . 'attendance-exam.php';
                     if ( file_exists( $exam_file ) ) {
                         require_once $exam_file;
-                        if ( function_exists( 'educore_exam_attendance_view' ) ) {
-                            educore_exam_attendance_view();
-                        }
+                    }
+                    if ( function_exists( 'educore_exam_attendance_view' ) ) {
+                        educore_exam_attendance_view( $classes, $sections, $filter_class, $filter_section, $filter_date, $filter_exam_id );
                     }
                     break;
 
@@ -245,9 +275,9 @@ function educore_attendance_tab() {
                     $monthly_file = $attendance_dir . 'attendance-monthly.php';
                     if ( file_exists( $monthly_file ) ) {
                         require_once $monthly_file;
-                        if ( function_exists( 'educore_monthly_attendance_summary_view' ) ) {
-                            educore_monthly_attendance_summary_view( $classes, $sections, $filter_class, $filter_section );
-                        }
+                    }
+                    if ( function_exists( 'educore_monthly_attendance_summary_view' ) ) {
+                        educore_monthly_attendance_summary_view( $classes, $sections, $filter_class, $filter_section );
                     }
                     break;
 
@@ -256,9 +286,9 @@ function educore_attendance_tab() {
                         $staff_file = $attendance_dir . 'attendance-staff.php';
                         if ( file_exists( $staff_file ) ) {
                             require_once $staff_file;
-                            if ( function_exists( 'educore_staff_attendance_view' ) ) {
-                                educore_staff_attendance_view();
-                            }
+                        }
+                        if ( function_exists( 'educore_staff_attendance_view' ) ) {
+                            educore_staff_attendance_view();
                         }
                     }
                     break;
@@ -281,9 +311,9 @@ function educore_attendance_tab() {
                     $daily_file = $attendance_dir . 'attendance-daily.php';
                     if ( file_exists( $daily_file ) ) {
                         require_once $daily_file;
-                        if ( function_exists( 'educore_daily_attendance_view' ) ) {
-                            educore_daily_attendance_view( $classes, $sections, $filter_class, $filter_section, $filter_date );
-                        }
+                    }
+                    if ( function_exists( 'educore_daily_attendance_view' ) ) {
+                        educore_daily_attendance_view( $classes, $sections, $filter_class, $filter_section, $filter_date );
                     }
                     break;
             }

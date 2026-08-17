@@ -5,14 +5,41 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * Master Financial Ledger Table View (Enterprise Neo-Bento Dashboard)
- * File: accounting-list.php
+ * File: inc/accounting/accounting-list.php
  */
 function educore_accounting_list_view() {
-    if ( ! current_user_can( 'manage_options' ) ) {
-        wp_die( esc_html__( 'You do not have sufficient administrative permissions to access the financial ledger.', 'ifsedu-sms' ) );
+    global $wpdb;
+    $current_user = wp_get_current_user();
+    $table_staff  = $wpdb->prefix . 'sms_staff';
+
+    // --------------------------------------------------------------------------
+    // 0. CAPABILITY & ROLE PERMISSION VALIDATION
+    // --------------------------------------------------------------------------
+    $is_admin = current_user_can( 'manage_options' ) || in_array( 'administrator', (array) $current_user->roles, true );
+    
+    $is_accountant = false;
+    if ( function_exists( 'educore_has_access' ) ) {
+        $is_accountant = educore_has_access( array( 'accountant', 'accounts_officer', 'finance', 'staff' ) );
     }
 
-    global $wpdb;
+    if ( ! $is_admin && ! $is_accountant ) {
+        $staff_row = $wpdb->get_row( $wpdb->prepare(
+            "SELECT designation, staff_type FROM {$table_staff} WHERE wp_user_id = %d OR email = %s LIMIT 1",
+            $current_user->ID,
+            $current_user->user_email
+        ) );
+        if ( $staff_row ) {
+            $desig = strtolower( $staff_row->designation . ' ' . $staff_row->staff_type );
+            if ( strpos( $desig, 'account' ) !== false || strpos( $desig, 'finance' ) !== false || strpos( $desig, 'cash' ) !== false ) {
+                $is_accountant = true;
+            }
+        }
+    }
+
+    if ( ! $is_admin && ! $is_accountant ) {
+        wp_die( esc_html__( 'You do not have sufficient permissions to access the financial ledger.', 'ifsedu-sms' ) );
+    }
+
     $table_accounting = $wpdb->prefix . 'sms_accounting';
 
     // --------------------------------------------------------------------------
@@ -109,7 +136,6 @@ function educore_accounting_list_view() {
             margin: 20px 20px 0 0;
         }
 
-        /* Top Action / Headline Bar */
         .dpt-header-headline-bar {
             display: flex;
             justify-content: space-between;
@@ -158,7 +184,6 @@ function educore_accounting_list_view() {
         }
         .dpt-btn-secondary:hover { background: #f8fafc; color: #0f172a; }
 
-        /* Metric Bento Grid Matrix */
         .dpt-bento-grid-stats {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
@@ -232,7 +257,6 @@ function educore_accounting_list_view() {
             letter-spacing: -0.5px;
         }
 
-        /* Filter Bento Box */
         .dpt-filter-bento-card {
             background: #ffffff;
             border: 1px solid #e2e8f0;
@@ -280,7 +304,6 @@ function educore_accounting_list_view() {
             outline: none;
         }
 
-        /* Table Card Container */
         .dpt-bento-table-card {
             background: #ffffff;
             border: 1px solid #e2e8f0;
@@ -327,7 +350,6 @@ function educore_accounting_list_view() {
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
         }
 
-        /* Matrix Table */
         .dpt-table-responsive {
             width: 100%;
             overflow-x: auto;
